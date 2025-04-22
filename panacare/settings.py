@@ -30,7 +30,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-b5d_wilkzt5+d1cexz9dg
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1', 'panacaredjangobackend-production.up.railway.app').split(',')
 
 
 # Application definition
@@ -98,6 +98,10 @@ DATABASES = {
     }
 }
 
+database_url = os.environ.get('DATABASE_URL')
+if database_url:
+    import dj_database_url
+    DATABASES['default'] = dj_database_url.config(default=database_url)
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
