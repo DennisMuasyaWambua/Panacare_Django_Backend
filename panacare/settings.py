@@ -10,7 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
-import os
+import os, dj_database_url
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -87,21 +87,26 @@ WSGI_APPLICATION = 'panacare.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': os.environ.get('DB_ENGINE', 'django.db.backends.sqlite3'),
-        'NAME': os.environ.get('DB_NAME', BASE_DIR / 'db.sqlite3'),
-        'USER': os.environ.get('DB_USER', ''),
-        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
-        'HOST': os.environ.get('DB_HOST', ''),
-        'PORT': os.environ.get('DB_PORT', ''),
+if os.environ.get("ENVIRONMENT")=="production":
+    DATABASES = {
+    'default': dj_database_url.config(default=os.getenv("DATABASE_PUBLIC_URL"))
     }
-}
+# else:
+#     DATABASES = {
+#         'default': {
+#             'ENGINE': os.environ.get('DB_ENGINE', 'django.db.backends.postgresql'),
+#             'NAME': os.environ.get('DB_NAME', BASE_DIR / 'db.sqlite3'),
+#             'USER': os.environ.get('DB_USER', ''),
+#             'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+#             'HOST': os.environ.get('DB_HOST', ''),
+#             'PORT': os.environ.get('DB_PORT', ''),
+#         }
+#     }
 
-database_url = os.environ.get('DATABASE_URL')
-if database_url:
-    import dj_database_url
-    DATABASES['default'] = dj_database_url.config(default=database_url)
+# database_url = os.environ.get('DATABASE_URL')
+# if database_url:
+#     DATABASES['default'] = dj_database_url.config(default=database_url)
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
