@@ -1,3 +1,4 @@
+import os
 from rest_framework import status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -97,14 +98,38 @@ class UserRegisterAPIView(APIView):
         if serializer.is_valid():
             user = serializer.save()
             
-            # Send activation email
-            domain = request.get_host()
-            user.send_activation_email(domain)
+            # Optional: Auto-verify account in development
+            if os.environ.get('AUTO_VERIFY_ACCOUNTS', 'True') == 'True':
+                user.is_verified = True
+                user.save()
+                message = 'Registration successful. Your account has been automatically verified.'
+            else:
+                # Send activation email
+                try:
+                    domain = request.get_host()
+                    user.send_activation_email(domain)
+                    message = 'Registration successful. Please check your email to activate your account.'
+                except Exception as e:
+                    # Log the error but don't fail the registration
+                    print(f"Failed to send activation email: {str(e)}")
+                    message = 'Registration successful. Please contact support if you do not receive an activation email.'
             
-            return Response({
-                'detail': 'Registration successful. Please check your email to activate your account.',
-                'user': serializer.data
-            }, status=status.HTTP_201_CREATED)
+            # Generate JWT tokens for auto-verified users
+            if user.is_verified:
+                refresh = RefreshToken.for_user(user)
+                return Response({
+                    'detail': message,
+                    'user': serializer.data,
+                    'tokens': {
+                        'refresh': str(refresh),
+                        'access': str(refresh.access_token),
+                    }
+                }, status=status.HTTP_201_CREATED)
+            else:
+                return Response({
+                    'detail': message,
+                    'user': serializer.data
+                }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class UserActivateAPIView(APIView):
@@ -120,8 +145,16 @@ class UserActivateAPIView(APIView):
             if default_token_generator.check_token(user, token):
                 user.is_verified = True
                 user.save()
+                
+                # Generate JWT tokens
+                refresh = RefreshToken.for_user(user)
+                
                 return Response({
-                    'detail': 'Account activated successfully!'
+                    'detail': 'Account activated successfully!',
+                    'tokens': {
+                        'refresh': str(refresh),
+                        'access': str(refresh.access_token),
+                    }
                 }, status=status.HTTP_200_OK)
             else:
                 return Response({

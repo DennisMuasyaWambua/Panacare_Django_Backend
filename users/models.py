@@ -47,10 +47,13 @@ class User(AbstractUser):
             'activation_url': activation_url,
         })
         
+        # Use DEFAULT_FROM_EMAIL as fallback if EMAIL_HOST_USER is empty
+        from_email = settings.EMAIL_HOST_USER or settings.DEFAULT_FROM_EMAIL or 'noreply@panacare.com'
+        
         return send_mail(
             subject,
             message,
-            settings.EMAIL_HOST_USER,
+            from_email,
             [self.email],
             html_message=message,
             fail_silently=False,
