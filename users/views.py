@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 from django.utils.http import urlsafe_base64_decode
 from django.utils.encoding import force_str
 from django.contrib.auth.tokens import default_token_generator
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User, Role, Customer
 from .serializers import UserSerializer, RoleSerializer, CustomerSerializer
@@ -147,8 +148,17 @@ class UserLoginAPIView(APIView):
                     'error': 'Please activate your account before logging in.'
                 }, status=status.HTTP_401_UNAUTHORIZED)
                 
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+            
             serializer = UserSerializer(user)
-            return Response(serializer.data)
+            return Response({
+                'user': serializer.data,
+                'tokens': {
+                    'refresh': str(refresh),
+                    'access': str(refresh.access_token),
+                }
+            })
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
 class CustomerListAPIView(APIView):

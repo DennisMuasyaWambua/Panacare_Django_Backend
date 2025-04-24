@@ -12,6 +12,9 @@ from users.views import (
 )
 from doctors.views import DoctorViewSet
 from healthcare.views import HealthCareViewSet
+from rest_framework_simplejwt.views import (
+    TokenRefreshView, TokenVerifyView
+)
 
 # For the doctor and healthcare apps - keeping viewsets temporarily
 from rest_framework.routers import DefaultRouter
@@ -40,4 +43,8 @@ urlpatterns = [
     
     # Django REST framework auth
     path('api-auth/', include('rest_framework.urls')),
+    
+    # JWT Authentication
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
 ]
