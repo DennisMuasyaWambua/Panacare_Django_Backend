@@ -2,6 +2,7 @@ import os
 from rest_framework import status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.renderers import BrowsableAPIRenderer, JSONRenderer
 from django.contrib.auth import authenticate
 from django.shortcuts import get_object_or_404
 from django.utils.http import urlsafe_base64_decode
@@ -13,7 +14,8 @@ from .models import User, Role, Customer
 from .serializers import UserSerializer, RoleSerializer, CustomerSerializer
 
 class RoleListAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    # Allow unauthenticated users to list roles for registration forms
+    permission_classes = [permissions.AllowAny]
     
     def get(self, request):
         roles = Role.objects.all()
@@ -92,27 +94,96 @@ class UserDetailAPIView(APIView):
 
 class UserRegisterAPIView(APIView):
     permission_classes = [permissions.AllowAny]
+    renderer_classes = [JSONRenderer, BrowsableAPIRenderer]
     
-    def post(self, request):
-        serializer = UserSerializer(data=request.data)
+    def get(self, request, format=None):
+        """Provide available roles for the registration form (excluding admin)"""
+        roles = Role.objects.exclude(name='admin')
+        role_serializer = RoleSerializer(roles, many=True)
+        
+        # Also provide an empty serializer to expose form fields
+        user_serializer = UserSerializer(context={'request': request})
+        
+        # Generate HTML for the role selection fields that will be shown in the browsable API
+        role_options_html = ""
+        for role in roles:
+            role_options_html += f"""
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="role_names" value="{role.name}" id="role_{role.id}">
+                <label class="form-check-label" for="role_{role.id}">
+                    {role.name} - {role.description}
+                </label>
+            </div>
+            """
+        
+        # Add HTML form guidance for the browsable API
+        if request.accepted_renderer.format == 'api':
+            return Response({
+                'roles': role_serializer.data,
+                'html_help': f"""
+                <div class="card">
+                    <div class="card-header">Registration Form Help</div>
+                    <div class="card-body">
+                        <h5 class="card-title">Available Roles</h5>
+                        <p class="card-text">You can select one of the following roles:</p>
+                        {role_options_html}
+                        <hr>
+                        <p>Admin role is not available for regular registration.</p>
+                    </div>
+                </div>
+                """,
+                'form_fields': {
+                    'username': 'Your username',
+                    'email': 'Your email address',
+                    'password': 'Your password',
+                    'first_name': 'Your first name',
+                    'last_name': 'Your last name',
+                    'phone_number': 'Your phone number',
+                    'address': 'Your address',
+                    'role_names': 'Select a role from options above'
+                }
+            })
+        
+        # Regular JSON response for API clients
+        return Response({
+            'roles': role_serializer.data,
+            'form_fields': {
+                'username': 'Your username',
+                'email': 'Your email address',
+                'password': 'Your password',
+                'first_name': 'Your first name',
+                'last_name': 'Your last name',
+                'phone_number': 'Your phone number',
+                'address': 'Your address',
+                'role_names': 'List of role names (doctor, patient) [optional]'
+            }
+        })
+    
+    def post(self, request, format=None):
+        serializer = UserSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             user = serializer.save()
             
-            # Optional: Auto-verify account in development
-            if os.environ.get('AUTO_VERIFY_ACCOUNTS', 'True') == 'True':
+            # Always try to send activation email first
+            email_sent = False
+            try:
+                # Use frontend domain for email links if set in environment
+                domain = os.environ.get('FRONTEND_DOMAIN', request.get_host())
+                user.send_activation_email(domain)
+                email_sent = True
+                message = 'Registration successful. Please check your email to activate your account.'
+            except Exception as e:
+                # Log the error but don't fail the registration
+                print(f"Failed to send activation email: {str(e)}")
+                message = 'Registration successful. Please contact support if you do not receive an activation email.'
+            
+            # Auto-verify account in development or if email sending fails
+            # This provides a fallback if email configuration isn't working
+            auto_verify = os.environ.get('AUTO_VERIFY_ACCOUNTS', 'True') == 'True'
+            if auto_verify or not email_sent:
                 user.is_verified = True
                 user.save()
                 message = 'Registration successful. Your account has been automatically verified.'
-            else:
-                # Send activation email
-                try:
-                    domain = request.get_host()
-                    user.send_activation_email(domain)
-                    message = 'Registration successful. Please check your email to activate your account.'
-                except Exception as e:
-                    # Log the error but don't fail the registration
-                    print(f"Failed to send activation email: {str(e)}")
-                    message = 'Registration successful. Please contact support if you do not receive an activation email.'
             
             # Generate JWT tokens for auto-verified users
             if user.is_verified:
@@ -168,10 +239,29 @@ class UserActivateAPIView(APIView):
 
 class UserLoginAPIView(APIView):
     permission_classes = [permissions.AllowAny]
+    renderer_classes = [JSONRenderer, BrowsableAPIRenderer]
     
-    def post(self, request):
+    def get(self, request, format=None):
+        """Provide form fields for login"""
+        return Response({
+            'form_fields': {
+                'email': 'Your email address',
+                'password': 'Your password'
+            }
+        })
+    
+    def post(self, request, format=None):
         email = request.data.get('email')
         password = request.data.get('password')
+        
+        if not email or not password:
+            return Response({
+                'error': 'Please provide both email and password.',
+                'form_fields': {
+                    'email': 'Your email address',
+                    'password': 'Your password'
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
         
         user = authenticate(username=email, password=password)
         

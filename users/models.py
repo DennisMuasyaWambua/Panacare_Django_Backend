@@ -37,9 +37,18 @@ class User(AbstractUser):
         """
         Send an activation email to the user
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         uid = urlsafe_base64_encode(force_bytes(self.pk))
         token = default_token_generator.make_token(self)
-        activation_url = f"http://{domain}/api/users/activate/{uid}/{token}/"
+        
+        # Use https if not localhost/127.0.0.1
+        protocol = 'http'
+        if domain not in ['localhost', '127.0.0.1'] and not domain.startswith('192.168.'):
+            protocol = 'https'
+            
+        activation_url = f"{protocol}://{domain}/api/users/activate/{uid}/{token}/"
         
         subject = 'Activate Your Panacare Account'
         message = render_to_string('users/activation_email.html', {
@@ -50,14 +59,24 @@ class User(AbstractUser):
         # Use DEFAULT_FROM_EMAIL as fallback if EMAIL_HOST_USER is empty
         from_email = settings.EMAIL_HOST_USER or settings.DEFAULT_FROM_EMAIL or 'noreply@panacare.com'
         
-        return send_mail(
-            subject,
-            message,
-            from_email,
-            [self.email],
-            html_message=message,
-            fail_silently=False,
-        )
+        # Log email sending attempt
+        logger.info(f"Attempting to send activation email to {self.email} from {from_email}")
+        logger.info(f"Email settings: HOST={settings.EMAIL_HOST}, PORT={settings.EMAIL_PORT}, TLS={settings.EMAIL_USE_TLS}")
+        
+        try:
+            result = send_mail(
+                subject,
+                message,
+                from_email,
+                [self.email],
+                html_message=message,
+                fail_silently=False,
+            )
+            logger.info(f"Email sending result: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to send email: {str(e)}")
+            raise
 
 class Customer(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

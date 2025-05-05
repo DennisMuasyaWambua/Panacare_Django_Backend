@@ -4,8 +4,12 @@ from .models import User, Role, Customer
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ('email', 'username', 'first_name', 'last_name', 'is_staff', 'is_verified')
+    list_display = ('email', 'username', 'first_name', 'last_name', 'is_staff', 'is_verified', 'display_roles')
     list_filter = ('is_staff', 'is_superuser', 'is_verified', 'roles')
+    
+    def display_roles(self, obj):
+        return ", ".join([role.name for role in obj.roles.all()])
+    display_roles.short_description = 'Roles'
     fieldsets = (
         (None, {'fields': ('email', 'username', 'password')}),
         ('Personal info', {'fields': ('first_name', 'last_name', 'phone_number', 'address')}),
@@ -23,8 +27,9 @@ class UserAdmin(BaseUserAdmin):
 
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
-    list_display = ('name', 'description')
-    search_fields = ('name',)
+    list_display = ('name', 'description', 'created_at', 'updated_at')
+    search_fields = ('name', 'description')
+    list_filter = ('created_at', 'updated_at')
 
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):
