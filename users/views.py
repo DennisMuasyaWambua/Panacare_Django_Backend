@@ -328,14 +328,23 @@ class UserLoginAPIView(APIView):
             # Generate JWT tokens
             refresh = RefreshToken.for_user(user)
             
+            # Get user roles to include in response
+            roles = [role.name for role in user.roles.all()]
+            
             serializer = UserSerializer(user)
-            return Response({
+            response_data = {
                 'user': serializer.data,
+                'roles': roles,
                 'tokens': {
                     'refresh': str(refresh),
                     'access': str(refresh.access_token),
                 }
-            })
+            }
+            
+            # Set up the response
+            response = Response(response_data)
+            
+            return response
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
 class CustomerListAPIView(APIView):

@@ -125,7 +125,29 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
-CORS_ALLOW_ALL_ORIGINS=True
+# CORS settings
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken', 'Authorization']
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
 
 
 # Internationalization
@@ -169,6 +191,7 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.FormParser',
         'rest_framework.parsers.MultiPartParser',
     ],
+    'EXCEPTION_HANDLER': 'panacare.utils.custom_exception_handler',
 }
 
 # JWT settings
@@ -199,6 +222,13 @@ SIMPLE_JWT = {
     'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
 
     'JTI_CLAIM': 'jti',
+    
+    # Custom settings to help with frontend CORS
+    'AUTH_COOKIE': 'access_token',
+    'AUTH_COOKIE_SECURE': False,  # Set to True in HTTPS environments
+    'AUTH_COOKIE_SAMESITE': 'Lax',  # Adjust as needed
+    'AUTH_COOKIE_DOMAIN': None,  # Set to your domain in production
+    'AUTH_COOKIE_PATH': '/',  
 }
 
 # Email configuration
