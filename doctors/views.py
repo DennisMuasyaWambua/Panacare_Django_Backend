@@ -110,6 +110,19 @@ class DoctorViewSet(viewsets.ModelViewSet):
         }, status=status.HTTP_201_CREATED)
     
     @action(detail=False, methods=['get'], permission_classes=[IsAdminUser])
+    def admin_list_doctors(self, request):
+        """
+        Endpoint for admin to view all doctors
+        """
+        # Get all doctors
+        doctors = Doctor.objects.all()
+        
+        # Serialize the data
+        serializer = self.get_serializer(doctors, many=True)
+        
+        return Response(serializer.data)
+        
+    @action(detail=False, methods=['get'], permission_classes=[IsAdminUser])
     def admin_list_patients(self, request):
         """
         Endpoint for admin to view all patients
@@ -125,6 +138,15 @@ class DoctorViewSet(viewsets.ModelViewSet):
         
         return Response(serializer.data)
     
+    @action(detail=True, methods=['get'], permission_classes=[IsAdminUser])
+    def admin_view_doctor(self, request, pk=None):
+        """
+        Endpoint for admin to view a specific doctor
+        """
+        doctor = get_object_or_404(Doctor, pk=pk)
+        serializer = self.get_serializer(doctor)
+        return Response(serializer.data)
+        
     @action(detail=True, methods=['get'], permission_classes=[IsAdminUser])
     def admin_view_patient(self, request, pk=None):
         """
