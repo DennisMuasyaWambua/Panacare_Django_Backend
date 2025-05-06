@@ -13,9 +13,63 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, Role, Customer
 from .serializers import UserSerializer, RoleSerializer, CustomerSerializer
 
+class IsAdminUser(permissions.BasePermission):
+    """
+    Permission class to check if the user has admin role
+    """
+    def has_permission(self, request, view):
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return False
+        
+        # Check if user has admin role
+        return request.user.roles.filter(name='admin').exists()
+
+class IsAdminOrAuthenticated(permissions.BasePermission):
+    """
+    Permission class that allows access to admin users or restricts to authenticated users
+    based on the request method
+    """
+    def has_permission(self, request, view):
+        # All users must be authenticated
+        if not request.user.is_authenticated:
+            return False
+        
+        # Admin users can do anything
+        if request.user.roles.filter(name='admin').exists():
+            return True
+            
+        # For safe methods (GET, HEAD, OPTIONS), any authenticated user can access
+        if request.method in permissions.SAFE_METHODS:
+            return True
+            
+        # For unsafe methods (POST, PUT, DELETE), only allow if it's the user's own data
+        # This check is done in has_object_permission for object-level views
+        return False
+        
+    def has_object_permission(self, request, view, obj):
+        # Admin users can do anything
+        if request.user.roles.filter(name='admin').exists():
+            return True
+            
+        # Allow users to manage their own data
+        if hasattr(obj, 'user') and obj.user == request.user:
+            return True
+            
+        if obj == request.user:
+            return True
+            
+        return False
+
 class RoleListAPIView(APIView):
     # Allow unauthenticated users to list roles for registration forms
+    # Use custom permission for POST operations - only admin can create roles
     permission_classes = [permissions.AllowAny]
+    
+    def post(self, request):
+        # Ensure only admin users can create roles
+        if not request.user.is_authenticated or not request.user.roles.filter(name='admin').exists():
+            return Response({"error": "Only administrators can create roles"}, status=status.HTTP_403_FORBIDDEN)
     
     def get(self, request):
         roles = Role.objects.all()
@@ -30,7 +84,7 @@ class RoleListAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class RoleDetailAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdminUser]
     
     def get_object(self, pk):
         return get_object_or_404(Role, pk=pk)
@@ -54,7 +108,7 @@ class RoleDetailAPIView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 class UserListAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdminUser]
     
     def get(self, request):
         users = User.objects.all()
@@ -69,7 +123,7 @@ class UserListAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class UserDetailAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdminOrAuthenticated]
     
     def get_object(self, pk):
         return get_object_or_404(User, pk=pk)
@@ -285,7 +339,7 @@ class UserLoginAPIView(APIView):
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
 class CustomerListAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdminUser]
     
     def get(self, request):
         customers = Customer.objects.all()
@@ -300,7 +354,7 @@ class CustomerListAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class CustomerDetailAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdminOrAuthenticated]
     
     def get_object(self, pk):
         return get_object_or_404(Customer, pk=pk)

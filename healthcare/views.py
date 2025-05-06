@@ -13,6 +13,16 @@ class HealthCareViewSet(viewsets.ModelViewSet):
     serializer_class = HealthCareSerializer
     permission_classes = [permissions.IsAuthenticated]
     
+    def get_permissions(self):
+        """
+        Override to set custom permissions for different actions
+        """
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            permission_classes = [IsAdminUser]
+        else:
+            permission_classes = [permissions.IsAuthenticated]
+        return [permission() for permission in permission_classes]
+    
     def get_queryset(self):
         queryset = HealthCare.objects.all()
         category = self.request.query_params.get('category')
