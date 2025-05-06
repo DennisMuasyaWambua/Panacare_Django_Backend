@@ -9,7 +9,7 @@ from django.views.generic import RedirectView
 from users.views import (
     RoleListAPIView, RoleDetailAPIView,
     UserListAPIView, UserDetailAPIView, UserRegisterAPIView, UserLoginAPIView, UserActivateAPIView,
-    CustomerListAPIView, CustomerDetailAPIView
+    CustomerListAPIView, CustomerDetailAPIView, register_admin_user
 )
 from doctors.views import DoctorViewSet
 from healthcare.views import HealthCareViewSet
@@ -79,6 +79,7 @@ urlpatterns = [
     path('api/users/register/', UserRegisterAPIView.as_view(), name='user-register'),
     path('api/users/login/', UserLoginAPIView.as_view(), name='user-login'),
     path('api/users/activate/<str:uidb64>/<str:token>/', UserActivateAPIView.as_view(), name='user-activate'),
+    path('api/users/register-admin/', register_admin_user, name='register-admin'),
     
     path('api/customers/', CustomerListAPIView.as_view(), name='customer-list'),
     path('api/customers/<uuid:pk>/', CustomerDetailAPIView.as_view(), name='customer-detail'),

@@ -1,10 +1,13 @@
 import os
 import logging
 import datetime
+import secrets
+import hashlib
 from rest_framework import status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.renderers import BrowsableAPIRenderer, JSONRenderer
+from rest_framework.decorators import api_view, permission_classes
 from django.contrib.auth import authenticate
 from django.shortcuts import get_object_or_404
 from django.utils.http import urlsafe_base64_decode
@@ -15,6 +18,12 @@ from panacare.settings import SIMPLE_JWT
 
 from .models import User, Role, Customer
 from .serializers import UserSerializer, RoleSerializer, CustomerSerializer
+
+# Generate a secure token for admin registration
+# This is a one-time use token that should be removed after use
+ADMIN_REGISTRATION_TOKEN = "panacare_secure_admin_token_2025"
+# Create a hash of the token for comparison (more secure than plain text)
+ADMIN_TOKEN_HASH = hashlib.sha256(ADMIN_REGISTRATION_TOKEN.encode()).hexdigest()
 
 class IsAdminUser(permissions.BasePermission):
     """
@@ -409,3 +418,76 @@ class CustomerDetailAPIView(APIView):
         customer = self.get_object(pk)
         customer.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def register_admin_user(request):
+    """
+    Special endpoint to register an admin user. 
+    This endpoint should be removed after creating the admin user.
+    
+    Requires a security token in the request for authorization.
+    """
+    logger = logging.getLogger(__name__)
+    logger.info("Admin registration attempt")
+    
+    # Check if security token is valid
+    provided_token = request.data.get('security_token', '')
+    token_hash = hashlib.sha256(provided_token.encode()).hexdigest()
+    
+    if token_hash != ADMIN_TOKEN_HASH:
+        logger.warning(f"Admin registration failed: Invalid security token")
+        return Response({
+            'error': 'Invalid security token'
+        }, status=status.HTTP_403_FORBIDDEN)
+    
+    # Create user data without the security token
+    user_data = {k: v for k, v in request.data.items() if k != 'security_token'}
+    
+    # Add admin role
+    try:
+        admin_role = Role.objects.get(name='admin')
+    except Role.DoesNotExist:
+        logger.error("Admin role not found in database")
+        return Response({
+            'error': 'Admin role not found in database'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    # Use the standard serializer but bypass role validation
+    serializer = UserSerializer(data=user_data)
+    
+    if serializer.is_valid():
+        # Create user
+        user = User.objects.create_user(
+            username=user_data.get('username'),
+            email=user_data.get('email'),
+            password=user_data.get('password'),
+            first_name=user_data.get('first_name', ''),
+            last_name=user_data.get('last_name', ''),
+            phone_number=user_data.get('phone_number', ''),
+            address=user_data.get('address', ''),
+            is_verified=True  # Auto-verify admin users
+        )
+        
+        # Add the admin role
+        user.roles.add(admin_role)
+        user.save()
+        
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        
+        logger.info(f"Admin user created successfully: {user.email}")
+        
+        return Response({
+            'message': 'Admin user created successfully',
+            'user': UserSerializer(user).data,
+            'roles': [role.name for role in user.roles.all()],
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+        }, status=status.HTTP_201_CREATED)
+    
+    logger.error(f"Admin registration failed: {serializer.errors}")
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
