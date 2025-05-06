@@ -15,6 +15,7 @@ from healthcare.views import HealthCareViewSet
 from rest_framework_simplejwt.views import (
     TokenRefreshView, TokenVerifyView
 )
+import panacare.utils
 
 # For the doctor and healthcare apps - keeping viewsets temporarily
 from rest_framework.routers import DefaultRouter
@@ -62,6 +63,9 @@ urlpatterns = [
     
     # For the doctor and healthcare apps - keeping viewsets temporarily
     path('api/', include(router.urls)),
+    
+    # Add token verification endpoint
+    path('api/verify-token/', panacare.utils.verify_token_view, name='verify-token'),
     
     # Django REST framework auth
     path('api-auth/', include('rest_framework.urls')),

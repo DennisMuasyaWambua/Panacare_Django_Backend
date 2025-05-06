@@ -1,4 +1,6 @@
 import os
+import logging
+import datetime
 from rest_framework import status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -9,6 +11,7 @@ from django.utils.http import urlsafe_base64_decode
 from django.utils.encoding import force_str
 from django.contrib.auth.tokens import default_token_generator
 from rest_framework_simplejwt.tokens import RefreshToken
+from panacare.settings import SIMPLE_JWT
 
 from .models import User, Role, Customer
 from .serializers import UserSerializer, RoleSerializer, CustomerSerializer
@@ -308,6 +311,10 @@ class UserLoginAPIView(APIView):
         email = request.data.get('email')
         password = request.data.get('password')
         
+        # Log the request for debugging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Login attempt for email: {email}")
+        
         if not email or not password:
             return Response({
                 'error': 'Please provide both email and password.',
@@ -327,6 +334,7 @@ class UserLoginAPIView(APIView):
                 
             # Generate JWT tokens
             refresh = RefreshToken.for_user(user)
+            access_token = str(refresh.access_token)
             
             # Get user roles to include in response
             roles = [role.name for role in user.roles.all()]
@@ -337,14 +345,30 @@ class UserLoginAPIView(APIView):
                 'roles': roles,
                 'tokens': {
                     'refresh': str(refresh),
-                    'access': str(refresh.access_token),
-                }
+                    'access': access_token,
+                },
+                'auth_header_example': f'Bearer {access_token}'
             }
+            
+            # Add debugging info for frontend developers
+            response_data['_debug'] = {
+                'token_expiry': (datetime.datetime.now() + SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']).isoformat(),
+                'token_length': len(access_token),
+                'user_id': str(user.id),
+                'username': user.username,
+                'email': user.email,
+            }
+            
+            # Log success
+            logger.info(f"Login successful for user {user.email} with roles {roles}")
             
             # Set up the response
             response = Response(response_data)
             
             return response
+            
+        # Log failed login
+        logger.warning(f"Failed login attempt for email: {email}")
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
 class CustomerListAPIView(APIView):
