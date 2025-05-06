@@ -2,7 +2,8 @@
 URL configuration for panacare project.
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
+from django.views.generic import RedirectView
 
 # Import views
 from users.views import (
@@ -16,6 +17,25 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView, TokenVerifyView
 )
 import panacare.utils
+import panacare.test_cors
+
+# Swagger documentation
+from rest_framework import permissions
+from drf_yasg.views import get_schema_view
+from drf_yasg import openapi
+
+schema_view = get_schema_view(
+   openapi.Info(
+      title="Panacare API",
+      default_version='v1',
+      description="API documentation for Panacare Healthcare System",
+      terms_of_service="https://www.panacare.com/terms/",
+      contact=openapi.Contact(email="contact@panacare.com"),
+      license=openapi.License(name="MIT License"),
+   ),
+   public=True,
+   permission_classes=(permissions.AllowAny,),
+)
 
 # For the doctor and healthcare apps - keeping viewsets temporarily
 from rest_framework.routers import DefaultRouter
@@ -45,6 +65,11 @@ admin_urls = [
 urlpatterns = [
     path('admin/', admin.site.urls),
     
+    # API Documentation with Swagger
+    path('', RedirectView.as_view(url='/api/docs/', permanent=False), name='index'),
+    re_path(r'^api/docs/$', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
+    re_path(r'^api/redoc/$', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+    
     # Users app - APIView based URLs
     path('api/roles/', RoleListAPIView.as_view(), name='role-list'),
     path('api/roles/<uuid:pk>/', RoleDetailAPIView.as_view(), name='role-detail'),
@@ -73,4 +98,7 @@ urlpatterns = [
     # JWT Authentication
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
+    
+    # CORS Test endpoint
+    path('api/test-cors/', panacare.test_cors.test_cors, name='test-cors'),
 ]

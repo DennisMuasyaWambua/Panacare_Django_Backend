@@ -30,6 +30,9 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-b5d_wilkzt5+d1cexz9dg
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
+# For development
+APPEND_SLASH = False
+
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,panacaredjangobackend-production.up.railway.app').split(',')
 
 
@@ -46,6 +49,7 @@ INSTALLED_APPS = [
     # Third party apps
     'rest_framework',
     'corsheaders',
+    'drf_yasg',
     
     # Local apps
     'users',
@@ -56,7 +60,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # CORS must come before CommonMiddleware
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -126,28 +130,19 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
-# CORS settings
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS settings - Maximum permissive for development
+CORS_ORIGIN_ALLOW_ALL = True
+CORS_ALLOW_ALL_ORIGINS = True  # New in django-cors-headers 3.0.0
 CORS_ALLOW_CREDENTIALS = True
-CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken', 'Authorization']
-CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-]
-CORS_ALLOW_METHODS = [
-    'DELETE',
-    'GET',
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
+CORS_ALLOW_METHODS = ['*']  # Allow all methods
+CORS_ALLOW_HEADERS = ['*']  # Allow all headers
+CORS_EXPOSE_HEADERS = ['*']  # Expose all headers
+CORS_URLS_REGEX = r'.*'  # Apply to all URLs
+
+# For older versions compatibility
+CORS_ORIGIN_WHITELIST = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
 ]
 
 

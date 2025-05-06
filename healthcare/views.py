@@ -13,6 +13,16 @@ class HealthCareViewSet(viewsets.ModelViewSet):
     serializer_class = HealthCareSerializer
     permission_classes = [permissions.IsAuthenticated]
     
+    def finalize_response(self, request, response, *args, **kwargs):
+        """
+        Add CORS headers to all responses
+        """
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response["Access-Control-Allow-Origin"] = "*"
+        response["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Requested-With"
+        return response
+    
     def get_permissions(self):
         """
         Override to set custom permissions for different actions

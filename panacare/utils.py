@@ -55,6 +55,12 @@ class DebugAuthMiddleware:
             logger.info("No auth header in request")
             
         response = self.get_response(request)
+        
+        # Add CORS headers to all responses
+        response["Access-Control-Allow-Origin"] = "*"
+        response["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Requested-With"
+        
         return response
 
 

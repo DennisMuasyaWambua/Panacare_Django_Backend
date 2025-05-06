@@ -24,6 +24,22 @@ class DoctorViewSet(viewsets.ModelViewSet):
     serializer_class = DoctorSerializer
     permission_classes = [permissions.IsAuthenticated]
     
+    def initial(self, request, *args, **kwargs):
+        """
+        Add CORS headers to all responses
+        """
+        super().initial(request, *args, **kwargs)
+    
+    def finalize_response(self, request, response, *args, **kwargs):
+        """
+        Add CORS headers to all responses
+        """
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response["Access-Control-Allow-Origin"] = "*"
+        response["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Requested-With"
+        return response
+    
     def get_permissions(self):
         """
         Override to set custom permissions for different actions
@@ -130,7 +146,13 @@ class DoctorViewSet(viewsets.ModelViewSet):
         # Serialize the data
         serializer = self.get_serializer(doctors, many=True)
         
-        return Response(serializer.data)
+        # Add CORS headers to the response
+        response = Response(serializer.data)
+        response["Access-Control-Allow-Origin"] = "*"
+        response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
+        
+        return response
         
     @action(detail=False, methods=['get'], permission_classes=[IsAdminUser])
     def admin_list_patients(self, request):
