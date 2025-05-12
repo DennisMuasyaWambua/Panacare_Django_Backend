@@ -13,6 +13,7 @@ from users.views import (
     CustomerListAPIView, CustomerDetailAPIView, register_admin_user
 )
 from doctors.views import DoctorViewSet
+import doctors.views
 from healthcare.views import HealthCareViewSet
 from rest_framework_simplejwt.views import (
     TokenRefreshView, TokenVerifyView
@@ -58,6 +59,7 @@ admin_urls = [
     path('api/doctors/admin_view_doctor/<uuid:pk>/', DoctorViewSet.as_view({'get': 'admin_view_doctor'}), name='admin-view-doctor'),
     path('api/doctors/admin_list_patients/', DoctorViewSet.as_view({'get': 'admin_list_patients'}), name='admin-list-patients'),
     path('api/doctors/admin_view_patient/<uuid:pk>/', DoctorViewSet.as_view({'get': 'admin_view_patient'}), name='admin-view-patient'),
+    path('api/doctors/add_profile/', doctors.views.add_doctor_profile, name='add-doctor-profile'),
     
     # Healthcare endpoints for patient-doctor assignments
     path('api/healthcare/assign_patient_to_doctor/', HealthCareViewSet.as_view({'post': 'assign_patient_to_doctor'}), name='assign-patient-to-doctor'),

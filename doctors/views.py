@@ -1,6 +1,6 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from .models import Doctor, Education
 from .serializers import DoctorSerializer, EducationSerializer
 from users.models import User, Role, Customer
@@ -18,6 +18,75 @@ class IsAdminUser(permissions.BasePermission):
         
         # Check if user has admin role
         return request.user.roles.filter(name='admin').exists()
+
+class IsVerifiedUser(permissions.BasePermission):
+    """
+    Permission class to check if the user is verified
+    """
+    def has_permission(self, request, view):
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return False
+        
+        # Check if user is verified
+        return request.user.is_verified
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated, IsVerifiedUser])
+def add_doctor_profile(request):
+    """
+    Dedicated endpoint for verified users to add their own doctor profile
+    This is separate from the admin pathway and specifically for doctors after registration and verification
+    """
+    # Check if user has a doctor role
+    if not request.user.roles.filter(name='doctor').exists():
+        return Response(
+            {"error": "Only users with doctor role can create a doctor profile"},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    # Check if doctor profile already exists for this user
+    if hasattr(request.user, 'doctor'):
+        return Response(
+            {"error": "Doctor profile already exists for this user"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Create education record if provided
+    education_data = request.data.get('education', {})
+    education = None
+    if education_data:
+        education_serializer = EducationSerializer(data=education_data)
+        if education_serializer.is_valid():
+            education = education_serializer.save()
+        else:
+            return Response(education_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Create doctor profile with current user ID
+    doctor_data = {
+        'user_id': request.user.id,
+        'specialty': request.data.get('specialty'),
+        'license_number': request.data.get('license_number'),
+        'experience_years': request.data.get('experience_years', 0),
+        'bio': request.data.get('bio', ''),
+        'education': education.id if education else None,
+        'is_verified': False,  # Admin will need to verify doctor profiles
+        'is_available': request.data.get('is_available', True)
+    }
+    
+    doctor_serializer = DoctorSerializer(data=doctor_data)
+    if not doctor_serializer.is_valid():
+        # Delete education if it was created but doctor profile creation fails
+        if education:
+            education.delete()
+        return Response(doctor_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    doctor = doctor_serializer.save()
+    
+    return Response({
+        'doctor': doctor_serializer.data,
+        'message': 'Doctor profile created successfully. An admin will review and verify your profile.'
+    }, status=status.HTTP_201_CREATED)
 
 class DoctorViewSet(viewsets.ModelViewSet):
     queryset = Doctor.objects.all()
@@ -44,8 +113,11 @@ class DoctorViewSet(viewsets.ModelViewSet):
         """
         Override to set custom permissions for different actions
         """
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+        if self.action in ['update', 'partial_update', 'destroy']:
             permission_classes = [IsAdminUser]
+        elif self.action == 'create':
+            # For create, allow either admin users or verified users with doctor role
+            permission_classes = [IsAdminUser | IsVerifiedUser]
         else:
             permission_classes = [permissions.IsAuthenticated]
         return [permission() for permission in permission_classes]
@@ -61,6 +133,39 @@ class DoctorViewSet(viewsets.ModelViewSet):
         return queryset
         
     def create(self, request, *args, **kwargs):
+        # For verified users creating their own doctor profile
+        if not request.user.roles.filter(name='admin').exists():
+            # If this is a regular user (not admin), we need to make some checks
+            # and override the user_id with the current user's ID for security
+            
+            # Check if user has a doctor role
+            if not request.user.roles.filter(name='doctor').exists():
+                return Response(
+                    {"error": "Only users with doctor role can create a doctor profile"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Check if doctor profile already exists for this user
+            if hasattr(request.user, 'doctor'):
+                return Response(
+                    {"error": "Doctor profile already exists for this user"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Override the user_id in the request data with the current user's ID
+            request.data['user_id'] = request.user.id
+            
+            # Create education record if provided
+            education_data = request.data.get('education', {})
+            education = None
+            if education_data:
+                education_serializer = EducationSerializer(data=education_data)
+                if education_serializer.is_valid():
+                    education = education_serializer.save()
+                    request.data['education'] = education.id
+                else:
+                    return Response(education_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
