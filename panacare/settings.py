@@ -50,12 +50,30 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'drf_yasg',
+    'drf_spectacular',
     
     # Local apps
     'users',
     'doctors',
     'healthcare',
 ]
+
+# Spectacular Settings
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Your Project API',
+    'DESCRIPTION': 'API documentation for your project',
+    'VERSION': '1.0.0',
+    
+    # Production-specific configurations
+    'SERVE_PUBLIC': True,  # Enable public access in production
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
+    
+    # Customize schema generation
+    'COMPONENT_SPLIT_REQUEST': True,
+    'PREPROCESSING_HOOKS': [
+        'drf_spectacular.hooks.preprocess_exclude_path_format',
+    ],
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

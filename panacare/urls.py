@@ -1,6 +1,7 @@
 """
 URL configuration for panacare project.
 """
+import os
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.generic import RedirectView
@@ -24,6 +25,7 @@ from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 
+
 schema_view = get_schema_view(
    openapi.Info(
       title="Panacare API",
@@ -35,6 +37,7 @@ schema_view = get_schema_view(
    ),
    public=True,
    permission_classes=(permissions.AllowAny,),
+   url=os.environ.get('API_URL', None),  # Set API_URL in production environment
 )
 
 # For the doctor and healthcare apps - keeping viewsets temporarily
