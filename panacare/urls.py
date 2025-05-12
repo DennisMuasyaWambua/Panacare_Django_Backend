@@ -37,8 +37,7 @@ schema_view = get_schema_view(
       license=openapi.License(name="MIT License"),
    ),
    public=True,
-   permission_classes=(permissions.AllowAny,),
-   url=os.environ.get('API_URL', None),  # Set API_URL in production environment
+   permission_classes=[permissions.AllowAny],
 )
 
 # For the doctor and healthcare apps - keeping viewsets temporarily
@@ -69,11 +68,12 @@ admin_urls = [
 urlpatterns = [
     path('admin/', admin.site.urls),
     
-    # API Documentation with Swagger
-    path('', RedirectView.as_view(url='/api/docs/', permanent=False), name='index'),
-    re_path(r'^api/docs/$', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
-    re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
-    re_path(r'^api/redoc/$', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+    # API Documentation with Swagger - make paths more explicit and straightforward
+    path('', RedirectView.as_view(url='/swagger/', permanent=False), name='index'),
+    path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
+    path('swagger.json', schema_view.without_ui(cache_timeout=0), name='schema-json'),
+    path('swagger.yaml', schema_view.without_ui(cache_timeout=0), name='schema-yaml'),
+    path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
     
     # Users app - APIView based URLs
     path('api/roles/', RoleListAPIView.as_view(), name='role-list'),

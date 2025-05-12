@@ -4,9 +4,10 @@ djangorestframework-simplejwt>=5.3.1,<5.4.0
 python-dotenv>=1.0.0,<1.1.0
 django-cors-headers>=4.2.0,<4.3.0
 drf-yasg>=1.21.7,<1.22.0
-drf-spectacular>=0.27.0,<0.28.0
 coreapi>=2.3.3,<2.4.0
 pyyaml>=6.0,<7.0
+uritemplate>=4.1.1
+whitenoise>=6.6.0
 django-filter>=23.0,<24.0
 pillow>=10.0.0,<10.1.0
 dj-database-url
