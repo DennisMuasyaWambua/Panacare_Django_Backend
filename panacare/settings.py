@@ -58,10 +58,29 @@ INSTALLED_APPS = [
     'healthcare',
 ]
 
+# Swagger Settings
+SWAGGER_SETTINGS = {
+    'USE_SESSION_AUTH': False,
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header'
+        }
+    },
+    'JSON_EDITOR': True,
+    'VALIDATOR_URL': None,
+    'PERSIST_AUTH': True,
+    'DEFAULT_MODEL_RENDERING': 'example',
+    'DISPLAY_OPERATION_ID': False,
+    'OPERATIONS_SORTER': 'alpha',
+    'TAGS_SORTER': 'alpha',
+}
+
 # Spectacular Settings
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Your Project API',
-    'DESCRIPTION': 'API documentation for your project',
+    'TITLE': 'Panacare API',
+    'DESCRIPTION': 'API documentation for Panacare Healthcare System',
     'VERSION': '1.0.0',
     
     # Production-specific configurations
@@ -205,6 +224,7 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.FormParser',
         'rest_framework.parsers.MultiPartParser',
     ],
+    'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
     'EXCEPTION_HANDLER': 'panacare.utils.custom_exception_handler',
 }
 
