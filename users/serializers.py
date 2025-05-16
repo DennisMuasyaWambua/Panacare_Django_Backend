@@ -22,7 +22,7 @@ class UserSerializer(serializers.ModelSerializer):
     
     # Allow a single role assignment
     role = serializers.CharField(
-        required=False,
+        required=True,
         help_text="Single role to assign to this user. Only doctor or patient role is allowed."
     )
     
@@ -96,16 +96,7 @@ class UserSerializer(serializers.ModelSerializer):
             for role_name in role_names:
                 role = Role.objects.get(name=role_name)
                 user.roles.add(role)
-        # If no roles were specified, assign patient role by default
-        else:
-            try:
-                default_role = Role.objects.get(name='patient')
-                user.roles.add(default_role)
-            except Role.DoesNotExist:
-                # Log error if patient role doesn't exist
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error("Default 'patient' role not found")
+        # No default role assignment anymore - user must provide a role
         
         return user
 
