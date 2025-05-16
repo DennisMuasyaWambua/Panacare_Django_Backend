@@ -23,6 +23,7 @@ class UserSerializer(serializers.ModelSerializer):
     # Allow a single role assignment
     role = serializers.CharField(
         required=True,
+        write_only=True,
         help_text="Single role to assign to this user. Only doctor or patient role is allowed."
     )
     
