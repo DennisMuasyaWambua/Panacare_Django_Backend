@@ -4,14 +4,49 @@ from rest_framework.decorators import action
 from .models import HealthCare, PatientDoctorAssignment
 from .serializers import HealthCareSerializer, PatientDoctorAssignmentSerializer
 from doctors.views import IsAdminUser
-from users.models import User, Role, Customer
+from users.models import User, Role, Patient
 from doctors.models import Doctor
 from django.shortcuts import get_object_or_404
+
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
+# Define the format parameter for Swagger documentation
+format_parameter = openapi.Parameter(
+    'format', 
+    openapi.IN_QUERY, 
+    description="Response format. Set to 'fhir' for FHIR-compliant responses", 
+    type=openapi.TYPE_STRING,
+    required=False,
+    enum=['fhir']
+)
 
 class HealthCareViewSet(viewsets.ModelViewSet):
     queryset = HealthCare.objects.all()
     serializer_class = HealthCareSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="List all healthcare facilities",
+        manual_parameters=[
+            format_parameter,
+            openapi.Parameter('category', openapi.IN_QUERY, type=openapi.TYPE_STRING, 
+                            description="Filter by category (GENERAL, PEDIATRIC, MENTAL, DENTAL, VISION, OTHER)"),
+            openapi.Parameter('name', openapi.IN_QUERY, type=openapi.TYPE_STRING, 
+                            description="Filter by name (contains search)"),
+            openapi.Parameter('active', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, 
+                            description="Filter by active status")
+        ]
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+        
+    @swagger_auto_schema(
+        operation_description="Get details of a specific healthcare facility",
+        manual_parameters=[format_parameter]
+    )
+    def retrieve(self, request, *args, **kwargs):
+        return super().retrieve(request, *args, **kwargs)
     
     def finalize_response(self, request, response, *args, **kwargs):
         """
@@ -21,6 +56,11 @@ class HealthCareViewSet(viewsets.ModelViewSet):
         response["Access-Control-Allow-Origin"] = "*"
         response["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Requested-With"
+        
+        # Add FHIR content type header if format is FHIR
+        if request.query_params.get('format') == 'fhir':
+            response["Content-Type"] = "application/fhir+json"
+            
         return response
     
     def get_permissions(self):
@@ -62,9 +102,9 @@ class HealthCareViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            patient = Customer.objects.get(id=patient_id)
+            patient = Patient.objects.get(id=patient_id)
             doctor = Doctor.objects.get(id=doctor_id)
-        except (Customer.DoesNotExist, Doctor.DoesNotExist):
+        except (Patient.DoesNotExist, Doctor.DoesNotExist):
             return Response({
                 'error': 'Patient or doctor not found'
             }, status=status.HTTP_404_NOT_FOUND)
@@ -91,6 +131,17 @@ class HealthCareViewSet(viewsets.ModelViewSet):
         serializer = PatientDoctorAssignmentSerializer(assignment)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     
+    @swagger_auto_schema(
+        method='get',
+        operation_description="List all patient-doctor assignments",
+        manual_parameters=[
+            format_parameter,
+            openapi.Parameter('doctor_id', openapi.IN_QUERY, type=openapi.TYPE_STRING, 
+                            description="Filter by doctor ID"),
+            openapi.Parameter('patient_id', openapi.IN_QUERY, type=openapi.TYPE_STRING, 
+                            description="Filter by patient ID")
+        ]
+    )
     @action(detail=False, methods=['get'], permission_classes=[IsAdminUser])
     def list_patient_doctor_assignments(self, request):
         """
@@ -107,8 +158,14 @@ class HealthCareViewSet(viewsets.ModelViewSet):
         if patient_id:
             assignments = assignments.filter(patient_id=patient_id)
         
-        serializer = PatientDoctorAssignmentSerializer(assignments, many=True)
-        return Response(serializer.data)
+        serializer = PatientDoctorAssignmentSerializer(assignments, many=True, context={'request': request})
+        
+        # Set appropriate content type for FHIR responses
+        response = Response(serializer.data)
+        if request.query_params.get('format') == 'fhir':
+            response["Content-Type"] = "application/fhir+json"
+            
+        return response
     
     @action(detail=True, methods=['get'], permission_classes=[IsAdminUser])
     def view_assignment(self, request, pk=None):

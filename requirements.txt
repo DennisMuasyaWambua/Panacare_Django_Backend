@@ -13,3 +13,4 @@ pillow>=10.0.0,<10.1.0
 dj-database-url
 psycopg2-binary>=2.9.9,<2.10.0  # For PostgreSQL
 gunicorn>=21.0.0,<21.1.0  # For production deployment
+fhir.resources>=8.0.0  # FHIR Resources library

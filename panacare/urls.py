@@ -10,7 +10,7 @@ from django.views.generic import RedirectView
 from users.views import (
     RoleListAPIView, RoleDetailAPIView,
     UserListAPIView, UserDetailAPIView, UserRegisterAPIView, UserLoginAPIView, UserActivateAPIView,
-    CustomerListAPIView, CustomerDetailAPIView, register_admin_user
+    PatientListAPIView, PatientDetailAPIView, register_admin_user
 )
 from doctors.views import DoctorViewSet
 import doctors.views
@@ -32,7 +32,17 @@ schema_view = get_schema_view(
    openapi.Info(
       title="Panacare API",
       default_version='v1',
-      description="API documentation for Panacare Healthcare System",
+      description="""
+      API documentation for Panacare Healthcare System
+      
+      ## FHIR Compliance
+      
+      All GET endpoints support FHIR format responses by adding the `format=fhir` query parameter.
+      
+      Example: `GET /api/patients/?format=fhir`
+      
+      The response will follow FHIR R4 (4.0.1) standards with appropriate resource types.
+      """,
       terms_of_service="https://www.panacare.com/terms/",
       contact=openapi.Contact(email="contact@panacare.com"),
       license=openapi.License(name="MIT License"),
@@ -88,8 +98,8 @@ urlpatterns = [
     path('api/users/activate/<str:uidb64>/<str:token>/', UserActivateAPIView.as_view(), name='user-activate'),
     path('api/users/register-admin/', register_admin_user, name='register-admin'),
     
-    path('api/customers/', CustomerListAPIView.as_view(), name='customer-list'),
-    path('api/customers/<uuid:pk>/', CustomerDetailAPIView.as_view(), name='customer-detail'),
+    path('api/patients/', PatientListAPIView.as_view(), name='patient-list'),
+    path('api/patients/<uuid:pk>/', PatientDetailAPIView.as_view(), name='patient-detail'),
     
     # Add the admin URLs explicitly
     *admin_urls,
@@ -109,4 +119,7 @@ urlpatterns = [
     
     # CORS Test endpoint
     path('api/test-cors/', panacare.test_cors.test_cors, name='test-cors'),
+    
+    # FHIR API
+    path('fhir/', include('fhir_api.urls')),
 ]

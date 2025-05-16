@@ -78,13 +78,261 @@ class User(AbstractUser):
             logger.error(f"Failed to send email: {str(e)}")
             raise
 
-class Customer(models.Model):
+class Patient(models.Model):
+    """
+    Patient model (maps to FHIR Patient resource)
+    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='customer')
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='patient')
+    
+    # Basic FHIR Patient fields
     date_of_birth = models.DateField(null=True, blank=True)
-    gender = models.CharField(max_length=10, choices=[('male', 'Male'), ('female', 'Female'), ('other', 'Other')], blank=True)
+    gender = models.CharField(max_length=10, choices=[
+        ('male', 'Male'), 
+        ('female', 'Female'), 
+        ('other', 'Other'),
+        ('unknown', 'Unknown')
+    ], blank=True)
+    active = models.BooleanField(default=True)
+    
+    # Medical information
+    blood_type = models.CharField(max_length=5, blank=True, choices=[
+        ('A+', 'A Positive'),
+        ('A-', 'A Negative'),
+        ('B+', 'B Positive'),
+        ('B-', 'B Negative'),
+        ('AB+', 'AB Positive'),
+        ('AB-', 'AB Negative'),
+        ('O+', 'O Positive'),
+        ('O-', 'O Negative'),
+        ('', 'Unknown')
+    ])
+    height_cm = models.PositiveIntegerField(null=True, blank=True, help_text="Height in centimeters")
+    weight_kg = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text="Weight in kilograms")
+    allergies = models.TextField(blank=True, help_text="Known allergies")
+    medical_conditions = models.TextField(blank=True, help_text="Pre-existing medical conditions")
+    medications = models.TextField(blank=True, help_text="Current medications")
+    emergency_contact_name = models.CharField(max_length=100, blank=True)
+    emergency_contact_phone = models.CharField(max_length=15, blank=True)
+    emergency_contact_relationship = models.CharField(max_length=50, blank=True)
+    
+    # Additional FHIR-compliant fields
+    identifier_system = models.CharField(max_length=255, default="urn:panacare:patient", blank=True)
+    marital_status = models.CharField(max_length=50, blank=True, choices=[
+        ('M', 'Married'),
+        ('S', 'Single'),
+        ('D', 'Divorced'),
+        ('W', 'Widowed'),
+        ('U', 'Unknown')
+    ])
+    language = models.CharField(max_length=50, blank=True, default="en")
+    
+    # Insurance information
+    insurance_provider = models.CharField(max_length=100, blank=True)
+    insurance_policy_number = models.CharField(max_length=50, blank=True)
+    insurance_group_number = models.CharField(max_length=50, blank=True)
+    
+    # Metadata fields
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    class Meta:
+        verbose_name = "Patient"
+        verbose_name_plural = "Patients"
+    
     def __str__(self):
-        return f"{self.user.email}'s Profile"
+        return f"{self.user.get_full_name() or self.user.email}'s Patient Record"
+    
+    def to_fhir_json(self):
+        """Return FHIR-compliant representation of patient"""
+        patient_json = {
+            "resourceType": "Patient",
+            "id": str(self.id),
+            "identifier": [
+                {
+                    "system": self.identifier_system,
+                    "value": str(self.id)
+                }
+            ],
+            "active": self.active,
+            "name": [
+                {
+                    "use": "official",
+                    "family": self.user.last_name,
+                    "given": [self.user.first_name]
+                }
+            ],
+            "telecom": [
+                {
+                    "system": "email",
+                    "value": self.user.email,
+                    "use": "home"
+                },
+                {
+                    "system": "phone",
+                    "value": self.user.phone_number,
+                    "use": "mobile"
+                } if self.user.phone_number else None
+            ],
+            "gender": self.gender or "unknown",
+            "birthDate": self.date_of_birth.isoformat() if self.date_of_birth else None,
+            "address": [
+                {
+                    "use": "home",
+                    "line": [self.user.address],
+                    "text": self.user.address
+                }
+            ] if self.user.address else [],
+            "maritalStatus": {
+                "coding": [
+                    {
+                        "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
+                        "code": self.marital_status or "U"
+                    }
+                ]
+            },
+            "communication": [
+                {
+                    "language": {
+                        "coding": [
+                            {
+                                "system": "urn:ietf:bcp:47",
+                                "code": self.language
+                            }
+                        ]
+                    },
+                    "preferred": True
+                }
+            ]
+        }
+        
+        # Add insurance information if available
+        if self.insurance_provider or self.insurance_policy_number:
+            patient_json["extension"] = patient_json.get("extension", []) + [
+                {
+                    "url": "http://hl7.org/fhir/StructureDefinition/patient-insurance",
+                    "extension": [
+                        {
+                            "url": "provider",
+                            "valueString": self.insurance_provider
+                        },
+                        {
+                            "url": "policy-number",
+                            "valueString": self.insurance_policy_number
+                        },
+                        {
+                            "url": "group-number",
+                            "valueString": self.insurance_group_number
+                        }
+                    ]
+                }
+            ]
+            
+        # Add emergency contact if available
+        if self.emergency_contact_name:
+            patient_json["contact"] = [
+                {
+                    "relationship": [
+                        {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0131",
+                                    "code": "C",
+                                    "display": "Emergency Contact"
+                                }
+                            ],
+                            "text": self.emergency_contact_relationship
+                        }
+                    ],
+                    "name": {
+                        "text": self.emergency_contact_name
+                    },
+                    "telecom": [
+                        {
+                            "system": "phone",
+                            "value": self.emergency_contact_phone,
+                            "use": "mobile"
+                        }
+                    ] if self.emergency_contact_phone else []
+                }
+            ]
+            
+        # Add vital signs and medical information
+        if self.height_cm or self.weight_kg or self.blood_type:
+            height_weight_extension = []
+            
+            if self.height_cm:
+                height_weight_extension.append({
+                    "url": "height",
+                    "valueQuantity": {
+                        "value": self.height_cm,
+                        "unit": "cm",
+                        "system": "http://unitsofmeasure.org",
+                        "code": "cm"
+                    }
+                })
+                
+            if self.weight_kg:
+                height_weight_extension.append({
+                    "url": "weight",
+                    "valueQuantity": {
+                        "value": float(self.weight_kg),
+                        "unit": "kg",
+                        "system": "http://unitsofmeasure.org",
+                        "code": "kg"
+                    }
+                })
+                
+            if self.blood_type:
+                height_weight_extension.append({
+                    "url": "blood-type",
+                    "valueCodeableConcept": {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v2-0005",
+                                "code": self.blood_type,
+                                "display": dict(self._meta.get_field('blood_type').choices).get(self.blood_type)
+                            }
+                        ]
+                    }
+                })
+                
+            if height_weight_extension:
+                patient_json["extension"] = patient_json.get("extension", []) + [
+                    {
+                        "url": "http://hl7.org/fhir/StructureDefinition/patient-vitalsigns",
+                        "extension": height_weight_extension
+                    }
+                ]
+                
+        # Add allergies, medical conditions and medications if available  
+        if self.allergies or self.medical_conditions or self.medications:
+            medical_info_extension = []
+            
+            if self.allergies:
+                medical_info_extension.append({
+                    "url": "allergies",
+                    "valueString": self.allergies
+                })
+                
+            if self.medical_conditions:
+                medical_info_extension.append({
+                    "url": "medical-conditions",
+                    "valueString": self.medical_conditions
+                })
+                
+            if self.medications:
+                medical_info_extension.append({
+                    "url": "medications",
+                    "valueString": self.medications
+                })
+                
+            if medical_info_extension:
+                patient_json["extension"] = patient_json.get("extension", []) + [
+                    {
+                        "url": "http://hl7.org/fhir/StructureDefinition/patient-medicalInformation",
+                        "extension": medical_info_extension
+                    }
+                ]
+        
+        return patient_json

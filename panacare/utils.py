@@ -5,6 +5,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.http import JsonResponse
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 
 logger = logging.getLogger(__name__)
 
@@ -105,3 +107,93 @@ def verify_token_view(request):
             "error": str(e),
             "token_preview": token[:10] + "..." if token else "None"
         }, status=401)
+        
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def fhir_capability_statement(request):
+    """
+    Provide a FHIR CapabilityStatement resource that describes the server's capabilities
+    """
+    capability = {
+        "resourceType": "CapabilityStatement",
+        "status": "active",
+        "date": "2025-05-15",
+        "publisher": "Panacare Healthcare",
+        "kind": "instance",
+        "software": {
+            "name": "Panacare FHIR API",
+            "version": "1.0.0"
+        },
+        "implementation": {
+            "description": "Panacare Healthcare FHIR API",
+            "url": request.build_absolute_uri('/')
+        },
+        "fhirVersion": "4.0.1",
+        "format": ["json"],
+        "rest": [
+            {
+                "mode": "server",
+                "resource": [
+                    {
+                        "type": "Patient",
+                        "profile": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient",
+                        "interaction": [
+                            {"code": "read"},
+                            {"code": "search-type"}
+                        ],
+                        "searchParam": [
+                            {"name": "_id", "type": "token"},
+                            {"name": "name", "type": "string"},
+                            {"name": "gender", "type": "token"}
+                        ]
+                    },
+                    {
+                        "type": "Practitioner",
+                        "profile": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-practitioner",
+                        "interaction": [
+                            {"code": "read"},
+                            {"code": "search-type"}
+                        ],
+                        "searchParam": [
+                            {"name": "_id", "type": "token"},
+                            {"name": "name", "type": "string"},
+                            {"name": "specialty", "type": "token"}
+                        ]
+                    },
+                    {
+                        "type": "Organization",
+                        "profile": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-organization",
+                        "interaction": [
+                            {"code": "read"},
+                            {"code": "search-type"}
+                        ],
+                        "searchParam": [
+                            {"name": "_id", "type": "token"},
+                            {"name": "name", "type": "string"},
+                            {"name": "type", "type": "token"}
+                        ]
+                    },
+                    {
+                        "type": "Encounter",
+                        "profile": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-encounter",
+                        "interaction": [
+                            {"code": "read"},
+                            {"code": "search-type"}
+                        ],
+                        "searchParam": [
+                            {"name": "_id", "type": "token"},
+                            {"name": "patient", "type": "reference"},
+                            {"name": "practitioner", "type": "reference"},
+                            {"name": "status", "type": "token"}
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+    
+    # Set response with appropriate content type
+    response = Response(capability)
+    response["Content-Type"] = "application/fhir+json"
+    
+    return response

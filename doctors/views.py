@@ -3,8 +3,8 @@ from rest_framework.response import Response
 from rest_framework.decorators import action, api_view, permission_classes
 from .models import Doctor, Education
 from .serializers import DoctorSerializer, EducationSerializer
-from users.models import User, Role, Customer
-from users.serializers import UserSerializer, CustomerSerializer
+from users.models import User, Role, Patient
+from users.serializers import UserSerializer, PatientSerializer
 from django.shortcuts import get_object_or_404
 
 class IsAdminUser(permissions.BasePermission):
@@ -88,10 +88,41 @@ def add_doctor_profile(request):
         'message': 'Doctor profile created successfully. An admin will review and verify your profile.'
     }, status=status.HTTP_201_CREATED)
 
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
+# Define the format parameter for Swagger documentation
+format_parameter = openapi.Parameter(
+    'format', 
+    openapi.IN_QUERY, 
+    description="Response format. Set to 'fhir' for FHIR-compliant responses", 
+    type=openapi.TYPE_STRING,
+    required=False,
+    enum=['fhir']
+)
+
 class DoctorViewSet(viewsets.ModelViewSet):
     queryset = Doctor.objects.all()
     serializer_class = DoctorSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="List all doctors",
+        manual_parameters=[
+            format_parameter,
+            openapi.Parameter('specialty', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by specialty"),
+            openapi.Parameter('available', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by availability")
+        ]
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+        
+    @swagger_auto_schema(
+        operation_description="Get details of a specific doctor",
+        manual_parameters=[format_parameter]
+    )
+    def retrieve(self, request, *args, **kwargs):
+        return super().retrieve(request, *args, **kwargs)
     
     def initial(self, request, *args, **kwargs):
         """
@@ -107,6 +138,11 @@ class DoctorViewSet(viewsets.ModelViewSet):
         response["Access-Control-Allow-Origin"] = "*"
         response["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Requested-With"
+        
+        # Add FHIR content type header if format is FHIR
+        if request.query_params.get('format') == 'fhir':
+            response["Content-Type"] = "application/fhir+json"
+        
         return response
     
     def get_permissions(self):
@@ -268,10 +304,10 @@ class DoctorViewSet(viewsets.ModelViewSet):
         patient_role = get_object_or_404(Role, name='patient')
         
         # Get all users with patient role
-        patients = Customer.objects.filter(user__roles=patient_role)
+        patients = Patient.objects.filter(user__roles=patient_role)
         
         # Serialize the data
-        serializer = CustomerSerializer(patients, many=True)
+        serializer = PatientSerializer(patients, many=True, context={'request': request})
         
         return Response(serializer.data)
     
@@ -289,6 +325,6 @@ class DoctorViewSet(viewsets.ModelViewSet):
         """
         Endpoint for admin to view a specific patient
         """
-        patient = get_object_or_404(Customer, pk=pk)
-        serializer = CustomerSerializer(patient)
+        patient = get_object_or_404(Patient, pk=pk)
+        serializer = PatientSerializer(patient, context={'request': request})
         return Response(serializer.data)

@@ -16,8 +16,8 @@ from django.contrib.auth.tokens import default_token_generator
 from rest_framework_simplejwt.tokens import RefreshToken
 from panacare.settings import SIMPLE_JWT
 
-from .models import User, Role, Customer
-from .serializers import UserSerializer, RoleSerializer, CustomerSerializer
+from .models import User, Role, Patient
+from .serializers import UserSerializer, RoleSerializer, PatientSerializer
 
 # Generate a secure token for admin registration
 # This is a one-time use token that should be removed after use
@@ -206,7 +206,8 @@ class UserRegisterAPIView(APIView):
                     'last_name': 'Your last name',
                     'phone_number': 'Your phone number',
                     'address': 'Your address',
-                    'role_names': 'Select a role from options above'
+                    'role_names': 'Select multiple roles from options above',
+                    'role': 'Or specify a single role (doctor or patient)'
                 }
             })
         
@@ -221,7 +222,8 @@ class UserRegisterAPIView(APIView):
                 'last_name': 'Your last name',
                 'phone_number': 'Your phone number',
                 'address': 'Your address',
-                'role_names': 'List of role names (doctor, patient) [optional]'
+                'role_names': 'List of role names (doctor, patient) [optional]',
+                'role': 'Single role name (doctor or patient) [optional]'
             }
         })
     
@@ -230,43 +232,21 @@ class UserRegisterAPIView(APIView):
         if serializer.is_valid():
             user = serializer.save()
             
-            # Always try to send activation email first
-            email_sent = False
+            # Send activation email for verification
             try:
                 # Use frontend domain for email links if set in environment
                 domain = os.environ.get('FRONTEND_DOMAIN', request.get_host())
                 user.send_activation_email(domain)
-                email_sent = True
                 message = 'Registration successful. Please check your email to activate your account.'
             except Exception as e:
                 # Log the error but don't fail the registration
                 print(f"Failed to send activation email: {str(e)}")
                 message = 'Registration successful. Please contact support if you do not receive an activation email.'
             
-            # Auto-verify account in development or if email sending fails
-            # This provides a fallback if email configuration isn't working
-            auto_verify = os.environ.get('AUTO_VERIFY_ACCOUNTS', 'True') == 'True'
-            if auto_verify or not email_sent:
-                user.is_verified = True
-                user.save()
-                message = 'Registration successful. Your account has been automatically verified.'
-            
-            # Generate JWT tokens for auto-verified users
-            if user.is_verified:
-                refresh = RefreshToken.for_user(user)
-                return Response({
-                    'detail': message,
-                    'user': serializer.data,
-                    'tokens': {
-                        'refresh': str(refresh),
-                        'access': str(refresh.access_token),
-                    }
-                }, status=status.HTTP_201_CREATED)
-            else:
-                return Response({
-                    'detail': message,
-                    'user': serializer.data
-                }, status=status.HTTP_201_CREATED)
+            return Response({
+                'detail': message,
+                'user': serializer.data
+            }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class UserActivateAPIView(APIView):
@@ -380,43 +360,76 @@ class UserLoginAPIView(APIView):
         logger.warning(f"Failed login attempt for email: {email}")
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
-class CustomerListAPIView(APIView):
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
+# Define the format parameter for Swagger documentation
+format_parameter = openapi.Parameter(
+    'format', 
+    openapi.IN_QUERY, 
+    description="Response format. Set to 'fhir' for FHIR-compliant responses", 
+    type=openapi.TYPE_STRING,
+    required=False,
+    enum=['fhir']
+)
+
+class PatientListAPIView(APIView):
     permission_classes = [IsAdminUser]
     
+    @swagger_auto_schema(
+        operation_description="List all patients",
+        manual_parameters=[format_parameter]
+    )
     def get(self, request):
-        customers = Customer.objects.all()
-        serializer = CustomerSerializer(customers, many=True)
-        return Response(serializer.data)
+        patients = Patient.objects.all()
+        serializer = PatientSerializer(patients, many=True, context={'request': request})
+        
+        # Set appropriate content type for FHIR responses
+        response = Response(serializer.data)
+        if request.query_params.get('format') == 'fhir':
+            response["Content-Type"] = "application/fhir+json"
+            
+        return response
     
     def post(self, request):
-        serializer = CustomerSerializer(data=request.data)
+        serializer = PatientSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class CustomerDetailAPIView(APIView):
+class PatientDetailAPIView(APIView):
     permission_classes = [IsAdminOrAuthenticated]
     
     def get_object(self, pk):
-        return get_object_or_404(Customer, pk=pk)
+        return get_object_or_404(Patient, pk=pk)
     
+    @swagger_auto_schema(
+        operation_description="Get details of a specific patient",
+        manual_parameters=[format_parameter]
+    )
     def get(self, request, pk):
-        customer = self.get_object(pk)
-        serializer = CustomerSerializer(customer)
-        return Response(serializer.data)
+        patient = self.get_object(pk)
+        serializer = PatientSerializer(patient, context={'request': request})
+        
+        # Set appropriate content type for FHIR responses
+        response = Response(serializer.data)
+        if request.query_params.get('format') == 'fhir':
+            response["Content-Type"] = "application/fhir+json"
+        
+        return response
     
     def put(self, request, pk):
-        customer = self.get_object(pk)
-        serializer = CustomerSerializer(customer, data=request.data)
+        patient = self.get_object(pk)
+        serializer = PatientSerializer(patient, data=request.data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     def delete(self, request, pk):
-        customer = self.get_object(pk)
-        customer.delete()
+        patient = self.get_object(pk)
+        patient.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

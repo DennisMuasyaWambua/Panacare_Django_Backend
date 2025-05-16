@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Role, Customer
+from .models import User, Role, Patient
 
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
@@ -20,6 +20,12 @@ class UserSerializer(serializers.ModelSerializer):
         help_text="List of role names to assign to this user. Only doctor and patient roles are allowed."
     )
     
+    # Allow a single role assignment
+    role = serializers.CharField(
+        required=False,
+        help_text="Single role to assign to this user. Only doctor or patient role is allowed."
+    )
+    
     def validate_role_names(self, value):
         """Validate that all role_names exist in the database"""
         if value:
@@ -31,6 +37,18 @@ class UserSerializer(serializers.ModelSerializer):
                     Role.objects.get(name=role_name)
                 except Role.DoesNotExist:
                     raise serializers.ValidationError(f"Role with name '{role_name}' does not exist")
+        return value
+        
+    def validate_role(self, value):
+        """Validate that the role exists in the database"""
+        if value:
+            allowed_roles = ['doctor', 'patient']
+            if value not in allowed_roles:
+                raise serializers.ValidationError(f"Role '{value}' is not allowed. Choose from: {', '.join(allowed_roles)}")
+            try:
+                Role.objects.get(name=value)
+            except Role.DoesNotExist:
+                raise serializers.ValidationError(f"Role with name '{value}' does not exist")
         return value
     
     def to_representation(self, instance):
@@ -45,7 +63,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'password', 'first_name', 'last_name', 
-                  'phone_number', 'address', 'roles', 'role_names', 'is_verified']
+                  'phone_number', 'address', 'roles', 'role_names', 'role', 'is_verified']
         read_only_fields = ['id', 'is_verified']
         extra_kwargs = {
             'username': {'help_text': 'Your username'},
@@ -57,12 +75,29 @@ class UserSerializer(serializers.ModelSerializer):
         }
     
     def create(self, validated_data):
-        # Extract role_names from validated_data, defaulting to empty list
+        # Extract role_names and role from validated_data
         role_names = validated_data.pop('role_names', [])
+        single_role = validated_data.pop('role', None)
         user = User.objects.create_user(**validated_data)
         
+        # Check if a single role was specified
+        if single_role:
+            try:
+                role = Role.objects.get(name=single_role)
+                user.roles.add(role)
+            except Role.DoesNotExist:
+                # This should never happen due to validation
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Role '{single_role}' not found")
+        # Otherwise, check role_names
+        elif role_names:
+            # Assign all the specified roles - they've already been validated
+            for role_name in role_names:
+                role = Role.objects.get(name=role_name)
+                user.roles.add(role)
         # If no roles were specified, assign patient role by default
-        if not role_names:
+        else:
             try:
                 default_role = Role.objects.get(name='patient')
                 user.roles.add(default_role)
@@ -71,19 +106,62 @@ class UserSerializer(serializers.ModelSerializer):
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.error("Default 'patient' role not found")
-        else:
-            # Assign all the specified roles - they've already been validated
-            for role_name in role_names:
-                role = Role.objects.get(name=role_name)  # This should never fail due to validation
-                user.roles.add(role)
         
         return user
 
-class CustomerSerializer(serializers.ModelSerializer):
+class PatientSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     user_id = serializers.UUIDField(write_only=True)
     
+    # Add explicit field definitions with help_text for Swagger documentation
+    date_of_birth = serializers.DateField(required=False, allow_null=True, 
+                                        help_text="Patient's date of birth")
+    gender = serializers.ChoiceField(choices=['male', 'female', 'other', 'unknown'], required=False,
+                                   help_text="Patient's gender")
+    active = serializers.BooleanField(required=False, help_text="Whether the patient record is active")
+    marital_status = serializers.ChoiceField(choices=['M', 'S', 'D', 'W', 'U'], required=False,
+                                           help_text="Marital status (M=Married, S=Single, D=Divorced, W=Widowed, U=Unknown)")
+    language = serializers.CharField(required=False, help_text="Preferred language code, e.g. 'en'")
+    blood_type = serializers.ChoiceField(choices=['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', ''], 
+                                       required=False, help_text="Blood type")
+    height_cm = serializers.IntegerField(required=False, allow_null=True, help_text="Height in centimeters")
+    weight_kg = serializers.DecimalField(max_digits=5, decimal_places=2, required=False, allow_null=True,
+                                       help_text="Weight in kilograms")
+    allergies = serializers.CharField(required=False, help_text="Known allergies")
+    medical_conditions = serializers.CharField(required=False, help_text="Pre-existing medical conditions")
+    medications = serializers.CharField(required=False, help_text="Current medications")
+    
     class Meta:
-        model = Customer
-        fields = ['id', 'user', 'user_id', 'date_of_birth', 'gender', 'created_at', 'updated_at']
+        model = Patient
+        fields = [
+            'id', 'user', 'user_id', 'date_of_birth', 'gender', 
+            'active', 'marital_status', 'language', 'identifier_system',
+            'blood_type', 'height_cm', 'weight_kg', 'allergies', 
+            'medical_conditions', 'medications', 
+            'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relationship',
+            'insurance_provider', 'insurance_policy_number', 'insurance_group_number',
+            'created_at', 'updated_at'
+        ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'emergency_contact_name': {'help_text': 'Emergency contact name'},
+            'emergency_contact_phone': {'help_text': 'Emergency contact phone number'},
+            'emergency_contact_relationship': {'help_text': 'Relationship to emergency contact'},
+            'insurance_provider': {'help_text': 'Insurance provider name'},
+            'insurance_policy_number': {'help_text': 'Insurance policy number'},
+            'insurance_group_number': {'help_text': 'Insurance group number'},
+            'identifier_system': {'help_text': 'FHIR identifier system URI'}
+        }
+    
+    def to_representation(self, instance):
+        """
+        If FHIR format is requested, return FHIR JSON representation.
+        """
+        request = self.context.get('request')
+        
+        # Default to standard representation
+        if not request or not request.query_params.get('format') == 'fhir':
+            return super().to_representation(instance)
+        
+        # Return FHIR format
+        return instance.to_fhir_json()

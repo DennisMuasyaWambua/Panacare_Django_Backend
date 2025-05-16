@@ -10,6 +10,7 @@ This is a Django REST Framework implementation of the Panacare Healthcare Backen
 - Healthcare facility management
 - RESTful API endpoints for all resources
 - Class-based views with Django REST Framework
+- FHIR-compliant API endpoints
 
 ## API Endpoints
 
@@ -30,12 +31,12 @@ This is a Django REST Framework implementation of the Panacare Healthcare Backen
 - `PUT /api/roles/{id}/` - Update role details
 - `DELETE /api/roles/{id}/` - Delete role
 
-### Customers
-- `GET /api/customers/` - List all customers
-- `POST /api/customers/` - Create a new customer
-- `GET /api/customers/{id}/` - Get customer details
-- `PUT /api/customers/{id}/` - Update customer details
-- `DELETE /api/customers/{id}/` - Delete customer
+### Patients
+- `GET /api/patients/` - List all patients
+- `POST /api/patients/` - Create a new patient
+- `GET /api/patients/{id}/` - Get patient details
+- `PUT /api/patients/{id}/` - Update patient details
+- `DELETE /api/patients/{id}/` - Delete patient
 
 ### Doctors
 - `GET /api/doctors/` - List all doctors
@@ -50,6 +51,21 @@ This is a Django REST Framework implementation of the Panacare Healthcare Backen
 - `GET /api/healthcare/{id}/` - Get healthcare facility details
 - `PUT /api/healthcare/{id}/` - Update healthcare facility details
 - `DELETE /api/healthcare/{id}/` - Delete healthcare facility
+
+### FHIR API Access
+You can access all endpoints in FHIR format by adding the `format=fhir` query parameter:
+
+- `GET /api/patients/?format=fhir` - List all patients in FHIR Patient format
+- `GET /api/patients/{id}/?format=fhir` - Get a specific patient in FHIR Patient format
+- `GET /api/doctors/?format=fhir` - List all doctors in FHIR Practitioner format
+- `GET /api/doctors/{id}/?format=fhir` - Get a specific doctor in FHIR Practitioner format
+- `GET /api/healthcare/?format=fhir` - List all healthcare facilities in FHIR Organization format
+- `GET /api/healthcare/{id}/?format=fhir` - Get a specific healthcare facility in FHIR Organization format
+
+Additional FHIR endpoints:
+- `GET /fhir/metadata` - FHIR capability statement (returns CapabilityStatement resource)
+
+For more detailed information about the FHIR implementation, see the [FHIR Documentation](README-FHIR.md).
 
 ## Setup and Installation
 
