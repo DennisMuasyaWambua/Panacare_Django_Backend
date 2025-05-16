@@ -36,6 +36,18 @@ class IsAdminUser(permissions.BasePermission):
         
         # Check if user has admin role
         return request.user.roles.filter(name='admin').exists()
+        
+class IsAdminOrDoctor(permissions.BasePermission):
+    """
+    Permission class to check if the user has admin or doctor role
+    """
+    def has_permission(self, request, view):
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return False
+        
+        # Check if user has admin or doctor role
+        return request.user.roles.filter(name__in=['admin', 'doctor']).exists()
 
 class IsAdminOrAuthenticated(permissions.BasePermission):
     """
@@ -374,14 +386,24 @@ format_parameter = openapi.Parameter(
 )
 
 class PatientListAPIView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOrDoctor]
     
     @swagger_auto_schema(
         operation_description="List all patients",
         manual_parameters=[format_parameter]
     )
     def get(self, request):
-        patients = Patient.objects.all()
+        # Check if user is doctor (not admin)
+        if not request.user.roles.filter(name='admin').exists() and request.user.roles.filter(name='doctor').exists():
+            # For doctors, only return patients assigned to them
+            doctor = request.user.doctor
+            from healthcare.models import PatientDoctorAssignment
+            assigned_patients = PatientDoctorAssignment.objects.filter(doctor=doctor).values_list('patient', flat=True)
+            patients = Patient.objects.filter(id__in=assigned_patients)
+        else:
+            # For admin, return all patients
+            patients = Patient.objects.all()
+            
         serializer = PatientSerializer(patients, many=True, context={'request': request})
         
         # Set appropriate content type for FHIR responses
@@ -394,7 +416,23 @@ class PatientListAPIView(APIView):
     def post(self, request):
         serializer = PatientSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            patient = serializer.save()
+            
+            # If doctor is creating patient, automatically assign the patient to them
+            if not request.user.roles.filter(name='admin').exists() and request.user.roles.filter(name='doctor').exists():
+                try:
+                    doctor = request.user.doctor
+                    from healthcare.models import PatientDoctorAssignment
+                    assignment = PatientDoctorAssignment.objects.create(
+                        patient=patient,
+                        doctor=doctor,
+                        status='planned',
+                        notes='Automatically assigned to doctor who created patient record'
+                    )
+                except Exception as e:
+                    # Log error but don't fail patient creation
+                    print(f"Failed to assign patient to doctor: {str(e)}")
+            
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -402,7 +440,21 @@ class PatientDetailAPIView(APIView):
     permission_classes = [IsAdminOrAuthenticated]
     
     def get_object(self, pk):
-        return get_object_or_404(Patient, pk=pk)
+        patient = get_object_or_404(Patient, pk=pk)
+        
+        # Check if doctor is accessing patient
+        if not self.request.user.roles.filter(name='admin').exists() and self.request.user.roles.filter(name='doctor').exists():
+            # For doctors, only allow access to assigned patients
+            try:
+                doctor = self.request.user.doctor
+                from healthcare.models import PatientDoctorAssignment
+                assignment_exists = PatientDoctorAssignment.objects.filter(doctor=doctor, patient=patient).exists()
+                if not assignment_exists:
+                    raise permissions.PermissionDenied("You do not have permission to access this patient's data")
+            except Exception as e:
+                raise permissions.PermissionDenied(str(e))
+        
+        return patient
     
     @swagger_auto_schema(
         operation_description="Get details of a specific patient",
@@ -428,6 +480,10 @@ class PatientDetailAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     def delete(self, request, pk):
+        # Only admin can delete patients
+        if not request.user.roles.filter(name='admin').exists():
+            raise permissions.PermissionDenied("Only administrators can delete patient records")
+            
         patient = self.get_object(pk)
         patient.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
