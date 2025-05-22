@@ -452,13 +452,26 @@ class PatientDetailAPIView(APIView):
         if not self.request.user.roles.filter(name='admin').exists() and self.request.user.roles.filter(name='doctor').exists():
             # For doctors, only allow access to assigned patients
             try:
-                doctor = self.request.user.doctor
+                # Check if the doctor profile exists
+                from doctors.models import Doctor
+                doctor = Doctor.objects.get(user=self.request.user)
+                
+                # Check if this doctor is assigned to the patient
                 from healthcare.models import PatientDoctorAssignment
                 assignment_exists = PatientDoctorAssignment.objects.filter(doctor=doctor, patient=patient).exists()
+                
                 if not assignment_exists:
                     raise permissions.PermissionDenied("You do not have permission to access this patient's data")
+                    
+            except Doctor.DoesNotExist:
+                # If doctor profile doesn't exist, deny access
+                raise permissions.PermissionDenied("Doctor profile not found. Please complete your doctor profile setup.")
             except Exception as e:
-                raise permissions.PermissionDenied(str(e))
+                # Log the error for debugging
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error in patient access check: {str(e)}")
+                raise permissions.PermissionDenied("Error checking patient access permissions")
         
         return patient
     
