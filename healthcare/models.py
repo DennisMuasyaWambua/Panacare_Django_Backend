@@ -296,3 +296,413 @@ class PatientDoctorAssignment(models.Model):
             }
             
         return fhir_json
+
+
+class DoctorAvailability(models.Model):
+    """
+    Doctor's scheduled availability times
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.ForeignKey('doctors.Doctor', on_delete=models.CASCADE, related_name='availabilities')
+    
+    # Schedule details
+    day_of_week = models.IntegerField(choices=[
+        (0, 'Monday'),
+        (1, 'Tuesday'),
+        (2, 'Wednesday'),
+        (3, 'Thursday'),
+        (4, 'Friday'),
+        (5, 'Saturday'),
+        (6, 'Sunday'),
+    ])
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    is_recurring = models.BooleanField(default=True)
+    
+    # Optional specific date (for non-recurring availability)
+    specific_date = models.DateField(null=True, blank=True)
+    
+    # Status
+    is_available = models.BooleanField(default=True)
+    notes = models.TextField(blank=True)
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Doctor Availability"
+        verbose_name_plural = "Doctor Availabilities"
+        
+    def __str__(self):
+        day_name = dict(self._meta.get_field('day_of_week').choices).get(self.day_of_week)
+        if self.specific_date:
+            return f"Dr. {self.doctor.user.get_full_name()} available on {self.specific_date.strftime('%Y-%m-%d')} from {self.start_time} to {self.end_time}"
+        return f"Dr. {self.doctor.user.get_full_name()} available on {day_name}s from {self.start_time} to {self.end_time}"
+
+
+class AppointmentStatus(models.TextChoices):
+    """
+    FHIR Appointment status codes
+    """
+    PROPOSED = 'proposed', 'Proposed'
+    PENDING = 'pending', 'Pending'
+    BOOKED = 'booked', 'Booked'
+    ARRIVED = 'arrived', 'Arrived'
+    FULFILLED = 'fulfilled', 'Fulfilled'
+    CANCELLED = 'cancelled', 'Cancelled'
+    NOSHOW = 'noshow', 'No Show'
+    ENTERED_IN_ERROR = 'entered-in-error', 'Entered in Error'
+
+
+class Appointment(models.Model):
+    """
+    Appointment model (maps to FHIR Appointment resource)
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    patient = models.ForeignKey('users.Patient', on_delete=models.CASCADE, related_name='appointments')
+    doctor = models.ForeignKey('doctors.Doctor', on_delete=models.CASCADE, related_name='appointments')
+    
+    # Appointment details
+    appointment_date = models.DateField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    status = models.CharField(
+        max_length=20,
+        choices=AppointmentStatus.choices,
+        default=AppointmentStatus.BOOKED
+    )
+    
+    # Appointment type and reason
+    appointment_type = models.CharField(max_length=50, choices=[
+        ('routine', 'Routine Checkup'),
+        ('follow-up', 'Follow Up'),
+        ('emergency', 'Emergency'),
+        ('consultation', 'Consultation'),
+        ('procedure', 'Procedure'),
+        ('other', 'Other')
+    ], default='consultation')
+    reason = models.TextField(blank=True)
+    
+    # Consultation details filled by doctor
+    diagnosis = models.TextField(blank=True)
+    treatment = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
+    risk_level = models.CharField(max_length=20, choices=[
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('critical', 'Critical'),
+    ], blank=True)
+    
+    # FHIR-compliant fields
+    identifier_system = models.CharField(max_length=255, default="urn:panacare:appointment", blank=True)
+    healthcare_facility = models.ForeignKey(HealthCare, on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments')
+    
+    # Metadata fields
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Appointment"
+        verbose_name_plural = "Appointments"
+        ordering = ['-appointment_date', '-start_time']
+    
+    def __str__(self):
+        return f"{self.patient.user.get_full_name()} with Dr. {self.doctor.user.get_full_name()} on {self.appointment_date} at {self.start_time}"
+    
+    def to_fhir_json(self):
+        """Return FHIR-compliant representation as Appointment resource"""
+        from django.utils import timezone
+        
+        # Create a datetime that combines the date and time fields
+        start_datetime = timezone.make_aware(
+            timezone.datetime.combine(self.appointment_date, self.start_time)
+        )
+        end_datetime = timezone.make_aware(
+            timezone.datetime.combine(self.appointment_date, self.end_time)
+        )
+        
+        fhir_json = {
+            "resourceType": "Appointment",
+            "id": str(self.id),
+            "identifier": [
+                {
+                    "system": self.identifier_system,
+                    "value": str(self.id)
+                }
+            ],
+            "status": self.status,
+            "appointmentType": {
+                "coding": [
+                    {
+                        "system": "http://terminology.hl7.org/CodeSystem/v2-0276",
+                        "code": self.appointment_type,
+                        "display": dict(self._meta.get_field('appointment_type').choices).get(self.appointment_type)
+                    }
+                ]
+            },
+            "reason": [
+                {
+                    "text": self.reason
+                }
+            ] if self.reason else [],
+            "start": start_datetime.isoformat(),
+            "end": end_datetime.isoformat(),
+            "participant": [
+                {
+                    "actor": {
+                        "reference": f"Patient/{self.patient.id}",
+                        "display": self.patient.user.get_full_name() or self.patient.user.email
+                    },
+                    "status": "accepted"
+                },
+                {
+                    "actor": {
+                        "reference": f"Practitioner/{self.doctor.id}",
+                        "display": f"Dr. {self.doctor.user.get_full_name()}"
+                    },
+                    "status": "accepted"
+                }
+            ]
+        }
+        
+        # Add healthcare service location if available
+        if self.healthcare_facility:
+            fhir_json["participant"].append({
+                "actor": {
+                    "reference": f"Organization/{self.healthcare_facility.id}",
+                    "display": self.healthcare_facility.name
+                },
+                "status": "accepted"
+            })
+            
+        return fhir_json
+
+
+class AppointmentDocument(models.Model):
+    """
+    Documents related to an appointment (prescriptions, lab results, etc.)
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE, related_name='documents')
+    
+    # Document details
+    title = models.CharField(max_length=255)
+    file = models.FileField(upload_to='appointment_documents/%Y/%m/%d/')
+    document_type = models.CharField(max_length=50, choices=[
+        ('prescription', 'Prescription'),
+        ('lab_result', 'Lab Result'),
+        ('imaging', 'Imaging Result'),
+        ('referral', 'Referral'),
+        ('note', 'Clinical Note'),
+        ('other', 'Other')
+    ])
+    description = models.TextField(blank=True)
+    
+    # Metadata
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='uploaded_documents'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Appointment Document"
+        verbose_name_plural = "Appointment Documents"
+        
+    def __str__(self):
+        return f"{self.title} - {self.appointment}"
+
+
+class Consultation(models.Model):
+    """
+    Video consultation session tied to an appointment
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    appointment = models.OneToOneField(Appointment, on_delete=models.CASCADE, related_name='consultation')
+    
+    # Consultation status
+    status = models.CharField(max_length=20, choices=[
+        ('scheduled', 'Scheduled'),
+        ('in-progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+        ('missed', 'Missed'),
+    ], default='scheduled')
+    
+    # Consultation details
+    start_time = models.DateTimeField(null=True, blank=True)
+    end_time = models.DateTimeField(null=True, blank=True)
+    
+    # Session details
+    session_id = models.CharField(max_length=255, blank=True)  # External video session ID
+    recording_url = models.URLField(max_length=255, blank=True)
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Consultation"
+        verbose_name_plural = "Consultations"
+        
+    def __str__(self):
+        return f"Consultation for {self.appointment}"
+
+
+class Package(models.Model):
+    """
+    Subscription package for patients
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    duration_days = models.PositiveIntegerField()
+    
+    # Features
+    consultation_count = models.PositiveIntegerField(default=0)
+    max_doctors = models.PositiveIntegerField(default=1)
+    priority_support = models.BooleanField(default=False)
+    access_to_resources = models.BooleanField(default=True)
+    
+    # Metadata
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Package"
+        verbose_name_plural = "Packages"
+        
+    def __str__(self):
+        return self.name
+
+
+class PatientSubscription(models.Model):
+    """
+    Patient subscription to a package
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    patient = models.ForeignKey('users.Patient', on_delete=models.CASCADE, related_name='subscriptions')
+    package = models.ForeignKey(Package, on_delete=models.CASCADE)
+    
+    # Subscription details
+    start_date = models.DateField(auto_now_add=True)
+    end_date = models.DateField()
+    status = models.CharField(max_length=20, choices=[
+        ('active', 'Active'),
+        ('cancelled', 'Cancelled'),
+        ('expired', 'Expired'),
+        ('pending', 'Pending'),
+    ], default='active')
+    
+    # Usage tracking
+    consultations_used = models.PositiveIntegerField(default=0)
+    
+    # Payment details (basic)
+    payment_reference = models.CharField(max_length=255, blank=True)
+    payment_date = models.DateTimeField(auto_now_add=True)
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Patient Subscription"
+        verbose_name_plural = "Patient Subscriptions"
+        
+    def __str__(self):
+        return f"{self.patient.user.get_full_name()} - {self.package.name}"
+
+
+class Resource(models.Model):
+    """
+    Educational resources for patients
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    content_type = models.CharField(max_length=20, choices=[
+        ('article', 'Article'),
+        ('video', 'Video'),
+        ('pdf', 'PDF'),
+        ('link', 'External Link'),
+        ('other', 'Other'),
+    ])
+    
+    # Content
+    file = models.FileField(upload_to='resources/', blank=True, null=True)
+    url = models.URLField(max_length=255, blank=True)
+    text_content = models.TextField(blank=True)
+    
+    # Access control
+    is_password_protected = models.BooleanField(default=False)
+    password_hash = models.CharField(max_length=255, blank=True)  # Hashed password
+    
+    # Resource categorization
+    category = models.CharField(max_length=50, choices=[
+        ('general', 'General Health'),
+        ('nutrition', 'Nutrition'),
+        ('fitness', 'Fitness'),
+        ('mental', 'Mental Health'),
+        ('children', 'Children\'s Health'),
+        ('chronic', 'Chronic Conditions'),
+        ('prevention', 'Preventive Care'),
+        ('other', 'Other'),
+    ])
+    tags = models.CharField(max_length=255, blank=True)  # Comma-separated tags
+    
+    # Publishing details
+    author = models.ForeignKey(
+        'doctors.Doctor', on_delete=models.SET_NULL, null=True, blank=True, related_name='resources'
+    )
+    is_approved = models.BooleanField(default=False)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_resources'
+    )
+    
+    # Metadata
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Resource"
+        verbose_name_plural = "Resources"
+        
+    def __str__(self):
+        return self.title
+
+
+class DoctorRating(models.Model):
+    """
+    Doctor ratings by patients
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.ForeignKey('doctors.Doctor', on_delete=models.CASCADE, related_name='ratings')
+    patient = models.ForeignKey('users.Patient', on_delete=models.CASCADE, related_name='doctor_ratings')
+    
+    # Rating details
+    rating = models.PositiveSmallIntegerField(choices=[
+        (1, '1 Star'),
+        (2, '2 Stars'),
+        (3, '3 Stars'),
+        (4, '4 Stars'),
+        (5, '5 Stars'),
+    ])
+    review = models.TextField(blank=True)
+    
+    # Metadata
+    is_anonymous = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Doctor Rating"
+        verbose_name_plural = "Doctor Ratings"
+        unique_together = ('doctor', 'patient')
+        
+    def __str__(self):
+        return f"{self.patient.user.get_full_name()} rated Dr. {self.doctor.user.get_full_name()} {self.rating} stars"

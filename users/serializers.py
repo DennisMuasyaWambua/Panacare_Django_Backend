@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from .models import User, Role, Patient
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -157,3 +159,74 @@ class PatientSerializer(serializers.ModelSerializer):
         
         # Return FHIR format
         return instance.to_fhir_json()
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    current_password = serializers.CharField(required=True, help_text="User's current password")
+    new_password = serializers.CharField(required=True, help_text="New password to set")
+    
+    def validate_new_password(self, value):
+        """
+        Validate the new password using Django's validators.
+        """
+        try:
+            validate_password(value)
+        except ValidationError as e:
+            raise serializers.ValidationError(list(e.messages))
+        return value
+
+
+class EmailChangeSerializer(serializers.Serializer):
+    password = serializers.CharField(required=True, help_text="User's current password for verification")
+    new_email = serializers.EmailField(required=True, help_text="New email address")
+    
+    def validate_new_email(self, value):
+        """
+        Validate that the email address isn't already in use.
+        """
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Email address is already in use.")
+        return value
+
+
+class PhoneChangeSerializer(serializers.Serializer):
+    password = serializers.CharField(required=True, help_text="User's current password for verification")
+    new_phone_number = serializers.CharField(required=True, help_text="New phone number")
+
+
+class ContactUsSerializer(serializers.Serializer):
+    name = serializers.CharField(required=True, help_text="Your name")
+    email = serializers.EmailField(required=True, help_text="Your email address")
+    subject = serializers.CharField(required=True, help_text="Message subject")
+    message = serializers.CharField(required=True, help_text="Your message")
+
+
+class SupportRequestSerializer(serializers.Serializer):
+    subject = serializers.CharField(required=True, help_text="Support request subject")
+    message = serializers.CharField(required=True, help_text="Detailed support request")
+    request_type = serializers.ChoiceField(
+        required=True,
+        choices=[
+            ('technical', 'Technical Issue'),
+            ('billing', 'Billing Question'),
+            ('account', 'Account Issue'),
+            ('feedback', 'Feedback'),
+            ('other', 'Other')
+        ],
+        help_text="Type of support request"
+    )
+    priority = serializers.ChoiceField(
+        required=False,
+        default='medium',
+        choices=[
+            ('low', 'Low'),
+            ('medium', 'Medium'),
+            ('high', 'High'),
+            ('urgent', 'Urgent')
+        ],
+        help_text="Priority level of the request"
+    )
+
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True, help_text="Email address associated with your account")

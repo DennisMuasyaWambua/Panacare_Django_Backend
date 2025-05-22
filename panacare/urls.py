@@ -10,11 +10,17 @@ from django.views.generic import RedirectView
 from users.views import (
     RoleListAPIView, RoleDetailAPIView,
     UserListAPIView, UserDetailAPIView, UserRegisterAPIView, UserLoginAPIView, UserActivateAPIView,
-    PatientListAPIView, PatientDetailAPIView, register_admin_user
+    PatientListAPIView, PatientDetailAPIView, PatientProfileAPIView, register_admin_user,
+    ResendVerificationAPIView, PasswordChangeAPIView, EmailChangeAPIView, PhoneChangeAPIView,
+    ContactUsAPIView, SupportRequestAPIView, ForgotPasswordAPIView, ResetPasswordAPIView
 )
 from doctors.views import DoctorViewSet
 import doctors.views
-from healthcare.views import HealthCareViewSet
+from healthcare.views import (
+    HealthCareViewSet, DoctorAvailabilityViewSet, AppointmentViewSet,
+    AppointmentDocumentViewSet, ConsultationViewSet, PackageViewSet,
+    PatientSubscriptionViewSet, ResourceViewSet, DoctorRatingViewSet
+)
 from rest_framework_simplejwt.views import (
     TokenRefreshView, TokenVerifyView
 )
@@ -56,6 +62,14 @@ from rest_framework.routers import DefaultRouter
 router = DefaultRouter()
 router.register(r'doctors', DoctorViewSet, basename='doctor')
 router.register(r'healthcare', HealthCareViewSet, basename='healthcare')
+router.register(r'doctor-availability', DoctorAvailabilityViewSet, basename='doctor-availability')
+router.register(r'appointments', AppointmentViewSet, basename='appointment')
+router.register(r'appointment-documents', AppointmentDocumentViewSet, basename='appointment-document')
+router.register(r'consultations', ConsultationViewSet, basename='consultation')
+router.register(r'packages', PackageViewSet, basename='package')
+router.register(r'subscriptions', PatientSubscriptionViewSet, basename='subscription')
+router.register(r'resources', ResourceViewSet, basename='resource')
+router.register(r'doctor-ratings', DoctorRatingViewSet, basename='doctor-rating')
 
 # Generate the router URLs
 router_urls = router.urls
@@ -97,6 +111,19 @@ urlpatterns = [
     path('api/users/login/', UserLoginAPIView.as_view(), name='user-login'),
     path('api/users/activate/<str:uidb64>/<str:token>/', UserActivateAPIView.as_view(), name='user-activate'),
     path('api/users/register-admin/', register_admin_user, name='register-admin'),
+    
+    # Authentication endpoints
+    path('api/users/resend-verification/', ResendVerificationAPIView.as_view(), name='resend-verification'),
+    path('api/users/change-password/', PasswordChangeAPIView.as_view(), name='change-password'),
+    path('api/users/change-email/', EmailChangeAPIView.as_view(), name='change-email'),
+    path('api/users/change-phone/', PhoneChangeAPIView.as_view(), name='change-phone'),
+    path('api/contact-us/', ContactUsAPIView.as_view(), name='contact-us'),
+    path('api/support-request/', SupportRequestAPIView.as_view(), name='support-request'),
+    path('api/forgot-password/', ForgotPasswordAPIView.as_view(), name='forgot-password'),
+    path('api/reset-password/<str:uidb64>/<str:token>/', ResetPasswordAPIView.as_view(), name='reset-password'),
+    
+    # Patient profile endpoint
+    path('api/patient/profile/', PatientProfileAPIView.as_view(), name='patient-profile'),
     
     path('api/patients/', PatientListAPIView.as_view(), name='patient-list'),
     path('api/patients/<uuid:pk>/', PatientDetailAPIView.as_view(), name='patient-detail'),

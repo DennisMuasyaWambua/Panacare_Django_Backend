@@ -1,8 +1,12 @@
 from rest_framework import serializers
-from .models import HealthCare, PatientDoctorAssignment
+from .models import (
+    HealthCare, PatientDoctorAssignment, DoctorAvailability, 
+    Appointment, AppointmentDocument, Consultation, 
+    Package, PatientSubscription, Resource, DoctorRating
+)
 from doctors.serializers import DoctorSerializer
 from doctors.models import Doctor
-from users.models import Patient
+from users.models import Patient, User
 
 class HealthCareSerializer(serializers.ModelSerializer):
     doctors = DoctorSerializer(many=True, read_only=True)
@@ -158,3 +162,197 @@ class PatientDoctorAssignmentSerializer(serializers.ModelSerializer):
         
         # Return FHIR format
         return instance.to_fhir_json()
+
+
+class DoctorAvailabilitySerializer(serializers.ModelSerializer):
+    doctor_name = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = DoctorAvailability
+        fields = [
+            'id', 'doctor', 'doctor_name', 'day_of_week', 'start_time', 'end_time',
+            'is_recurring', 'specific_date', 'is_available', 'notes',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        
+    def get_doctor_name(self, obj):
+        return obj.doctor.user.get_full_name() or obj.doctor.user.username
+
+
+class AppointmentSerializer(serializers.ModelSerializer):
+    patient_name = serializers.SerializerMethodField(read_only=True)
+    doctor_name = serializers.SerializerMethodField(read_only=True)
+    healthcare_facility_name = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = Appointment
+        fields = [
+            'id', 'patient', 'doctor', 'patient_name', 'doctor_name',
+            'appointment_date', 'start_time', 'end_time', 'status',
+            'appointment_type', 'reason', 'diagnosis', 'treatment', 
+            'notes', 'risk_level', 'identifier_system',
+            'healthcare_facility', 'healthcare_facility_name',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        
+    def get_patient_name(self, obj):
+        return obj.patient.user.get_full_name() or obj.patient.user.username
+    
+    def get_doctor_name(self, obj):
+        return obj.doctor.user.get_full_name() or obj.doctor.user.username
+    
+    def get_healthcare_facility_name(self, obj):
+        if obj.healthcare_facility:
+            return obj.healthcare_facility.name
+        return None
+    
+    def to_representation(self, instance):
+        """
+        If FHIR format is requested, return FHIR JSON representation.
+        """
+        request = self.context.get('request')
+        
+        # Default to standard representation
+        if not request or not request.query_params.get('format') == 'fhir':
+            return super().to_representation(instance)
+        
+        # Return FHIR format
+        return instance.to_fhir_json()
+
+
+class AppointmentDocumentSerializer(serializers.ModelSerializer):
+    uploaded_by_name = serializers.SerializerMethodField(read_only=True)
+    appointment_details = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = AppointmentDocument
+        fields = [
+            'id', 'appointment', 'appointment_details', 'title', 'file',
+            'document_type', 'description', 'uploaded_by', 'uploaded_by_name',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        
+    def get_uploaded_by_name(self, obj):
+        if obj.uploaded_by:
+            return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
+        return None
+    
+    def get_appointment_details(self, obj):
+        return {
+            'id': str(obj.appointment.id),
+            'patient': obj.appointment.patient.user.get_full_name(),
+            'doctor': obj.appointment.doctor.user.get_full_name(),
+            'date': obj.appointment.appointment_date,
+            'time': f"{obj.appointment.start_time} - {obj.appointment.end_time}"
+        }
+
+
+class ConsultationSerializer(serializers.ModelSerializer):
+    appointment_details = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = Consultation
+        fields = [
+            'id', 'appointment', 'appointment_details', 'status', 'start_time',
+            'end_time', 'session_id', 'recording_url', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        
+    def get_appointment_details(self, obj):
+        return {
+            'id': str(obj.appointment.id),
+            'patient': obj.appointment.patient.user.get_full_name(),
+            'doctor': obj.appointment.doctor.user.get_full_name(),
+            'date': obj.appointment.appointment_date,
+            'time': f"{obj.appointment.start_time} - {obj.appointment.end_time}"
+        }
+
+
+class PackageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Package
+        fields = [
+            'id', 'name', 'description', 'price', 'duration_days',
+            'consultation_count', 'max_doctors', 'priority_support',
+            'access_to_resources', 'is_active', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class PatientSubscriptionSerializer(serializers.ModelSerializer):
+    patient_name = serializers.SerializerMethodField(read_only=True)
+    package_details = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = PatientSubscription
+        fields = [
+            'id', 'patient', 'patient_name', 'package', 'package_details',
+            'start_date', 'end_date', 'status', 'consultations_used',
+            'payment_reference', 'payment_date', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        
+    def get_patient_name(self, obj):
+        return obj.patient.user.get_full_name() or obj.patient.user.username
+    
+    def get_package_details(self, obj):
+        return {
+            'id': str(obj.package.id),
+            'name': obj.package.name,
+            'price': str(obj.package.price),
+            'duration_days': obj.package.duration_days,
+            'consultation_count': obj.package.consultation_count
+        }
+
+
+class ResourceSerializer(serializers.ModelSerializer):
+    author_name = serializers.SerializerMethodField(read_only=True)
+    approved_by_name = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = Resource
+        fields = [
+            'id', 'title', 'description', 'content_type', 'file', 'url',
+            'text_content', 'is_password_protected', 'password_hash',
+            'category', 'tags', 'author', 'author_name', 'is_approved',
+            'approved_by', 'approved_by_name', 'is_active',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'password_hash': {'write_only': True}
+        }
+        
+    def get_author_name(self, obj):
+        if obj.author:
+            return obj.author.user.get_full_name() or obj.author.user.username
+        return None
+    
+    def get_approved_by_name(self, obj):
+        if obj.approved_by:
+            return obj.approved_by.get_full_name() or obj.approved_by.username
+        return None
+
+
+class DoctorRatingSerializer(serializers.ModelSerializer):
+    patient_name = serializers.SerializerMethodField(read_only=True)
+    doctor_name = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = DoctorRating
+        fields = [
+            'id', 'doctor', 'doctor_name', 'patient', 'patient_name',
+            'rating', 'review', 'is_anonymous', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        
+    def get_patient_name(self, obj):
+        if obj.is_anonymous:
+            return "Anonymous"
+        return obj.patient.user.get_full_name() or obj.patient.user.username
+    
+    def get_doctor_name(self, obj):
+        return obj.doctor.user.get_full_name() or obj.doctor.user.username

@@ -8,16 +8,22 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.renderers import BrowsableAPIRenderer, JSONRenderer
 from rest_framework.decorators import api_view, permission_classes
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, update_session_auth_hash
 from django.shortcuts import get_object_or_404
-from django.utils.http import urlsafe_base64_decode
-from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.utils.encoding import force_str, force_bytes
 from django.contrib.auth.tokens import default_token_generator
 from rest_framework_simplejwt.tokens import RefreshToken
 from panacare.settings import SIMPLE_JWT
+from django.core.exceptions import ValidationError
+from django.contrib.auth.password_validation import validate_password
 
 from .models import User, Role, Patient
-from .serializers import UserSerializer, RoleSerializer, PatientSerializer
+from .serializers import (
+    UserSerializer, RoleSerializer, PatientSerializer, 
+    PasswordChangeSerializer, EmailChangeSerializer, PhoneChangeSerializer,
+    ContactUsSerializer, SupportRequestSerializer, ForgotPasswordSerializer
+)
 
 # Generate a secure token for admin registration
 # This is a one-time use token that should be removed after use
@@ -560,3 +566,371 @@ def register_admin_user(request):
     
     logger.error(f"Admin registration failed: {serializer.errors}")
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ResendVerificationAPIView(APIView):
+    """
+    Endpoint to resend verification email if the initial one doesn't reach the user.
+    """
+    permission_classes = [permissions.AllowAny]
+    
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({
+                'error': 'Email address is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            user = User.objects.get(email=email)
+            
+            if user.is_verified:
+                return Response({
+                    'message': 'This account is already verified. You can log in.'
+                }, status=status.HTTP_200_OK)
+                
+            # Send activation email
+            domain = os.environ.get('FRONTEND_DOMAIN', request.get_host())
+            user.send_activation_email(domain)
+            
+            return Response({
+                'message': 'Verification email has been resent. Please check your inbox.'
+            }, status=status.HTTP_200_OK)
+            
+        except User.DoesNotExist:
+            # For security reasons, don't reveal if the email exists
+            return Response({
+                'message': 'If this email is registered, a verification link will be sent.'
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to resend verification email: {str(e)}")
+            return Response({
+                'error': 'Failed to send verification email. Please contact support.'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PasswordChangeAPIView(APIView):
+    """
+    Endpoint to change user password.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        serializer = PasswordChangeSerializer(data=request.data)
+        if serializer.is_valid():
+            # Check current password
+            user = request.user
+            if not user.check_password(serializer.validated_data['current_password']):
+                return Response({
+                    'error': 'Current password is incorrect'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+            # Set new password
+            user.set_password(serializer.validated_data['new_password'])
+            user.save()
+            
+            # Update session auth hash to prevent logout
+            update_session_auth_hash(request, user)
+            
+            # Generate new JWT tokens
+            refresh = RefreshToken.for_user(user)
+            
+            return Response({
+                'message': 'Password changed successfully',
+                'tokens': {
+                    'refresh': str(refresh),
+                    'access': str(refresh.access_token),
+                }
+            }, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class EmailChangeAPIView(APIView):
+    """
+    Endpoint to change user email address.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        serializer = EmailChangeSerializer(data=request.data)
+        if serializer.is_valid():
+            # Check current password
+            user = request.user
+            if not user.check_password(serializer.validated_data['password']):
+                return Response({
+                    'error': 'Password is incorrect'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+            # Change email and set verification status to false
+            old_email = user.email
+            user.email = serializer.validated_data['new_email']
+            user.is_verified = False
+            user.save()
+            
+            # Send verification email to new address
+            try:
+                domain = os.environ.get('FRONTEND_DOMAIN', request.get_host())
+                user.send_activation_email(domain)
+                
+                return Response({
+                    'message': 'Email address updated. Please verify your new email address.'
+                }, status=status.HTTP_200_OK)
+            except Exception as e:
+                # Revert changes on error
+                user.email = old_email
+                user.is_verified = True
+                user.save()
+                
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to send verification email: {str(e)}")
+                return Response({
+                    'error': 'Failed to send verification email. Email address not updated.'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PhoneChangeAPIView(APIView):
+    """
+    Endpoint to change user phone number.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        serializer = PhoneChangeSerializer(data=request.data)
+        if serializer.is_valid():
+            # Check current password
+            user = request.user
+            if not user.check_password(serializer.validated_data['password']):
+                return Response({
+                    'error': 'Password is incorrect'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+            # Update phone number
+            user.phone_number = serializer.validated_data['new_phone_number']
+            user.save()
+            
+            return Response({
+                'message': 'Phone number updated successfully',
+                'phone_number': user.phone_number
+            }, status=status.HTTP_200_OK)
+                
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ContactUsAPIView(APIView):
+    """
+    Endpoint for contact us form submissions.
+    """
+    permission_classes = [permissions.AllowAny]
+    
+    def post(self, request):
+        serializer = ContactUsSerializer(data=request.data)
+        if serializer.is_valid():
+            # Here you would typically send an email or save to database
+            # For now, we'll just log the request
+            logger = logging.getLogger(__name__)
+            logger.info(f"Contact form submission from {serializer.validated_data['email']}: {serializer.validated_data['subject']}")
+            
+            return Response({
+                'message': 'Thank you for your message. We will get back to you soon.'
+            }, status=status.HTTP_200_OK)
+                
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SupportRequestAPIView(APIView):
+    """
+    Endpoint for support requests.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        serializer = SupportRequestSerializer(data=request.data)
+        if serializer.is_valid():
+            # Here you would typically create a support ticket
+            # For now, we'll just log the request
+            logger = logging.getLogger(__name__)
+            logger.info(f"Support request from {request.user.email}: {serializer.validated_data['subject']} (Priority: {serializer.validated_data['priority']})")
+            
+            return Response({
+                'message': 'Support request submitted successfully. We will respond as soon as possible.',
+                'request_id': secrets.token_hex(4).upper()  # Generate a fake request ID
+            }, status=status.HTTP_200_OK)
+                
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ForgotPasswordAPIView(APIView):
+    """
+    Endpoint to request password reset.
+    """
+    permission_classes = [permissions.AllowAny]
+    
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            
+            try:
+                user = User.objects.get(email=email)
+                
+                # Generate password reset token
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                token = default_token_generator.make_token(user)
+                
+                # Determine protocol
+                domain = os.environ.get('FRONTEND_DOMAIN', request.get_host())
+                protocol = 'http'
+                if domain not in ['localhost', '127.0.0.1'] and not domain.startswith('192.168.'):
+                    protocol = 'https'
+                    
+                # Create password reset URL
+                reset_url = f"{protocol}://{domain}/reset-password/{uid}/{token}/"
+                
+                # Send password reset email - would integrate with your email system
+                # For now, we'll just log it
+                logger = logging.getLogger(__name__)
+                logger.info(f"Password reset requested for {email}. Reset URL: {reset_url}")
+                
+                # In a real implementation, you would send an email like:
+                # send_mail(
+                #     'Reset Your Password',
+                #     f'Click the link to reset your password: {reset_url}',
+                #     settings.DEFAULT_FROM_EMAIL,
+                #     [email],
+                #     fail_silently=False,
+                # )
+                
+            except User.DoesNotExist:
+                # Don't reveal if user exists
+                pass
+                
+            # Always return success to prevent email enumeration
+            return Response({
+                'message': 'If an account with this email exists, a password reset link has been sent.'
+            }, status=status.HTTP_200_OK)
+                
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ResetPasswordAPIView(APIView):
+    """
+    Endpoint to reset password using the token sent via email.
+    """
+    permission_classes = [permissions.AllowAny]
+    
+    def post(self, request, uidb64, token):
+        try:
+            # Decode the user id
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
+            
+            # Check the token is valid
+            if default_token_generator.check_token(user, token):
+                # Get the new password
+                new_password = request.data.get('new_password')
+                if not new_password:
+                    return Response({
+                        'error': 'New password is required'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Validate the new password
+                try:
+                    validate_password(new_password)
+                except ValidationError as e:
+                    return Response({
+                        'error': list(e.messages)
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Set the new password
+                user.set_password(new_password)
+                user.save()
+                
+                # Generate JWT tokens
+                refresh = RefreshToken.for_user(user)
+                
+                return Response({
+                    'message': 'Password has been reset successfully',
+                    'tokens': {
+                        'refresh': str(refresh),
+                        'access': str(refresh.access_token),
+                    }
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'error': 'Reset link is invalid or has expired'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response({
+                'error': 'Reset link is invalid'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PatientProfileAPIView(APIView):
+    """
+    Endpoint for patients to view and update their own profile.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        # Check if user has patient role
+        if not request.user.roles.filter(name='patient').exists():
+            return Response({
+                'error': 'Only patients can access this endpoint'
+            }, status=status.HTTP_403_FORBIDDEN)
+            
+        try:
+            patient = request.user.patient
+            serializer = PatientSerializer(patient, context={'request': request})
+            
+            # Set appropriate content type for FHIR responses
+            response = Response(serializer.data)
+            if request.query_params.get('format') == 'fhir':
+                response["Content-Type"] = "application/fhir+json"
+            
+            return response
+        except Patient.DoesNotExist:
+            return Response({
+                'error': 'Patient profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+    
+    def put(self, request):
+        # Check if user has patient role
+        if not request.user.roles.filter(name='patient').exists():
+            return Response({
+                'error': 'Only patients can access this endpoint'
+            }, status=status.HTTP_403_FORBIDDEN)
+            
+        try:
+            patient = request.user.patient
+            serializer = PatientSerializer(patient, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Patient.DoesNotExist:
+            return Response({
+                'error': 'Patient profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+    
+    def patch(self, request):
+        # Check if user has patient role
+        if not request.user.roles.filter(name='patient').exists():
+            return Response({
+                'error': 'Only patients can access this endpoint'
+            }, status=status.HTTP_403_FORBIDDEN)
+            
+        try:
+            patient = request.user.patient
+            serializer = PatientSerializer(patient, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Patient.DoesNotExist:
+            return Response({
+                'error': 'Patient profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
