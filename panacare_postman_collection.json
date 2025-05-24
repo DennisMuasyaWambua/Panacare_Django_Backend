@@ -1,0 +1,229 @@
+{
+  "info": {
+    "name": "Panacare Healthcare API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication & User Management",
+      "item": [
+        {
+          "name": "Resend Verification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"user@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/resend-verification/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "resend-verification", ""]
+            },
+            "description": "Resend verification email to a user who hasn't verified their account yet. No authentication required."
+          }
+        },
+        {
+          "name": "Change Phone Number",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"password\": \"current_password\",\n    \"new_phone_number\": \"+1234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/change-phone/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "change-phone", ""]
+            },
+            "description": "Change user's phone number. Requires authentication."
+          }
+        },
+        {
+          "name": "Change Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"password\": \"current_password\",\n    \"new_email\": \"newemail@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/change-email/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "change-email", ""]
+            },
+            "description": "Change user's email address. Requires authentication."
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"user@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/forgot-password/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "forgot-password", ""]
+            },
+            "description": "Request a password reset. No authentication required."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Support & Contact",
+      "item": [
+        {
+          "name": "Support Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"subject\": \"Issue with account\",\n    \"message\": \"I'm having trouble accessing my medical records\",\n    \"request_type\": \"technical\",\n    \"priority\": \"medium\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/support-request/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "support-request", ""]
+            },
+            "description": "Submit a support request. Requires authentication. request_type must be one of: 'technical', 'billing', 'account', 'feedback', 'other'. priority can be: 'low', 'medium', 'high', 'urgent' (defaults to 'medium')."
+          }
+        },
+        {
+          "name": "Contact Us",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"John Doe\",\n    \"email\": \"john@example.com\",\n    \"subject\": \"General Inquiry\",\n    \"message\": \"I'd like to know more about your services.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/contact-us/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "contact-us", ""]
+            },
+            "description": "Send a general contact message. No authentication required."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reviews & Ratings",
+      "item": [
+        {
+          "name": "Submit Doctor Rating",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"doctor\": 123,\n    \"rating\": 5,\n    \"review\": \"Dr. Smith was very professional and knowledgeable.\",\n    \"anonymous\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/doctor-ratings/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctor-ratings", ""]
+            },
+            "description": "Submit a rating for a doctor. Requires patient authentication. Rating must be between 1-5."
+          }
+        },
+        {
+          "name": "Get Doctor Average Rating",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctor-ratings/doctor_average_rating/?doctor_id=123",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctor-ratings", "doctor_average_rating", ""],
+              "query": [
+                {
+                  "key": "doctor_id",
+                  "value": "123"
+                }
+              ]
+            },
+            "description": "Get the average rating for a specific doctor."
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "your_jwt_token_here",
+      "type": "string"
+    }
+  ]
+}
