@@ -10,7 +10,7 @@ from django.views.generic import RedirectView
 from users.views import (
     RoleListAPIView, RoleDetailAPIView,
     UserListAPIView, UserDetailAPIView, UserRegisterAPIView, UserLoginAPIView, UserActivateAPIView,
-    PatientListAPIView, PatientDetailAPIView, PatientProfileAPIView, register_admin_user,
+    PatientListAPIView, PatientDetailAPIView, PatientProfileAPIView, UserProfileAPIView, register_admin_user,
     ResendVerificationAPIView, PasswordChangeAPIView, EmailChangeAPIView, PhoneChangeAPIView,
     ContactUsAPIView, SupportRequestAPIView, ForgotPasswordAPIView, ResetPasswordAPIView
 )
@@ -123,8 +123,9 @@ urlpatterns = [
     path('api/forgot-password/', ForgotPasswordAPIView.as_view(), name='forgot-password'),
     path('api/reset-password/<str:uidb64>/<str:token>/', ResetPasswordAPIView.as_view(), name='reset-password'),
     
-    # Patient profile endpoint
+    # Profile endpoints
     path('api/patient/profile/', PatientProfileAPIView.as_view(), name='patient-profile'),
+    path('api/profile/', UserProfileAPIView.as_view(), name='user-profile'),
     
     path('api/patients/', PatientListAPIView.as_view(), name='patient-list'),
     path('api/patients/<uuid:pk>/', PatientDetailAPIView.as_view(), name='patient-detail'),

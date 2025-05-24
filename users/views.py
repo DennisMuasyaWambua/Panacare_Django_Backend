@@ -24,6 +24,8 @@ from .serializers import (
     PasswordChangeSerializer, EmailChangeSerializer, PhoneChangeSerializer,
     ContactUsSerializer, SupportRequestSerializer, ForgotPasswordSerializer
 )
+from doctors.models import Doctor
+from doctors.serializers import DoctorSerializer
 
 # Generate a secure token for admin registration
 # This is a one-time use token that should be removed after use
@@ -303,182 +305,174 @@ class UserActivateAPIView(APIView):
 
 class UserLoginAPIView(APIView):
     permission_classes = [permissions.AllowAny]
-    renderer_classes = [JSONRenderer, BrowsableAPIRenderer]
     
-    def get(self, request, format=None):
-        """Provide form fields for login"""
-        return Response({
-            'form_fields': {
-                'email': 'Your email address',
-                'password': 'Your password'
-            }
-        })
-    
-    def post(self, request, format=None):
-        email = request.data.get('email')
+    def post(self, request):
+        username = request.data.get('username')
         password = request.data.get('password')
         
-        # Log the request for debugging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Login attempt for email: {email}")
-        
-        if not email or not password:
+        if not username or not password:
             return Response({
-                'error': 'Please provide both email and password.',
-                'form_fields': {
-                    'email': 'Your email address',
-                    'password': 'Your password'
-                }
+                'error': 'Please provide both username and password'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        user = authenticate(username=email, password=password)
+        user = authenticate(username=username, password=password)
         
-        if user:
-            if not user.is_verified:
-                return Response({
-                    'error': 'Please activate your account before logging in.'
-                }, status=status.HTTP_401_UNAUTHORIZED)
-                
-            # Generate JWT tokens
-            refresh = RefreshToken.for_user(user)
-            access_token = str(refresh.access_token)
-            
-            # Get user roles to include in response
-            roles = [role.name for role in user.roles.all()]
-            
-            serializer = UserSerializer(user)
-            response_data = {
-                'user': serializer.data,
-                'roles': roles,
-                'tokens': {
-                    'refresh': str(refresh),
-                    'access': access_token,
-                },
-                'auth_header_example': f'Bearer {access_token}'
-            }
-            
-            # Add debugging info for frontend developers
-            response_data['_debug'] = {
-                'token_expiry': (datetime.datetime.now() + SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']).isoformat(),
-                'token_length': len(access_token),
-                'user_id': str(user.id),
-                'username': user.username,
-                'email': user.email,
-            }
-            
-            # Log success
-            logger.info(f"Login successful for user {user.email} with roles {roles}")
-            
-            # Set up the response
-            response = Response(response_data)
-            
-            return response
-            
-        # Log failed login
-        logger.warning(f"Failed login attempt for email: {email}")
-        return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+        if not user:
+            return Response({
+                'error': 'Invalid credentials'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        
+        if not user.is_verified:
+            return Response({
+                'error': 'Account not verified. Please check your email for the verification link.'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        
+        refresh = RefreshToken.for_user(user)
+        
+        # Add user roles to the token claims
+        refresh['roles'] = [role.name for role in user.roles.all()]
+        
+        # Set token expiration time
+        access_token = refresh.access_token
+        refresh_token_lifetime = datetime.timedelta(days=SIMPLE_JWT.get('REFRESH_TOKEN_LIFETIME', 14))
+        access_token_lifetime = datetime.timedelta(minutes=SIMPLE_JWT.get('ACCESS_TOKEN_LIFETIME', 60))
+        
+        expires_at = datetime.datetime.now() + access_token_lifetime
+        refresh_expires_at = datetime.datetime.now() + refresh_token_lifetime
+        
+        # Serialize user with basic details
+        user_serializer = UserSerializer(user)
+        
+        # Get role-specific data
+        role_specific_data = {}
+        
+        # If user is a patient, include patient profile data
+        if user.roles.filter(name='patient').exists():
+            try:
+                patient = Patient.objects.get(user=user)
+                patient_serializer = PatientSerializer(patient)
+                role_specific_data['patient'] = patient_serializer.data
+            except Patient.DoesNotExist:
+                role_specific_data['patient'] = None
+        
+        # If user is a doctor, include doctor profile data
+        if user.roles.filter(name='doctor').exists():
+            try:
+                doctor = Doctor.objects.get(user=user)
+                doctor_serializer = DoctorSerializer(doctor)
+                role_specific_data['doctor'] = doctor_serializer.data
+            except Doctor.DoesNotExist:
+                role_specific_data['doctor'] = None
+        
+        return Response({
+            'access': str(access_token),
+            'refresh': str(refresh),
+            'user': user_serializer.data,
+            'roles': [role.name for role in user.roles.all()],
+            'role_data': role_specific_data,
+            'expires_at': expires_at.isoformat(),
+            'refresh_expires_at': refresh_expires_at.isoformat()
+        }, status=status.HTTP_200_OK)
 
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
-
-# Define the format parameter for Swagger documentation
-format_parameter = openapi.Parameter(
-    'format', 
-    openapi.IN_QUERY, 
-    description="Response format. Set to 'fhir' for FHIR-compliant responses", 
-    type=openapi.TYPE_STRING,
-    required=False,
-    enum=['fhir']
-)
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def register_admin_user(request):
+    """
+    Special endpoint for registering the first admin user.
+    This endpoint requires a secure token and can only be used once.
+    """
+    # Check if admin token is provided
+    token = request.data.get('admin_token')
+    if not token:
+        return Response({
+            'error': 'Admin registration token is required'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Verify the token
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    if token_hash != ADMIN_TOKEN_HASH:
+        return Response({
+            'error': 'Invalid admin registration token'
+        }, status=status.HTTP_401_UNAUTHORIZED)
+    
+    # Check if admin role exists, if not create it
+    admin_role, created = Role.objects.get_or_create(
+        name='admin',
+        defaults={
+            'description': 'Administrator with full system access',
+            'is_system_role': True
+        }
+    )
+    
+    # Prepare user data
+    user_data = request.data.copy()
+    user_data['role_names'] = ['admin']  # Assign admin role
+    
+    # Create admin user
+    serializer = UserSerializer(data=user_data)
+    if serializer.is_valid():
+        user = serializer.save()
+        
+        # Auto-verify admin user
+        user.is_verified = True
+        user.save()
+        
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'detail': 'Admin user registered successfully',
+            'user': serializer.data,
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+        }, status=status.HTTP_201_CREATED)
+    
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class PatientListAPIView(APIView):
+    """
+    API endpoint to list all patients.
+    Only accessible by admin and doctor users.
+    """
     permission_classes = [IsAdminOrDoctor]
     
-    @swagger_auto_schema(
-        operation_description="List all patients",
-        manual_parameters=[format_parameter]
-    )
     def get(self, request):
-        # Check if user is doctor (not admin)
-        if not request.user.roles.filter(name='admin').exists() and request.user.roles.filter(name='doctor').exists():
-            # For doctors, only return patients assigned to them
-            doctor = request.user.doctor
-            from healthcare.models import PatientDoctorAssignment
-            assigned_patients = PatientDoctorAssignment.objects.filter(doctor=doctor).values_list('patient', flat=True)
-            patients = Patient.objects.filter(id__in=assigned_patients)
-        else:
-            # For admin, return all patients
-            patients = Patient.objects.all()
-            
+        # Get patient role
+        patient_role = get_object_or_404(Role, name='patient')
+        
+        # Get all users with patient role
+        patients = Patient.objects.filter(user__roles=patient_role)
+        
+        # Apply filtering
+        name = request.query_params.get('name')
+        if name:
+            patients = patients.filter(
+                models.Q(user__first_name__icontains=name) | 
+                models.Q(user__last_name__icontains=name)
+            )
+        
+        # Serialize the data
         serializer = PatientSerializer(patients, many=True, context={'request': request})
         
         # Set appropriate content type for FHIR responses
         response = Response(serializer.data)
         if request.query_params.get('format') == 'fhir':
             response["Content-Type"] = "application/fhir+json"
-            
+        
         return response
-    
-    def post(self, request):
-        serializer = PatientSerializer(data=request.data)
-        if serializer.is_valid():
-            patient = serializer.save()
-            
-            # If doctor is creating patient, automatically assign the patient to them
-            if not request.user.roles.filter(name='admin').exists() and request.user.roles.filter(name='doctor').exists():
-                try:
-                    doctor = request.user.doctor
-                    from healthcare.models import PatientDoctorAssignment
-                    assignment = PatientDoctorAssignment.objects.create(
-                        patient=patient,
-                        doctor=doctor,
-                        status='planned',
-                        notes='Automatically assigned to doctor who created patient record'
-                    )
-                except Exception as e:
-                    # Log error but don't fail patient creation
-                    print(f"Failed to assign patient to doctor: {str(e)}")
-            
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class PatientDetailAPIView(APIView):
-    permission_classes = [IsAdminOrAuthenticated]
+    """
+    API endpoint to get details of a specific patient.
+    Only accessible by admin and doctor users.
+    """
+    permission_classes = [IsAdminOrDoctor]
     
     def get_object(self, pk):
-        patient = get_object_or_404(Patient, pk=pk)
-        
-        # Check if doctor is accessing patient
-        if not self.request.user.roles.filter(name='admin').exists() and self.request.user.roles.filter(name='doctor').exists():
-            # For doctors, only allow access to assigned patients
-            try:
-                # Check if the doctor profile exists
-                from doctors.models import Doctor
-                doctor = Doctor.objects.get(user=self.request.user)
-                
-                # Check if this doctor is assigned to the patient
-                from healthcare.models import PatientDoctorAssignment
-                assignment_exists = PatientDoctorAssignment.objects.filter(doctor=doctor, patient=patient).exists()
-                
-                if not assignment_exists:
-                    raise permissions.PermissionDenied("You do not have permission to access this patient's data")
-                    
-            except Doctor.DoesNotExist:
-                # If doctor profile doesn't exist, deny access
-                raise permissions.PermissionDenied("Doctor profile not found. Please complete your doctor profile setup.")
-            except Exception as e:
-                # Log the error for debugging
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f"Error in patient access check: {str(e)}")
-                raise permissions.PermissionDenied("Error checking patient access permissions")
-        
-        return patient
+        return get_object_or_404(Patient, pk=pk)
     
-    @swagger_auto_schema(
-        operation_description="Get details of a specific patient",
-        manual_parameters=[format_parameter]
-    )
     def get(self, request, pk):
         patient = self.get_object(pk)
         serializer = PatientSerializer(patient, context={'request': request})
@@ -489,101 +483,118 @@ class PatientDetailAPIView(APIView):
             response["Content-Type"] = "application/fhir+json"
         
         return response
+
+class PatientProfileAPIView(APIView):
+    """
+    Endpoint for patients to view and update their own profile.
+    """
+    permission_classes = [permissions.IsAuthenticated]
     
-    def put(self, request, pk):
-        patient = self.get_object(pk)
-        serializer = PatientSerializer(patient, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def delete(self, request, pk):
-        # Only admin can delete patients
-        if not request.user.roles.filter(name='admin').exists():
-            raise permissions.PermissionDenied("Only administrators can delete patient records")
+    def get(self, request):
+        # Check if user has patient role
+        if not request.user.roles.filter(name='patient').exists():
+            return Response({
+                'error': 'Only patients can access this endpoint'
+            }, status=status.HTTP_403_FORBIDDEN)
             
-        patient = self.get_object(pk)
-        patient.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        try:
+            patient = Patient.objects.get(user=request.user)
+            serializer = PatientSerializer(patient, context={'request': request})
+            
+            # Set appropriate content type for FHIR responses
+            response = Response(serializer.data)
+            if request.query_params.get('format') == 'fhir':
+                response["Content-Type"] = "application/fhir+json"
+            
+            return response
+        except Patient.DoesNotExist:
+            return Response({
+                'error': 'Patient profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+    
+    def put(self, request):
+        # Check if user has patient role
+        if not request.user.roles.filter(name='patient').exists():
+            return Response({
+                'error': 'Only patients can access this endpoint'
+            }, status=status.HTTP_403_FORBIDDEN)
+            
+        try:
+            patient = request.user.patient
+            serializer = PatientSerializer(patient, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Patient.DoesNotExist:
+            return Response({
+                'error': 'Patient profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+    
+    def patch(self, request):
+        # Check if user has patient role
+        if not request.user.roles.filter(name='patient').exists():
+            return Response({
+                'error': 'Only patients can access this endpoint'
+            }, status=status.HTTP_403_FORBIDDEN)
+            
+        try:
+            patient = request.user.patient
+            serializer = PatientSerializer(patient, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Patient.DoesNotExist:
+            return Response({
+                'error': 'Patient profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
 
 
-@api_view(['POST'])
-@permission_classes([permissions.AllowAny])
-def register_admin_user(request):
+class UserProfileAPIView(APIView):
     """
-    Special endpoint to register an admin user. 
-    This endpoint should be removed after creating the admin user.
-    
-    Requires a security token in the request for authorization.
+    Unified endpoint for users to view their profile information.
+    Returns both user details and role-specific profile information (patient or doctor).
     """
-    logger = logging.getLogger(__name__)
-    logger.info("Admin registration attempt")
+    permission_classes = [permissions.IsAuthenticated]
     
-    # Check if security token is valid
-    provided_token = request.data.get('security_token', '')
-    token_hash = hashlib.sha256(provided_token.encode()).hexdigest()
-    
-    if token_hash != ADMIN_TOKEN_HASH:
-        logger.warning(f"Admin registration failed: Invalid security token")
-        return Response({
-            'error': 'Invalid security token'
-        }, status=status.HTTP_403_FORBIDDEN)
-    
-    # Create user data without the security token
-    user_data = {k: v for k, v in request.data.items() if k != 'security_token'}
-    
-    # Add admin role
-    try:
-        admin_role = Role.objects.get(name='admin')
-    except Role.DoesNotExist:
-        logger.error("Admin role not found in database")
-        return Response({
-            'error': 'Admin role not found in database'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    # Use the standard serializer but bypass role validation
-    serializer = UserSerializer(data=user_data)
-    
-    if serializer.is_valid():
-        # Create user
-        user = User.objects.create_user(
-            username=user_data.get('username'),
-            email=user_data.get('email'),
-            password=user_data.get('password'),
-            first_name=user_data.get('first_name', ''),
-            last_name=user_data.get('last_name', ''),
-            phone_number=user_data.get('phone_number', ''),
-            address=user_data.get('address', ''),
-            is_verified=True  # Auto-verify admin users
-        )
+    def get(self, request):
+        # Get the base user data
+        user = request.user
+        user_serializer = UserSerializer(user)
         
-        # Add the admin role
-        user.roles.add(admin_role)
-        user.save()
-        
-        # Generate JWT tokens
-        refresh = RefreshToken.for_user(user)
-        
-        logger.info(f"Admin user created successfully: {user.email}")
-        
-        return Response({
-            'message': 'Admin user created successfully',
-            'user': UserSerializer(user).data,
+        response_data = {
+            'user': user_serializer.data,
             'roles': [role.name for role in user.roles.all()],
-            'tokens': {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            }
-        }, status=status.HTTP_201_CREATED)
-    
-    logger.error(f"Admin registration failed: {serializer.errors}")
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
+        }
+        
+        # Add role-specific profile data if available
+        if user.roles.filter(name='patient').exists():
+            try:
+                patient = Patient.objects.get(user=user)
+                patient_serializer = PatientSerializer(patient, context={'request': request})
+                response_data['patient_profile'] = patient_serializer.data
+            except Patient.DoesNotExist:
+                response_data['patient_profile'] = None
+        
+        if user.roles.filter(name='doctor').exists():
+            try:
+                doctor = Doctor.objects.get(user=user)
+                doctor_serializer = DoctorSerializer(doctor, context={'request': request})
+                response_data['doctor_profile'] = doctor_serializer.data
+            except Doctor.DoesNotExist:
+                response_data['doctor_profile'] = None
+        
+        # Set appropriate content type for FHIR responses
+        response = Response(response_data)
+        if request.query_params.get('format') == 'fhir':
+            response["Content-Type"] = "application/fhir+json"
+        
+        return response
 
 class ResendVerificationAPIView(APIView):
     """
-    Endpoint to resend verification email if the initial one doesn't reach the user.
+    Endpoint to resend verification email.
     """
     permission_classes = [permissions.AllowAny]
     
@@ -591,200 +602,190 @@ class ResendVerificationAPIView(APIView):
         email = request.data.get('email')
         if not email:
             return Response({
-                'error': 'Email address is required'
+                'error': 'Email is required'
             }, status=status.HTTP_400_BAD_REQUEST)
-            
+        
         try:
             user = User.objects.get(email=email)
             
+            # Check if already verified
             if user.is_verified:
                 return Response({
-                    'message': 'This account is already verified. You can log in.'
-                }, status=status.HTTP_200_OK)
-                
-            # Send activation email
+                    'message': 'Account is already verified'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Resend verification email
             domain = os.environ.get('FRONTEND_DOMAIN', request.get_host())
             user.send_activation_email(domain)
             
             return Response({
-                'message': 'Verification email has been resent. Please check your inbox.'
+                'message': 'Verification email has been resent'
             }, status=status.HTTP_200_OK)
             
         except User.DoesNotExist:
-            # For security reasons, don't reveal if the email exists
+            # Don't reveal if user exists
             return Response({
-                'message': 'If this email is registered, a verification link will be sent.'
+                'message': 'If an account with this email exists, a verification email has been sent'
             }, status=status.HTTP_200_OK)
-        except Exception as e:
-            logger = logging.getLogger(__name__)
-            logger.error(f"Failed to resend verification email: {str(e)}")
-            return Response({
-                'error': 'Failed to send verification email. Please contact support.'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 class PasswordChangeAPIView(APIView):
     """
-    Endpoint to change user password.
+    Endpoint for users to change their password.
     """
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request):
-        serializer = PasswordChangeSerializer(data=request.data)
+        serializer = PasswordChangeSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            # Check current password
-            user = request.user
-            if not user.check_password(serializer.validated_data['current_password']):
+            # Get the validated data
+            current_password = serializer.validated_data.get('current_password')
+            new_password = serializer.validated_data.get('new_password')
+            
+            # Check if current password is correct
+            if not request.user.check_password(current_password):
                 return Response({
                     'error': 'Current password is incorrect'
                 }, status=status.HTTP_400_BAD_REQUEST)
-                
-            # Set new password
-            user.set_password(serializer.validated_data['new_password'])
-            user.save()
+            
+            # Set the new password
+            request.user.set_password(new_password)
+            request.user.save()
             
             # Update session auth hash to prevent logout
-            update_session_auth_hash(request, user)
-            
-            # Generate new JWT tokens
-            refresh = RefreshToken.for_user(user)
+            update_session_auth_hash(request, request.user)
             
             return Response({
-                'message': 'Password changed successfully',
-                'tokens': {
-                    'refresh': str(refresh),
-                    'access': str(refresh.access_token),
-                }
+                'message': 'Password changed successfully'
             }, status=status.HTTP_200_OK)
+            
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class EmailChangeAPIView(APIView):
     """
-    Endpoint to change user email address.
+    Endpoint for users to change their email.
     """
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request):
-        serializer = EmailChangeSerializer(data=request.data)
+        serializer = EmailChangeSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            # Check current password
-            user = request.user
-            if not user.check_password(serializer.validated_data['password']):
+            # Get the validated data
+            password = serializer.validated_data.get('password')
+            new_email = serializer.validated_data.get('new_email')
+            
+            # Check if password is correct
+            if not request.user.check_password(password):
                 return Response({
                     'error': 'Password is incorrect'
                 }, status=status.HTTP_400_BAD_REQUEST)
-                
-            # Change email and set verification status to false
-            old_email = user.email
-            user.email = serializer.validated_data['new_email']
-            user.is_verified = False
-            user.save()
             
-            # Send verification email to new address
-            try:
-                domain = os.environ.get('FRONTEND_DOMAIN', request.get_host())
-                user.send_activation_email(domain)
-                
+            # Check if email is already in use
+            if User.objects.filter(email=new_email).exclude(id=request.user.id).exists():
                 return Response({
-                    'message': 'Email address updated. Please verify your new email address.'
-                }, status=status.HTTP_200_OK)
-            except Exception as e:
-                # Revert changes on error
-                user.email = old_email
-                user.is_verified = True
-                user.save()
-                
-                logger = logging.getLogger(__name__)
-                logger.error(f"Failed to send verification email: {str(e)}")
-                return Response({
-                    'error': 'Failed to send verification email. Email address not updated.'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                
+                    'error': 'Email is already in use'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update email
+            request.user.email = new_email
+            request.user.save()
+            
+            return Response({
+                'message': 'Email changed successfully',
+                'new_email': new_email
+            }, status=status.HTTP_200_OK)
+            
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class PhoneChangeAPIView(APIView):
     """
-    Endpoint to change user phone number.
+    Endpoint for users to change their phone number.
     """
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request):
-        serializer = PhoneChangeSerializer(data=request.data)
+        serializer = PhoneChangeSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            # Check current password
-            user = request.user
-            if not user.check_password(serializer.validated_data['password']):
+            # Get the validated data
+            password = serializer.validated_data.get('password')
+            new_phone_number = serializer.validated_data.get('new_phone_number')
+            
+            # Check if password is correct
+            if not request.user.check_password(password):
                 return Response({
                     'error': 'Password is incorrect'
                 }, status=status.HTTP_400_BAD_REQUEST)
-                
+            
             # Update phone number
-            user.phone_number = serializer.validated_data['new_phone_number']
-            user.save()
+            request.user.phone_number = new_phone_number
+            request.user.save()
             
             return Response({
-                'message': 'Phone number updated successfully',
-                'phone_number': user.phone_number
+                'message': 'Phone number changed successfully',
+                'new_phone_number': new_phone_number
             }, status=status.HTTP_200_OK)
-                
+            
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class ContactUsAPIView(APIView):
     """
-    Endpoint for contact us form submissions.
+    Endpoint for users to submit contact form.
     """
     permission_classes = [permissions.AllowAny]
     
     def post(self, request):
         serializer = ContactUsSerializer(data=request.data)
         if serializer.is_valid():
-            # Here you would typically send an email or save to database
-            # For now, we'll just log the request
+            # In a real implementation, you would save the message or send an email
+            name = serializer.validated_data.get('name')
+            email = serializer.validated_data.get('email')
+            message = serializer.validated_data.get('message')
+            
             logger = logging.getLogger(__name__)
-            logger.info(f"Contact form submission from {serializer.validated_data['email']}: {serializer.validated_data['subject']}")
+            logger.info(f"Contact form submission from {name} ({email}): {message}")
             
             return Response({
-                'message': 'Thank you for your message. We will get back to you soon.'
+                'message': 'Your message has been sent. We will get back to you soon!'
             }, status=status.HTTP_200_OK)
-                
+            
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class SupportRequestAPIView(APIView):
     """
-    Endpoint for support requests.
+    Endpoint for authenticated users to submit support requests.
     """
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request):
         serializer = SupportRequestSerializer(data=request.data)
         if serializer.is_valid():
-            # Here you would typically create a support ticket
-            # For now, we'll just log the request
+            # In a real implementation, you would save the request or create a ticket
+            issue_type = serializer.validated_data.get('issue_type')
+            subject = serializer.validated_data.get('subject')
+            description = serializer.validated_data.get('description')
+            
+            # Create a unique support ticket ID
+            ticket_id = f"SUP-{secrets.token_hex(4).upper()}"
+            
             logger = logging.getLogger(__name__)
-            logger.info(f"Support request from {request.user.email}: {serializer.validated_data['subject']} (Priority: {serializer.validated_data['priority']})")
+            logger.info(f"Support request from {request.user.email}, Ticket: {ticket_id}, Type: {issue_type}, Subject: {subject}")
             
             return Response({
-                'message': 'Support request submitted successfully. We will respond as soon as possible.',
-                'request_id': secrets.token_hex(4).upper()  # Generate a fake request ID
+                'message': 'Your support request has been submitted',
+                'ticket_id': ticket_id
             }, status=status.HTTP_200_OK)
-                
+            
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class ForgotPasswordAPIView(APIView):
     """
-    Endpoint to request password reset.
+    Endpoint to initiate password reset process.
     """
     permission_classes = [permissions.AllowAny]
     
     def post(self, request):
         serializer = ForgotPasswordSerializer(data=request.data)
         if serializer.is_valid():
-            email = serializer.validated_data['email']
+            email = serializer.validated_data.get('email')
             
             try:
                 user = User.objects.get(email=email)
@@ -793,10 +794,12 @@ class ForgotPasswordAPIView(APIView):
                 uid = urlsafe_base64_encode(force_bytes(user.pk))
                 token = default_token_generator.make_token(user)
                 
-                # Determine protocol
+                # Get domain for reset link
                 domain = os.environ.get('FRONTEND_DOMAIN', request.get_host())
-                protocol = 'http'
-                if domain not in ['localhost', '127.0.0.1'] and not domain.startswith('192.168.'):
+                
+                # Use HTTPS if available
+                protocol = 'https' if request.is_secure() else 'http'
+                if domain != request.get_host():
                     protocol = 'https'
                     
                 # Create password reset URL
@@ -880,70 +883,3 @@ class ResetPasswordAPIView(APIView):
             return Response({
                 'error': 'Reset link is invalid'
             }, status=status.HTTP_400_BAD_REQUEST)
-
-
-class PatientProfileAPIView(APIView):
-    """
-    Endpoint for patients to view and update their own profile.
-    """
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get(self, request):
-        # Check if user has patient role
-        if not request.user.roles.filter(name='patient').exists():
-            return Response({
-                'error': 'Only patients can access this endpoint'
-            }, status=status.HTTP_403_FORBIDDEN)
-            
-        try:
-            patient = Patient.objects.get(user=request.user)
-            serializer = PatientSerializer(patient, context={'request': request})
-            
-            # Set appropriate content type for FHIR responses
-            response = Response(serializer.data)
-            if request.query_params.get('format') == 'fhir':
-                response["Content-Type"] = "application/fhir+json"
-            
-            return response
-        except Patient.DoesNotExist:
-            return Response({
-                'error': 'Patient profile not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-    
-    def put(self, request):
-        # Check if user has patient role
-        if not request.user.roles.filter(name='patient').exists():
-            return Response({
-                'error': 'Only patients can access this endpoint'
-            }, status=status.HTTP_403_FORBIDDEN)
-            
-        try:
-            patient = request.user.patient
-            serializer = PatientSerializer(patient, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        except Patient.DoesNotExist:
-            return Response({
-                'error': 'Patient profile not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-    
-    def patch(self, request):
-        # Check if user has patient role
-        if not request.user.roles.filter(name='patient').exists():
-            return Response({
-                'error': 'Only patients can access this endpoint'
-            }, status=status.HTTP_403_FORBIDDEN)
-            
-        try:
-            patient = request.user.patient
-            serializer = PatientSerializer(patient, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        except Patient.DoesNotExist:
-            return Response({
-                'error': 'Patient profile not found'
-            }, status=status.HTTP_404_NOT_FOUND)

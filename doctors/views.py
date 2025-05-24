@@ -6,6 +6,10 @@ from .serializers import DoctorSerializer, EducationSerializer
 from users.models import User, Role, Patient
 from users.serializers import UserSerializer, PatientSerializer
 from django.shortcuts import get_object_or_404
+from django.db import models
+from django.db.models import Avg, Count
+from healthcare.models import DoctorRating
+from healthcare.serializers import DoctorRatingSerializer
 
 class IsAdminUser(permissions.BasePermission):
     """
@@ -30,6 +34,18 @@ class IsVerifiedUser(permissions.BasePermission):
         
         # Check if user is verified
         return request.user.is_verified
+
+class IsPatientUser(permissions.BasePermission):
+    """
+    Permission class to check if the user has patient role
+    """
+    def has_permission(self, request, view):
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return False
+        
+        # Check if user has patient role
+        return request.user.roles.filter(name='patient').exists() and hasattr(request.user, 'patient')
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated, IsVerifiedUser])
@@ -120,11 +136,13 @@ class DoctorViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     @swagger_auto_schema(
-        operation_description="List all doctors",
+        operation_description="List all doctors. Patients can use this endpoint to see available doctors and filter them.",
         manual_parameters=[
             format_parameter,
             openapi.Parameter('specialty', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by specialty"),
-            openapi.Parameter('available', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by availability")
+            openapi.Parameter('available', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by availability"),
+            openapi.Parameter('name', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by doctor's first or last name"),
+            openapi.Parameter('location', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by doctor's location/address")
         ]
     )
     def list(self, request, *args, **kwargs):
@@ -173,12 +191,30 @@ class DoctorViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         queryset = Doctor.objects.all()
+        
+        # Filter by specialty
         specialty = self.request.query_params.get('specialty')
         if specialty:
             queryset = queryset.filter(specialty__icontains=specialty)
+            
+        # Filter by availability
         available = self.request.query_params.get('available')
         if available:
             queryset = queryset.filter(is_available=available.lower() == 'true')
+            
+        # Filter by doctor name (first or last name)
+        name = self.request.query_params.get('name')
+        if name:
+            queryset = queryset.filter(
+                models.Q(user__first_name__icontains=name) | 
+                models.Q(user__last_name__icontains=name)
+            )
+            
+        # Filter by location (address)
+        location = self.request.query_params.get('location')
+        if location:
+            queryset = queryset.filter(user__address__icontains=location)
+            
         return queryset
         
     def create(self, request, *args, **kwargs):
@@ -383,4 +419,133 @@ class DoctorViewSet(viewsets.ModelViewSet):
         except Doctor.DoesNotExist:
             return Response({
                 'error': 'Doctor profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+    
+    @swagger_auto_schema(
+        operation_description="Get ratings for a specific doctor"
+    )
+    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def ratings(self, request, pk=None):
+        """
+        Endpoint for viewing all ratings for a specific doctor.
+        Accessible by any authenticated user.
+        """
+        doctor = self.get_object()
+        ratings = DoctorRating.objects.filter(doctor=doctor)
+        
+        # Apply pagination
+        page = self.paginate_queryset(ratings)
+        if page is not None:
+            serializer = DoctorRatingSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = DoctorRatingSerializer(ratings, many=True)
+        return Response(serializer.data)
+    
+    @swagger_auto_schema(
+        operation_description="Get summary of ratings for a specific doctor"
+    )
+    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def rating_summary(self, request, pk=None):
+        """
+        Endpoint for viewing summary statistics of ratings for a specific doctor.
+        Accessible by any authenticated user.
+        """
+        doctor = self.get_object()
+        
+        # Get ratings data
+        ratings = DoctorRating.objects.filter(doctor=doctor)
+        total_ratings = ratings.count()
+        
+        if total_ratings == 0:
+            return Response({
+                'doctor_id': str(doctor.id),
+                'doctor_name': doctor.user.get_full_name(),
+                'average_rating': 0,
+                'total_ratings': 0,
+                'rating_distribution': {
+                    '1': 0, '2': 0, '3': 0, '4': 0, '5': 0
+                }
+            })
+        
+        # Calculate average
+        avg_rating = ratings.aggregate(Avg('rating'))['rating__avg']
+        
+        # Calculate distribution
+        distribution = ratings.values('rating').annotate(count=Count('rating')).order_by('rating')
+        rating_distribution = {str(i): 0 for i in range(1, 6)}
+        for item in distribution:
+            rating_distribution[str(item['rating'])] = item['count']
+        
+        return Response({
+            'doctor_id': str(doctor.id),
+            'doctor_name': doctor.user.get_full_name(),
+            'average_rating': avg_rating,
+            'total_ratings': total_ratings,
+            'rating_distribution': rating_distribution
+        })
+        
+    @swagger_auto_schema(
+        operation_description="Create a review for a doctor",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['rating'],
+            properties={
+                'rating': openapi.Schema(type=openapi.TYPE_INTEGER, description="Rating (1-5 stars)", minimum=1, maximum=5),
+                'review': openapi.Schema(type=openapi.TYPE_STRING, description="Text review"),
+                'is_anonymous': openapi.Schema(type=openapi.TYPE_BOOLEAN, description="Whether to post review anonymously")
+            }
+        )
+    )
+    @action(detail=True, methods=['post'], permission_classes=[IsPatientUser])
+    def review(self, request, pk=None):
+        """
+        Endpoint for patients to create a review for a doctor.
+        Only accessible by authenticated users with patient role.
+        """
+        doctor = self.get_object()
+        
+        # Validate input data
+        rating = request.data.get('rating')
+        if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
+            return Response({
+                'error': 'Rating must be an integer between 1 and 5'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        review_text = request.data.get('review', '')
+        is_anonymous = request.data.get('is_anonymous', False)
+        
+        try:
+            patient = request.user.patient
+            
+            # Check if patient has already rated this doctor
+            existing_rating = DoctorRating.objects.filter(doctor=doctor, patient=patient).first()
+            
+            if existing_rating:
+                # Update existing rating
+                existing_rating.rating = rating
+                existing_rating.review = review_text
+                existing_rating.is_anonymous = is_anonymous
+                existing_rating.save()
+                message = "Review updated successfully"
+            else:
+                # Create new rating
+                DoctorRating.objects.create(
+                    doctor=doctor,
+                    patient=patient,
+                    rating=rating,
+                    review=review_text,
+                    is_anonymous=is_anonymous
+                )
+                message = "Review created successfully"
+            
+            return Response({
+                'message': message,
+                'doctor_id': str(doctor.id),
+                'doctor_name': doctor.user.get_full_name()
+            }, status=status.HTTP_201_CREATED)
+            
+        except Patient.DoesNotExist:
+            return Response({
+                'error': 'Patient profile not found'
             }, status=status.HTTP_404_NOT_FOUND)
