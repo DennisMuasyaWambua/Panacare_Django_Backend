@@ -332,8 +332,8 @@ class UserLoginAPIView(APIView):
         
         # Set token expiration time
         access_token = refresh.access_token
-        refresh_token_lifetime = datetime.timedelta(days=SIMPLE_JWT.get('REFRESH_TOKEN_LIFETIME', 14))
-        access_token_lifetime = datetime.timedelta(minutes=SIMPLE_JWT.get('ACCESS_TOKEN_LIFETIME', 60))
+        refresh_token_lifetime = SIMPLE_JWT.get('REFRESH_TOKEN_LIFETIME', datetime.timedelta(days=14))
+        access_token_lifetime = SIMPLE_JWT.get('ACCESS_TOKEN_LIFETIME', datetime.timedelta(minutes=60))
         
         expires_at = datetime.datetime.now() + access_token_lifetime
         refresh_expires_at = datetime.datetime.now() + refresh_token_lifetime
