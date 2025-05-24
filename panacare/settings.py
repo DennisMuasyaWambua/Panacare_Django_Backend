@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'users',
     'doctors',
     'healthcare',
+    'clinical_support',
 ]
 
 # Swagger Settings
@@ -323,3 +324,10 @@ LOGGING = {
         },
     },
 }
+# Database settings
+# DB_ENGINE=django.db.backends.postgresql
+# DB_NAME=panacare
+# DB_USER=postgres
+# DB_PASSWORD=Muasya254;
+# DB_HOST=localhost
+# DB_PORT=5432

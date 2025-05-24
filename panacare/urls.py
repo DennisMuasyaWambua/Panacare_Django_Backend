@@ -151,4 +151,7 @@ urlpatterns = [
     
     # FHIR API
     path('fhir/', include('fhir_api.urls')),
+    
+    # Clinical Decision Support
+    path('', include('clinical_support.urls')),
 ]
