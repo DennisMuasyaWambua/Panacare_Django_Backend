@@ -219,7 +219,6 @@ class UserRegisterAPIView(APIView):
                 </div>
                 """,
                 'form_fields': {
-                    'username': 'Your username',
                     'email': 'Your email address',
                     'password': 'Your password',
                     'first_name': 'Your first name',
@@ -235,7 +234,6 @@ class UserRegisterAPIView(APIView):
         return Response({
             'roles': role_serializer.data,
             'form_fields': {
-                'username': 'Your username',
                 'email': 'Your email address',
                 'password': 'Your password',
                 'first_name': 'Your first name',
@@ -307,15 +305,15 @@ class UserLoginAPIView(APIView):
     permission_classes = [permissions.AllowAny]
     
     def post(self, request):
-        username = request.data.get('username')
+        email = request.data.get('email')
         password = request.data.get('password')
         
-        if not username or not password:
+        if not email or not password:
             return Response({
-                'error': 'Please provide both username and password'
+                'error': 'Please provide both email and password'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        user = authenticate(username=username, password=password)
+        user = authenticate(username=email, password=password)
         
         if not user:
             return Response({
