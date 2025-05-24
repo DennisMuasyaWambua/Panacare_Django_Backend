@@ -84,6 +84,7 @@ admin_urls = [
     path('api/doctors/admin_list_patients/', DoctorViewSet.as_view({'get': 'admin_list_patients'}), name='admin-list-patients'),
     path('api/doctors/admin_view_patient/<uuid:pk>/', DoctorViewSet.as_view({'get': 'admin_view_patient'}), name='admin-view-patient'),
     path('api/doctors/add_profile/', doctors.views.add_doctor_profile, name='add-doctor-profile'),
+    path('api/doctors/profile/', DoctorViewSet.as_view({'get': 'profile'}), name='doctor-profile'),
     
     # Healthcare endpoints for patient-doctor assignments
     path('api/healthcare/assign_patient_to_doctor/', HealthCareViewSet.as_view({'post': 'assign_patient_to_doctor'}), name='assign-patient-to-doctor'),

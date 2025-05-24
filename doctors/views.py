@@ -61,17 +61,30 @@ def add_doctor_profile(request):
             education = education_serializer.save()
         else:
             return Response(education_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        # Education is required, so create a default one if not provided
+        default_education = {
+            'level_of_education': 'Not Specified',
+            'field': 'Medicine',
+            'institution': 'Not Specified'
+        }
+        education_serializer = EducationSerializer(data=default_education)
+        if education_serializer.is_valid():
+            education = education_serializer.save()
+        else:
+            return Response(education_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     # Create doctor profile with current user ID
     doctor_data = {
         'user_id': request.user.id,
-        'specialty': request.data.get('specialty'),
-        'license_number': request.data.get('license_number'),
+        'specialty': request.data.get('specialty', 'General Practice'),
+        'license_number': request.data.get('license_number', 'Pending'),
         'experience_years': request.data.get('experience_years', 0),
         'bio': request.data.get('bio', ''),
-        'education': education.id if education else None,
+        'education': education.id,
         'is_verified': False,  # Admin will need to verify doctor profiles
-        'is_available': request.data.get('is_available', True)
+        'is_available': request.data.get('is_available', True),
+        'communication_languages': request.data.get('communication_languages', 'en')
     }
     
     doctor_serializer = DoctorSerializer(data=doctor_data)
@@ -196,6 +209,19 @@ class DoctorViewSet(viewsets.ModelViewSet):
             education = None
             if education_data:
                 education_serializer = EducationSerializer(data=education_data)
+                if education_serializer.is_valid():
+                    education = education_serializer.save()
+                    request.data['education'] = education.id
+                else:
+                    return Response(education_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                # Education is required, so create a default one if not provided
+                default_education = {
+                    'level_of_education': 'Not Specified',
+                    'field': 'Medicine',
+                    'institution': 'Not Specified'
+                }
+                education_serializer = EducationSerializer(data=default_education)
                 if education_serializer.is_valid():
                     education = education_serializer.save()
                     request.data['education'] = education.id
@@ -328,3 +354,33 @@ class DoctorViewSet(viewsets.ModelViewSet):
         patient = get_object_or_404(Patient, pk=pk)
         serializer = PatientSerializer(patient, context={'request': request})
         return Response(serializer.data)
+        
+    @swagger_auto_schema(
+        operation_description="Get doctor's own profile",
+        manual_parameters=[format_parameter]
+    )
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def profile(self, request):
+        """
+        Endpoint for doctors to view their own profile
+        """
+        # Check if user has doctor role
+        if not request.user.roles.filter(name='doctor').exists():
+            return Response({
+                'error': 'Only doctors can access this endpoint'
+            }, status=status.HTTP_403_FORBIDDEN)
+            
+        try:
+            doctor = Doctor.objects.get(user=request.user)
+            serializer = self.get_serializer(doctor, context={'request': request})
+            
+            # Set appropriate content type for FHIR responses
+            response = Response(serializer.data)
+            if request.query_params.get('format') == 'fhir':
+                response["Content-Type"] = "application/fhir+json"
+            
+            return response
+        except Doctor.DoesNotExist:
+            return Response({
+                'error': 'Doctor profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)

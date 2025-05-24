@@ -896,7 +896,7 @@ class PatientProfileAPIView(APIView):
             }, status=status.HTTP_403_FORBIDDEN)
             
         try:
-            patient = request.user.patient
+            patient = Patient.objects.get(user=request.user)
             serializer = PatientSerializer(patient, context={'request': request})
             
             # Set appropriate content type for FHIR responses
