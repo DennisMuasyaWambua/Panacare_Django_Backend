@@ -352,6 +352,7 @@ class AppointmentStatus(models.TextChoices):
     FULFILLED = 'fulfilled', 'Fulfilled'
     CANCELLED = 'cancelled', 'Cancelled'
     NOSHOW = 'noshow', 'No Show'
+    SCHEDULED = 'scheduled', 'Scheduled'
     ENTERED_IN_ERROR = 'entered-in-error', 'Entered in Error'
 
 
@@ -380,6 +381,7 @@ class Appointment(models.Model):
         ('emergency', 'Emergency'),
         ('consultation', 'Consultation'),
         ('procedure', 'Procedure'),
+        ('checkup', 'Checkup'),
         ('other', 'Other')
     ], default='consultation')
     reason = models.TextField(blank=True)

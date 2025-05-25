@@ -54,8 +54,8 @@ class ClinicalDecisionSupportAPIView(APIView):
             'recommendations': recommendations,
             'risk_level': risk_level,
             'record_id': record.id,
-            'blood_pressure_status': bp_status if systolic and diastolic else None,
-            'blood_sugar_status': sugar_status if blood_sugar else None
+            'blood_pressure_status': bp_status if validated_data.get('systolic_pressure') and validated_data.get('diastolic_pressure') else None,
+            'blood_sugar_status': sugar_status if validated_data.get('blood_sugar') else None
         }
         
         response_serializer = ClinicalDecisionResponseSerializer(data=response_data)
