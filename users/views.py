@@ -412,9 +412,16 @@ def register_admin_user(request):
     # Prepare user data
     user_data = request.data.copy()
     user_data['role_names'] = ['admin']  # Assign admin role
+    user_data['role'] = 'admin'  # Satisfy the required field
+    
+    # If username is not provided, generate one from email
+    if 'username' not in user_data:
+        email = user_data.get('email', '')
+        username = email.split('@')[0] if '@' in email else 'admin_user'
+        user_data['username'] = username
     
     # Create admin user
-    serializer = UserSerializer(data=user_data)
+    serializer = UserSerializer(data=user_data, context={'admin_registration': True})
     if serializer.is_valid():
         user = serializer.save()
         

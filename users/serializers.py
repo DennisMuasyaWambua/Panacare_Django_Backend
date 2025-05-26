@@ -32,7 +32,12 @@ class UserSerializer(serializers.ModelSerializer):
     def validate_role_names(self, value):
         """Validate that all role_names exist in the database"""
         if value:
-            allowed_roles = ['doctor', 'patient']
+            # If it's an admin registration, allow 'admin' role
+            if self.context.get('admin_registration'):
+                allowed_roles = ['doctor', 'patient', 'admin']
+            else:
+                allowed_roles = ['doctor', 'patient']
+                
             for role_name in value:
                 if role_name not in allowed_roles:
                     raise serializers.ValidationError(f"Role '{role_name}' is not allowed. Choose from: {', '.join(allowed_roles)}")
@@ -45,7 +50,12 @@ class UserSerializer(serializers.ModelSerializer):
     def validate_role(self, value):
         """Validate that the role exists in the database"""
         if value:
-            allowed_roles = ['doctor', 'patient']
+            # If it's an admin registration, allow 'admin' role
+            if self.context.get('admin_registration'):
+                allowed_roles = ['doctor', 'patient', 'admin']
+            else:
+                allowed_roles = ['doctor', 'patient']
+                
             if value not in allowed_roles:
                 raise serializers.ValidationError(f"Role '{value}' is not allowed. Choose from: {', '.join(allowed_roles)}")
             try:
