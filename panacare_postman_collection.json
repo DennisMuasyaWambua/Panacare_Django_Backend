@@ -26,7 +26,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "users", "register", ""]
             },
-            "description": "Register a new user. Role is optional and defaults to 'patient' if not provided."
+            "description": "Register a new user. Role is optional and defaults to 'patient' if not provided. For multiple roles, use the role_names field with an array: [\"patient\", \"doctor\"]"
           }
         },
         {
@@ -185,14 +185,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"admin_token\": \"admin_secret_token\",\n    \"email\": \"admin@example.com\",\n    \"password\": \"secureadminpassword\",\n    \"first_name\": \"Admin\",\n    \"last_name\": \"User\",\n    \"phone_number\": \"+1234567890\",\n    \"address\": \"123 Admin Street\"\n}"
+              "raw": "{\n    \"admin_token\": \"panacare_secure_admin_token_2025\",\n    \"email\": \"admin@example.com\",\n    \"password\": \"secureadminpassword\",\n    \"first_name\": \"Admin\",\n    \"last_name\": \"User\",\n    \"phone_number\": \"+1234567890\",\n    \"address\": \"123 Admin Street\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/users/register-admin/",
               "host": ["{{base_url}}"],
               "path": ["api", "users", "register-admin", ""]
             },
-            "description": "Register an admin user. Requires a valid admin token."
+            "description": "Register an admin user. Requires a valid admin token. This endpoint can only be used once to create the first admin user."
           }
         },
         {
@@ -392,7 +392,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "doctors", "add_profile", ""]
             },
-            "description": "Add a doctor profile for the current user. Requires user authentication with doctor role."
+            "description": "Add a doctor profile for the current user. Requires user authentication with doctor role. After creating a profile, an admin must verify the doctor."
           }
         },
         {
@@ -436,7 +436,57 @@
               "host": ["{{base_url}}"],
               "path": ["api", "doctors", "admin_add_doctor", ""]
             },
-            "description": "Admin: Add a new doctor. Requires admin authentication."
+            "description": "Admin: Add a new doctor. Requires admin authentication. Doctors created by admin are automatically verified."
+          }
+        },
+        {
+          "name": "Admin List Doctors (With Verification Filter)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctors/admin_list_doctors/?is_verified=false",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "admin_list_doctors", ""],
+              "query": [
+                {
+                  "key": "is_verified",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Admin: List all doctors with optional filtering by verification status. Use is_verified=false to find doctors needing verification."
+          }
+        },
+        {
+          "name": "Admin Verify Doctor",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"is_verified\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/doctors/{{doctor_id}}/verify_doctor/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "{{doctor_id}}", "verify_doctor", ""]
+            },
+            "description": "Admin: Verify a doctor's profile. Requires admin authentication. Set is_verified to true to approve or false to reject a doctor."
           }
         }
       ]
