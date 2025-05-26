@@ -343,14 +343,40 @@ class DoctorViewSet(viewsets.ModelViewSet):
         """
         Endpoint for admin to view all doctors
         """
+        # Log the request user for debugging
+        print(f"Admin list doctors requested by: {request.user.email}")
+        
         # Get all doctors
         doctors = Doctor.objects.all()
+        
+        # Log the count of doctors
+        print(f"Total doctors found: {doctors.count()}")
+        for doctor in doctors:
+            print(f"Doctor: {doctor.id} - {doctor.user.get_full_name()} - Verified: {doctor.is_verified}")
+        
+        # Check for users with doctor role but no doctor profile
+        doctor_role = Role.objects.filter(name='doctor').first()
+        if doctor_role:
+            users_with_doctor_role = User.objects.filter(roles=doctor_role)
+            print(f"Users with doctor role: {users_with_doctor_role.count()}")
+            
+            # Find users with doctor role but no doctor profile
+            missing_profiles = []
+            for user in users_with_doctor_role:
+                if not hasattr(user, 'doctor'):
+                    missing_profiles.append(f"{user.id} - {user.get_full_name()}")
+            
+            if missing_profiles:
+                print(f"Users with doctor role but no doctor profile: {len(missing_profiles)}")
+                for profile in missing_profiles:
+                    print(f"Missing profile: {profile}")
         
         # Get verification status filter if provided
         is_verified = request.query_params.get('is_verified')
         if is_verified is not None:
             is_verified_bool = is_verified.lower() == 'true'
             doctors = doctors.filter(is_verified=is_verified_bool)
+            print(f"Filtered to {doctors.count()} doctors with is_verified={is_verified_bool}")
         
         # Serialize the data
         serializer = self.get_serializer(doctors, many=True)
@@ -393,7 +419,26 @@ class DoctorViewSet(viewsets.ModelViewSet):
         """
         Endpoint for admin to verify a doctor's profile
         """
-        doctor = get_object_or_404(Doctor, pk=pk)
+        try:
+            # First try to get doctor by primary key
+            doctor = Doctor.objects.get(pk=pk)
+        except Doctor.DoesNotExist:
+            # Log the attempted pk for debugging
+            print(f"Failed to find doctor with pk: {pk}")
+            
+            # Try to find by user ID as fallback (in case the ID is a user ID)
+            try:
+                user = User.objects.get(pk=pk)
+                if hasattr(user, 'doctor'):
+                    doctor = user.doctor
+                else:
+                    return Response({
+                        'error': f"Found user with ID {pk} but they don't have a doctor profile"
+                    }, status=status.HTTP_404_NOT_FOUND)
+            except User.DoesNotExist:
+                return Response({
+                    'error': f"No Doctor or User found with ID: {pk}"
+                }, status=status.HTTP_404_NOT_FOUND)
         
         # Get verification status from request data
         is_verified = request.data.get('is_verified', True)
