@@ -346,6 +346,12 @@ class DoctorViewSet(viewsets.ModelViewSet):
         # Get all doctors
         doctors = Doctor.objects.all()
         
+        # Get verification status filter if provided
+        is_verified = request.query_params.get('is_verified')
+        if is_verified is not None:
+            is_verified_bool = is_verified.lower() == 'true'
+            doctors = doctors.filter(is_verified=is_verified_bool)
+        
         # Serialize the data
         serializer = self.get_serializer(doctors, many=True)
         
@@ -381,6 +387,26 @@ class DoctorViewSet(viewsets.ModelViewSet):
         doctor = get_object_or_404(Doctor, pk=pk)
         serializer = self.get_serializer(doctor)
         return Response(serializer.data)
+        
+    @action(detail=True, methods=['patch'], permission_classes=[IsAdminUser])
+    def verify_doctor(self, request, pk=None):
+        """
+        Endpoint for admin to verify a doctor's profile
+        """
+        doctor = get_object_or_404(Doctor, pk=pk)
+        
+        # Get verification status from request data
+        is_verified = request.data.get('is_verified', True)
+        
+        # Update verification status
+        doctor.is_verified = is_verified
+        doctor.save()
+        
+        serializer = self.get_serializer(doctor)
+        return Response({
+            'message': f"Doctor verification status updated to: {is_verified}",
+            'doctor': serializer.data
+        }, status=status.HTTP_200_OK)
         
     @action(detail=True, methods=['get'], permission_classes=[IsAdminUser])
     def admin_view_patient(self, request, pk=None):

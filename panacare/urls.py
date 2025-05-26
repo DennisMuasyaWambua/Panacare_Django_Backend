@@ -83,6 +83,7 @@ admin_urls = [
     path('api/doctors/admin_view_doctor/<uuid:pk>/', DoctorViewSet.as_view({'get': 'admin_view_doctor'}), name='admin-view-doctor'),
     path('api/doctors/admin_list_patients/', DoctorViewSet.as_view({'get': 'admin_list_patients'}), name='admin-list-patients'),
     path('api/doctors/admin_view_patient/<uuid:pk>/', DoctorViewSet.as_view({'get': 'admin_view_patient'}), name='admin-view-patient'),
+    path('api/doctors/<uuid:pk>/verify/', DoctorViewSet.as_view({'patch': 'verify_doctor'}), name='verify-doctor'),
     path('api/doctors/add_profile/', doctors.views.add_doctor_profile, name='add-doctor-profile'),
     path('api/doctors/profile/', DoctorViewSet.as_view({'get': 'profile'}), name='doctor-profile'),
     
