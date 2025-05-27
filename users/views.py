@@ -354,10 +354,21 @@ class UserLoginAPIView(APIView):
         # If user is a patient, include patient profile data
         if user.roles.filter(name='patient').exists():
             try:
-                patient = Patient.objects.get(user=user)
+                # Get or create patient profile
+                patient, created = Patient.objects.get_or_create(user=user)
+                
+                # Log if a new profile was created
+                if created:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.info(f"Created new patient profile for user {user.email} during login")
+                
                 patient_serializer = PatientSerializer(patient)
                 role_specific_data['patient'] = patient_serializer.data
-            except Patient.DoesNotExist:
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error accessing patient profile during login: {str(e)}")
                 role_specific_data['patient'] = None
         
         # If user is a doctor, include doctor profile data
@@ -510,7 +521,15 @@ class PatientProfileAPIView(APIView):
             }, status=status.HTTP_403_FORBIDDEN)
             
         try:
-            patient = Patient.objects.get(user=request.user)
+            # Get or create patient profile
+            patient, created = Patient.objects.get_or_create(user=request.user)
+            
+            # Log if a new profile was created
+            if created:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Created new patient profile for user {request.user.email}")
+            
             serializer = PatientSerializer(patient, context={'request': request})
             
             # Set appropriate content type for FHIR responses
@@ -519,10 +538,13 @@ class PatientProfileAPIView(APIView):
                 response["Content-Type"] = "application/fhir+json"
             
             return response
-        except Patient.DoesNotExist:
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error accessing patient profile: {str(e)}")
             return Response({
-                'error': 'Patient profile not found'
-            }, status=status.HTTP_404_NOT_FOUND)
+                'error': 'Error accessing patient profile'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def put(self, request):
         # Check if user has patient role
@@ -532,16 +554,27 @@ class PatientProfileAPIView(APIView):
             }, status=status.HTTP_403_FORBIDDEN)
             
         try:
-            patient = request.user.patient
+            # Get or create patient profile
+            patient, created = Patient.objects.get_or_create(user=request.user)
+            
+            # Log if a new profile was created
+            if created:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Created new patient profile for user {request.user.email} during PUT")
+            
             serializer = PatientSerializer(patient, data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save()
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        except Patient.DoesNotExist:
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating patient profile: {str(e)}")
             return Response({
-                'error': 'Patient profile not found'
-            }, status=status.HTTP_404_NOT_FOUND)
+                'error': 'Error updating patient profile'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def patch(self, request):
         # Check if user has patient role
@@ -551,16 +584,27 @@ class PatientProfileAPIView(APIView):
             }, status=status.HTTP_403_FORBIDDEN)
             
         try:
-            patient = request.user.patient
+            # Get or create patient profile
+            patient, created = Patient.objects.get_or_create(user=request.user)
+            
+            # Log if a new profile was created
+            if created:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Created new patient profile for user {request.user.email} during PATCH")
+            
             serializer = PatientSerializer(patient, data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save()
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        except Patient.DoesNotExist:
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating patient profile: {str(e)}")
             return Response({
-                'error': 'Patient profile not found'
-            }, status=status.HTTP_404_NOT_FOUND)
+                'error': 'Error updating patient profile'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class UserProfileAPIView(APIView):
@@ -583,10 +627,21 @@ class UserProfileAPIView(APIView):
         # Add role-specific profile data if available
         if user.roles.filter(name='patient').exists():
             try:
-                patient = Patient.objects.get(user=user)
+                # Get or create patient profile
+                patient, created = Patient.objects.get_or_create(user=user)
+                
+                # Log if a new profile was created
+                if created:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.info(f"Created new patient profile for user {user.email} during profile view")
+                
                 patient_serializer = PatientSerializer(patient, context={'request': request})
                 response_data['patient_profile'] = patient_serializer.data
-            except Patient.DoesNotExist:
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error accessing patient profile: {str(e)}")
                 response_data['patient_profile'] = None
         
         if user.roles.filter(name='doctor').exists():

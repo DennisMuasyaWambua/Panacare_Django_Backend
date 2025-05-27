@@ -7,6 +7,8 @@ from django.template.loader import render_to_string
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.contrib.auth.tokens import default_token_generator
+from django.db.models.signals import m2m_changed
+from django.dispatch import receiver
 import uuid
 
 class Role(models.Model):
@@ -336,3 +338,17 @@ class Patient(models.Model):
                 ]
         
         return patient_json
+
+# Signal to create a Patient profile when a user is assigned the patient role
+@receiver(m2m_changed, sender=User.roles.through)
+def create_patient_profile(sender, instance, action, pk_set, **kwargs):
+    """
+    Signal handler to create a Patient profile when a user is assigned the patient role.
+    """
+    if action == 'post_add':
+        # Check if any of the newly added roles is 'patient'
+        patient_role_exists = Role.objects.filter(pk__in=pk_set, name='patient').exists()
+        
+        if patient_role_exists:
+            # Create a Patient profile if it doesn't exist
+            Patient.objects.get_or_create(user=instance)
