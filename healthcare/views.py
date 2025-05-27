@@ -16,7 +16,7 @@ from .serializers import (
     PackageSerializer, PatientSubscriptionSerializer,
     ResourceSerializer, DoctorRatingSerializer
 )
-from doctors.views import IsAdminUser, IsVerifiedUser
+from doctors.views import IsAdminUser, IsVerifiedUser, IsDoctorUser
 from users.models import User, Role, Patient
 from doctors.models import Doctor
 from django.shortcuts import get_object_or_404
