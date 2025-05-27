@@ -188,6 +188,95 @@ class HealthCareViewSet(viewsets.ModelViewSet):
         assignment = get_object_or_404(PatientDoctorAssignment, pk=pk)
         serializer = PatientDoctorAssignmentSerializer(assignment)
         return Response(serializer.data)
+    
+    @swagger_auto_schema(
+        method='get',
+        operation_description="List all patients assigned to the doctor",
+        manual_parameters=[
+            format_parameter,
+            openapi.Parameter('active', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, 
+                            description="Filter by active status (true/false)")
+        ]
+    )
+    @action(detail=False, methods=['get'], permission_classes=[IsDoctorUser])
+    def doctor_assigned_patients(self, request):
+        """
+        Endpoint for doctors to view all patients assigned to them
+        """
+        try:
+            # Get doctor from user
+            doctor = request.user.doctor
+            
+            # Get all active assignments for this doctor
+            assignments = PatientDoctorAssignment.objects.filter(doctor=doctor)
+            
+            # Optional filtering by active status
+            is_active = request.query_params.get('active')
+            if is_active is not None:
+                assignments = assignments.filter(is_active=is_active.lower() == 'true')
+                
+            # Get patient objects from assignments
+            patient_ids = assignments.values_list('patient_id', flat=True)
+            patients = Patient.objects.filter(id__in=patient_ids)
+            
+            # Use the patient serializer 
+            from users.serializers import PatientSerializer
+            serializer = PatientSerializer(patients, many=True, context={'request': request})
+            
+            # Set appropriate content type for FHIR responses
+            response = Response(serializer.data)
+            if request.query_params.get('format') == 'fhir':
+                response["Content-Type"] = "application/fhir+json"
+                
+            return response
+        except Doctor.DoesNotExist:
+            return Response({
+                'error': 'Doctor profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+    
+    @swagger_auto_schema(
+        method='get',
+        operation_description="Get details of a specific patient assigned to the doctor",
+        manual_parameters=[format_parameter]
+    )
+    @action(detail=True, methods=['get'], permission_classes=[IsDoctorUser])
+    def doctor_view_patient(self, request, pk=None):
+        """
+        Endpoint for doctors to view details of a specific patient assigned to them
+        """
+        try:
+            # Get doctor from user
+            doctor = request.user.doctor
+            
+            # Get the patient
+            patient = get_object_or_404(Patient, pk=pk)
+            
+            # Check if the patient is assigned to this doctor
+            assignment_exists = PatientDoctorAssignment.objects.filter(
+                doctor=doctor,
+                patient=patient,
+                is_active=True
+            ).exists()
+            
+            if not assignment_exists:
+                return Response({
+                    'error': 'This patient is not assigned to you or the assignment is not active'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Use the patient serializer
+            from users.serializers import PatientSerializer
+            serializer = PatientSerializer(patient, context={'request': request})
+            
+            # Set appropriate content type for FHIR responses
+            response = Response(serializer.data)
+            if request.query_params.get('format') == 'fhir':
+                response["Content-Type"] = "application/fhir+json"
+                
+            return response
+        except Doctor.DoesNotExist:
+            return Response({
+                'error': 'Doctor profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
 
 
 class IsPatientUser(permissions.BasePermission):

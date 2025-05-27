@@ -598,6 +598,61 @@
             },
             "description": "Assign a patient to a doctor. Requires admin or doctor authentication."
           }
+        },
+        {
+          "name": "Doctor - List Assigned Patients",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/doctor/patients/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", "doctor", "patients", ""],
+              "query": [
+                {
+                  "key": "active",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "format",
+                  "value": "fhir",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List all patients assigned to the authenticated doctor. Requires doctor authentication. Can filter by active status of assignments."
+          }
+        },
+        {
+          "name": "Doctor - View Patient Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/doctor/patient/{{patient_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", "doctor", "patient", "{{patient_id}}", ""],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "fhir",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "View details of a specific patient assigned to the authenticated doctor. Requires doctor authentication. Only returns data if the patient is actively assigned to the doctor."
+          }
         }
       ]
     },

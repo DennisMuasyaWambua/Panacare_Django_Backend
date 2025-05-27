@@ -91,6 +91,8 @@ admin_urls = [
     path('api/healthcare/assign_patient_to_doctor/', HealthCareViewSet.as_view({'post': 'assign_patient_to_doctor'}), name='assign-patient-to-doctor'),
     path('api/healthcare/list_patient_doctor_assignments/', HealthCareViewSet.as_view({'get': 'list_patient_doctor_assignments'}), name='list-patient-doctor-assignments'),
     path('api/healthcare/view_assignment/<uuid:pk>/', HealthCareViewSet.as_view({'get': 'view_assignment'}), name='view-assignment'),
+    path('api/healthcare/doctor/patients/', HealthCareViewSet.as_view({'get': 'doctor_assigned_patients'}), name='doctor-assigned-patients'),
+    path('api/healthcare/doctor/patient/<uuid:pk>/', HealthCareViewSet.as_view({'get': 'doctor_view_patient'}), name='doctor-view-patient'),
 ]
 
 urlpatterns = [

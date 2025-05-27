@@ -49,13 +49,52 @@ class ClinicalDecisionSupportAPIView(APIView):
         record.save()
         
         # Prepare the response
+        # Get blood pressure and sugar status from the analysis function
+        bp_status = None
+        sugar_status = None
+        
+        if validated_data.get('systolic_pressure') and validated_data.get('diastolic_pressure'):
+            # Check blood pressure status based on the same logic as in _analyze_clinical_data
+            systolic = validated_data.get('systolic_pressure')
+            diastolic = validated_data.get('diastolic_pressure')
+            
+            if systolic >= 180 or diastolic >= 120:
+                bp_status = "too high"
+            elif systolic >= 140 or diastolic >= 90:
+                bp_status = "high"
+            elif 120 <= systolic < 140 or 80 <= diastolic < 90:
+                bp_status = "borderline high"
+            elif systolic < 90 and diastolic < 60:
+                bp_status = "too low"
+            elif systolic < 100 and diastolic < 65:
+                bp_status = "borderline low"
+            else:
+                bp_status = "normal"
+        
+        if validated_data.get('blood_sugar'):
+            # Check blood sugar status based on the same logic as in _analyze_clinical_data
+            blood_sugar = validated_data.get('blood_sugar')
+            
+            if blood_sugar >= 200:
+                sugar_status = "too high"
+            elif blood_sugar >= 126:
+                sugar_status = "high"
+            elif 100 <= blood_sugar < 126:
+                sugar_status = "borderline high"
+            elif blood_sugar < 70:
+                sugar_status = "too low"
+            elif 70 <= blood_sugar < 80:
+                sugar_status = "borderline low"
+            else:
+                sugar_status = "normal"
+        
         response_data = {
             'analysis': analysis,
             'recommendations': recommendations,
             'risk_level': risk_level,
             'record_id': record.id,
-            'blood_pressure_status': bp_status if validated_data.get('systolic_pressure') and validated_data.get('diastolic_pressure') else None,
-            'blood_sugar_status': sugar_status if validated_data.get('blood_sugar') else None
+            'blood_pressure_status': bp_status,
+            'blood_sugar_status': sugar_status
         }
         
         response_serializer = ClinicalDecisionResponseSerializer(data=response_data)
