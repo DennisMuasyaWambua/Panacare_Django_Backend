@@ -754,6 +754,58 @@
             },
             "description": "Update consultation details for an appointment. Requires doctor authentication."
           }
+        },
+        {
+          "name": "Patient Reschedule Appointment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"appointment_date\": \"2023-07-20\",\n    \"start_time\": \"15:00:00\",\n    \"end_time\": \"15:30:00\",\n    \"reschedule_reason\": \"Personal emergency\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/appointments/{{appointment_id}}/patient_reschedule/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "appointments", "{{appointment_id}}", "patient_reschedule", ""]
+            },
+            "description": "Reschedule an appointment as a patient. Requires patient authentication and appointment ownership."
+          }
+        },
+        {
+          "name": "Doctor Reschedule Appointment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"appointment_date\": \"2023-07-22\",\n    \"start_time\": \"10:00:00\",\n    \"end_time\": \"10:30:00\",\n    \"reschedule_reason\": \"Doctor unavailable due to emergency surgery\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/appointments/{{appointment_id}}/doctor_reschedule/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "appointments", "{{appointment_id}}", "doctor_reschedule", ""]
+            },
+            "description": "Reschedule an appointment as a doctor. Requires doctor authentication and appointment ownership."
+          }
         }
       ]
     },

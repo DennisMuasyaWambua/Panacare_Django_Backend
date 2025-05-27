@@ -478,6 +478,87 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(appointment)
         return Response(serializer.data)
+        
+    @swagger_auto_schema(
+        operation_description="Reschedule an appointment as a patient",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['appointment_date', 'start_time', 'end_time', 'reschedule_reason'],
+            properties={
+                'appointment_date': openapi.Schema(type=openapi.TYPE_STRING, format='date', description='New appointment date (YYYY-MM-DD)'),
+                'start_time': openapi.Schema(type=openapi.TYPE_STRING, format='time', description='New start time (HH:MM:SS)'),
+                'end_time': openapi.Schema(type=openapi.TYPE_STRING, format='time', description='New end time (HH:MM:SS)'),
+                'reschedule_reason': openapi.Schema(type=openapi.TYPE_STRING, description='Reason for rescheduling the appointment')
+            }
+        )
+    )
+    @action(detail=True, methods=['post'], permission_classes=[IsPatientUser])
+    def patient_reschedule(self, request, pk=None):
+        """
+        Endpoint for patients to reschedule their appointments
+        """
+        appointment = self.get_object()
+        
+        # Check if patient owns this appointment
+        if not appointment.patient.user == request.user:
+            return Response({
+                'error': 'You can only reschedule your own appointments'
+            }, status=status.HTTP_403_FORBIDDEN)
+            
+        # Check if appointment can be rescheduled
+        if appointment.status in ['fulfilled', 'cancelled', 'noshow']:
+            return Response({
+                'error': f'Cannot reschedule an appointment with status: {appointment.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Get new appointment details
+        appointment_date = request.data.get('appointment_date')
+        start_time = request.data.get('start_time')
+        end_time = request.data.get('end_time')
+        reschedule_reason = request.data.get('reschedule_reason')
+        
+        if not all([appointment_date, start_time, end_time, reschedule_reason]):
+            return Response({
+                'error': 'appointment_date, start_time, end_time, and reschedule_reason are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            # Convert to appropriate formats
+            from datetime import datetime
+            appointment_date = datetime.strptime(appointment_date, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({
+                'error': 'Invalid date format. Use YYYY-MM-DD format.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Store the previous values for reference
+        previous_date = appointment.appointment_date
+        previous_start = appointment.start_time
+        previous_end = appointment.end_time
+        
+        # Update the appointment
+        appointment.appointment_date = appointment_date
+        appointment.start_time = start_time
+        appointment.end_time = end_time
+        
+        # Add rescheduling reason to notes
+        current_notes = appointment.notes or ""
+        reschedule_note = f"[Patient Reschedule {datetime.now().strftime('%Y-%m-%d %H:%M')}] "\
+                         f"Changed from {previous_date} {previous_start}-{previous_end} to "\
+                         f"{appointment_date} {start_time}-{end_time}. "\
+                         f"Reason: {reschedule_reason}"
+        
+        if current_notes:
+            appointment.notes = f"{current_notes}\n\n{reschedule_note}"
+        else:
+            appointment.notes = reschedule_note
+        
+        # Update status to rescheduled/scheduled
+        appointment.status = 'scheduled'
+        appointment.save()
+        
+        serializer = self.get_serializer(appointment)
+        return Response(serializer.data)
     
     @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser])
     def update_consultation_details(self, request, pk=None):
@@ -514,6 +595,87 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         if status_param:
             appointment.status = status_param
             
+        appointment.save()
+        
+        serializer = self.get_serializer(appointment)
+        return Response(serializer.data)
+        
+    @swagger_auto_schema(
+        operation_description="Reschedule an appointment as a doctor",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['appointment_date', 'start_time', 'end_time', 'reschedule_reason'],
+            properties={
+                'appointment_date': openapi.Schema(type=openapi.TYPE_STRING, format='date', description='New appointment date (YYYY-MM-DD)'),
+                'start_time': openapi.Schema(type=openapi.TYPE_STRING, format='time', description='New start time (HH:MM:SS)'),
+                'end_time': openapi.Schema(type=openapi.TYPE_STRING, format='time', description='New end time (HH:MM:SS)'),
+                'reschedule_reason': openapi.Schema(type=openapi.TYPE_STRING, description='Reason for rescheduling the appointment')
+            }
+        )
+    )
+    @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser])
+    def doctor_reschedule(self, request, pk=None):
+        """
+        Endpoint for doctors to reschedule appointments
+        """
+        appointment = self.get_object()
+        
+        # Check if doctor owns this appointment
+        if not appointment.doctor.user == request.user:
+            return Response({
+                'error': 'You can only reschedule your own appointments'
+            }, status=status.HTTP_403_FORBIDDEN)
+            
+        # Check if appointment can be rescheduled
+        if appointment.status in ['fulfilled', 'cancelled', 'noshow']:
+            return Response({
+                'error': f'Cannot reschedule an appointment with status: {appointment.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Get new appointment details
+        appointment_date = request.data.get('appointment_date')
+        start_time = request.data.get('start_time')
+        end_time = request.data.get('end_time')
+        reschedule_reason = request.data.get('reschedule_reason')
+        
+        if not all([appointment_date, start_time, end_time, reschedule_reason]):
+            return Response({
+                'error': 'appointment_date, start_time, end_time, and reschedule_reason are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            # Convert to appropriate formats
+            from datetime import datetime
+            appointment_date = datetime.strptime(appointment_date, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({
+                'error': 'Invalid date format. Use YYYY-MM-DD format.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Store the previous values for reference
+        previous_date = appointment.appointment_date
+        previous_start = appointment.start_time
+        previous_end = appointment.end_time
+        
+        # Update the appointment
+        appointment.appointment_date = appointment_date
+        appointment.start_time = start_time
+        appointment.end_time = end_time
+        
+        # Add rescheduling reason to notes
+        current_notes = appointment.notes or ""
+        reschedule_note = f"[Doctor Reschedule {datetime.now().strftime('%Y-%m-%d %H:%M')}] "\
+                         f"Changed from {previous_date} {previous_start}-{previous_end} to "\
+                         f"{appointment_date} {start_time}-{end_time}. "\
+                         f"Reason: {reschedule_reason}"
+        
+        if current_notes:
+            appointment.notes = f"{current_notes}\n\n{reschedule_note}"
+        else:
+            appointment.notes = reschedule_note
+        
+        # Update status to rescheduled/scheduled
+        appointment.status = 'scheduled'
         appointment.save()
         
         serializer = self.get_serializer(appointment)
