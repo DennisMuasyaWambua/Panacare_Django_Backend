@@ -16,7 +16,7 @@ from .serializers import (
     PackageSerializer, PatientSubscriptionSerializer,
     ResourceSerializer, DoctorRatingSerializer
 )
-from doctors.views import IsAdminUser, IsVerifiedUser, IsDoctorUser
+from doctors.views import IsAdminUser, IsVerifiedUser, IsPatientUser, IsDoctorUser
 from users.models import User, Role, Patient
 from doctors.models import Doctor
 from django.shortcuts import get_object_or_404
@@ -292,17 +292,6 @@ class IsPatientUser(permissions.BasePermission):
         return request.user.roles.filter(name='patient').exists()
 
 
-class IsDoctorUser(permissions.BasePermission):
-    """
-    Permission class to check if the user has doctor role
-    """
-    def has_permission(self, request, view):
-        # Check if user is authenticated
-        if not request.user.is_authenticated:
-            return False
-        
-        # Check if user has doctor role
-        return request.user.roles.filter(name='doctor').exists()
 
 
 class IsPatientOrDoctorOrAdmin(permissions.BasePermission):

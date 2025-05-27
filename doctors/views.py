@@ -46,6 +46,18 @@ class IsPatientUser(permissions.BasePermission):
         
         # Check if user has patient role
         return request.user.roles.filter(name='patient').exists() and hasattr(request.user, 'patient')
+        
+class IsDoctorUser(permissions.BasePermission):
+    """
+    Permission class to check if the user has doctor role
+    """
+    def has_permission(self, request, view):
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return False
+        
+        # Check if user has doctor role
+        return request.user.roles.filter(name='doctor').exists()
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated, IsVerifiedUser])
