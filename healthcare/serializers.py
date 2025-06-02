@@ -257,9 +257,11 @@ class ConsultationSerializer(serializers.ModelSerializer):
         model = Consultation
         fields = [
             'id', 'appointment', 'appointment_details', 'status', 'start_time',
-            'end_time', 'session_id', 'recording_url', 'created_at', 'updated_at'
+            'end_time', 'session_id', 'recording_url', 'twilio_room_name', 
+            'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'twilio_room_name', 
+                           'twilio_room_sid', 'doctor_token', 'patient_token']
         
     def get_appointment_details(self, obj):
         return {

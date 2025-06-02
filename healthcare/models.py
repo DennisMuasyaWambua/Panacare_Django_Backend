@@ -541,6 +541,12 @@ class Consultation(models.Model):
     session_id = models.CharField(max_length=255, blank=True)  # External video session ID
     recording_url = models.URLField(max_length=255, blank=True)
     
+    # Twilio Video specific fields
+    twilio_room_name = models.CharField(max_length=255, blank=True)
+    twilio_room_sid = models.CharField(max_length=255, blank=True)
+    doctor_token = models.TextField(blank=True)  # To store doctor's Twilio access token
+    patient_token = models.TextField(blank=True)  # To store patient's Twilio access token
+    
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

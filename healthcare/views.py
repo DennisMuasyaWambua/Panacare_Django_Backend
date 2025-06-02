@@ -814,6 +814,9 @@ class AppointmentDocumentViewSet(viewsets.ModelViewSet):
         serializer.save(uploaded_by=self.request.user)
 
 
+from .twilio_utils import create_twilio_room, close_twilio_room, generate_twilio_token
+import uuid
+
 class ConsultationViewSet(viewsets.ModelViewSet):
     queryset = Consultation.objects.all()
     serializer_class = ConsultationSerializer
@@ -862,11 +865,11 @@ class ConsultationViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(status=status_param)
                 
         return queryset
-    
+
     @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser])
     def start_consultation(self, request, pk=None):
         """
-        Endpoint for doctors to start a consultation
+        Endpoint for doctors to start a consultation and create a Twilio room
         """
         consultation = self.get_object()
         
@@ -881,24 +884,51 @@ class ConsultationViewSet(viewsets.ModelViewSet):
             return Response({
                 'error': f'Cannot start a consultation with status: {consultation.status}'
             }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Generate a unique room name
+            room_name = f"panacare-consultation-{str(consultation.id)}"
             
-        # Start the consultation
-        consultation.status = 'in-progress'
-        consultation.start_time = timezone.now()
-        consultation.save()
-        
-        # Update appointment status
-        appointment = consultation.appointment
-        appointment.status = 'arrived'
-        appointment.save()
-        
-        serializer = self.get_serializer(consultation)
-        return Response(serializer.data)
+            # Create a Twilio room
+            room = create_twilio_room(room_name)
+            
+            # Start the consultation
+            consultation.status = 'in-progress'
+            consultation.start_time = timezone.now()
+            consultation.twilio_room_name = room_name
+            consultation.twilio_room_sid = room.sid
+            consultation.session_id = room.sid  # Use Twilio room SID as session ID
+            consultation.save()
+            
+            # Update appointment status
+            appointment = consultation.appointment
+            appointment.status = 'arrived'
+            appointment.save()
+            
+            # Generate tokens for doctor and patient
+            doctor_identity = f"doctor-{consultation.appointment.doctor.id}"
+            patient_identity = f"patient-{consultation.appointment.patient.id}"
+            
+            consultation.doctor_token = generate_twilio_token(doctor_identity, room_name)
+            consultation.patient_token = generate_twilio_token(patient_identity, room_name)
+            consultation.save()
+            
+            # Return the consultation data with doctor token
+            serializer = self.get_serializer(consultation)
+            response_data = serializer.data
+            response_data['token'] = consultation.doctor_token
+            
+            return Response(response_data)
+            
+        except Exception as e:
+            return Response({
+                'error': f'Failed to start consultation: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser])
     def end_consultation(self, request, pk=None):
         """
-        Endpoint for doctors to end a consultation
+        Endpoint for doctors to end a consultation and close the Twilio room
         """
         consultation = self.get_object()
         
@@ -913,19 +943,129 @@ class ConsultationViewSet(viewsets.ModelViewSet):
             return Response({
                 'error': f'Cannot end a consultation with status: {consultation.status}'
             }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # If there's a Twilio room, close it
+            if consultation.twilio_room_sid:
+                close_twilio_room(consultation.twilio_room_sid)
             
-        # End the consultation
-        consultation.status = 'completed'
-        consultation.end_time = timezone.now()
-        consultation.save()
+            # End the consultation
+            consultation.status = 'completed'
+            consultation.end_time = timezone.now()
+            consultation.save()
+            
+            # Update appointment status
+            appointment = consultation.appointment
+            appointment.status = 'fulfilled'
+            appointment.save()
+            
+            serializer = self.get_serializer(consultation)
+            return Response(serializer.data)
+            
+        except Exception as e:
+            return Response({
+                'error': f'Failed to end consultation: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['get'], permission_classes=[IsPatientOrDoctorOrAdmin])
+    def get_token(self, request, pk=None):
+        """
+        Endpoint for patients and doctors to get their Twilio token
+        """
+        consultation = self.get_object()
         
-        # Update appointment status
-        appointment = consultation.appointment
-        appointment.status = 'fulfilled'
-        appointment.save()
+        # Check if the user is either the patient or doctor for this consultation
+        is_doctor = request.user.roles.filter(name='doctor').exists() and hasattr(request.user, 'doctor') and request.user.doctor == consultation.appointment.doctor
+        is_patient = request.user.roles.filter(name='patient').exists() and hasattr(request.user, 'patient') and request.user.patient == consultation.appointment.patient
+        is_admin = request.user.roles.filter(name='admin').exists()
         
-        serializer = self.get_serializer(consultation)
-        return Response(serializer.data)
+        if not (is_doctor or is_patient or is_admin):
+            return Response({
+                'error': 'You are not authorized to access this consultation'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if consultation is in progress
+        if consultation.status != 'in-progress':
+            return Response({
+                'error': f'Cannot join a consultation with status: {consultation.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Return the appropriate token
+            token = None
+            
+            if is_doctor:
+                token = consultation.doctor_token
+            elif is_patient:
+                token = consultation.patient_token
+            
+            # If token doesn't exist or is expired, generate a new one
+            if not token:
+                room_name = consultation.twilio_room_name
+                
+                if is_doctor:
+                    identity = f"doctor-{consultation.appointment.doctor.id}"
+                    token = generate_twilio_token(identity, room_name)
+                    consultation.doctor_token = token
+                elif is_patient:
+                    identity = f"patient-{consultation.appointment.patient.id}"
+                    token = generate_twilio_token(identity, room_name)
+                    consultation.patient_token = token
+                
+                consultation.save()
+            
+            return Response({
+                'token': token,
+                'room_name': consultation.twilio_room_name
+            })
+            
+        except Exception as e:
+            return Response({
+                'error': f'Failed to get token: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+    @action(detail=True, methods=['post'], permission_classes=[IsPatientOrDoctorOrAdmin])
+    def join_consultation(self, request, pk=None):
+        """
+        Endpoint for patients to join a consultation
+        """
+        consultation = self.get_object()
+        
+        # Check if the user is the patient for this consultation
+        is_patient = request.user.roles.filter(name='patient').exists() and hasattr(request.user, 'patient') and request.user.patient == consultation.appointment.patient
+        
+        if not is_patient:
+            return Response({
+                'error': 'You can only join your own consultations'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if consultation is in progress
+        if consultation.status != 'in-progress':
+            return Response({
+                'error': f'Cannot join a consultation with status: {consultation.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Generate or retrieve token for patient
+            token = consultation.patient_token
+            
+            # If token doesn't exist, generate a new one
+            if not token:
+                room_name = consultation.twilio_room_name
+                identity = f"patient-{consultation.appointment.patient.id}"
+                token = generate_twilio_token(identity, room_name)
+                consultation.patient_token = token
+                consultation.save()
+            
+            return Response({
+                'token': token,
+                'room_name': consultation.twilio_room_name
+            })
+            
+        except Exception as e:
+            return Response({
+                'error': f'Failed to join consultation: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class PackageViewSet(viewsets.ModelViewSet):
