@@ -6,15 +6,18 @@ from django.db.models import Q, Avg
 from datetime import datetime, timedelta
 from .models import (
     HealthCare, PatientDoctorAssignment, DoctorAvailability, 
-    Appointment, AppointmentDocument, Consultation, 
-    Package, PatientSubscription, Resource, DoctorRating
+    Appointment, AppointmentDocument, Consultation, ConsultationChat,
+    Package, PatientSubscription, Resource, DoctorRating,
+    Article, ArticleComment, ArticleCommentLike
 )
 from .serializers import (
     HealthCareSerializer, PatientDoctorAssignmentSerializer,
     DoctorAvailabilitySerializer, AppointmentSerializer,
-    AppointmentDocumentSerializer, ConsultationSerializer,
+    AppointmentDocumentSerializer, ConsultationSerializer, ConsultationChatSerializer,
     PackageSerializer, PatientSubscriptionSerializer,
-    ResourceSerializer, DoctorRatingSerializer
+    ResourceSerializer, DoctorRatingSerializer,
+    ArticleSerializer, ArticleCommentSerializer, ArticleCommentLikeSerializer,
+    ArticleCommentReplySerializer
 )
 from doctors.views import IsAdminUser, IsVerifiedUser, IsPatientUser, IsDoctorUser
 from users.models import User, Role, Patient
@@ -814,6 +817,9 @@ class AppointmentDocumentViewSet(viewsets.ModelViewSet):
         serializer.save(uploaded_by=self.request.user)
 
 
+from .twilio_utils import create_twilio_room, close_twilio_room, generate_twilio_token
+import uuid
+
 class ConsultationViewSet(viewsets.ModelViewSet):
     queryset = Consultation.objects.all()
     serializer_class = ConsultationSerializer
@@ -862,11 +868,11 @@ class ConsultationViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(status=status_param)
                 
         return queryset
-    
+
     @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser])
     def start_consultation(self, request, pk=None):
         """
-        Endpoint for doctors to start a consultation
+        Endpoint for doctors to start a consultation and create a Twilio room
         """
         consultation = self.get_object()
         
@@ -881,24 +887,51 @@ class ConsultationViewSet(viewsets.ModelViewSet):
             return Response({
                 'error': f'Cannot start a consultation with status: {consultation.status}'
             }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Generate a unique room name
+            room_name = f"panacare-consultation-{str(consultation.id)}"
             
-        # Start the consultation
-        consultation.status = 'in-progress'
-        consultation.start_time = timezone.now()
-        consultation.save()
-        
-        # Update appointment status
-        appointment = consultation.appointment
-        appointment.status = 'arrived'
-        appointment.save()
-        
-        serializer = self.get_serializer(consultation)
-        return Response(serializer.data)
+            # Create a Twilio room
+            room = create_twilio_room(room_name)
+            
+            # Start the consultation
+            consultation.status = 'in-progress'
+            consultation.start_time = timezone.now()
+            consultation.twilio_room_name = room_name
+            consultation.twilio_room_sid = room.sid
+            consultation.session_id = room.sid  # Use Twilio room SID as session ID
+            consultation.save()
+            
+            # Update appointment status
+            appointment = consultation.appointment
+            appointment.status = 'arrived'
+            appointment.save()
+            
+            # Generate tokens for doctor and patient
+            doctor_identity = f"doctor-{consultation.appointment.doctor.id}"
+            patient_identity = f"patient-{consultation.appointment.patient.id}"
+            
+            consultation.doctor_token = generate_twilio_token(doctor_identity, room_name)
+            consultation.patient_token = generate_twilio_token(patient_identity, room_name)
+            consultation.save()
+            
+            # Return the consultation data with doctor token
+            serializer = self.get_serializer(consultation)
+            response_data = serializer.data
+            response_data['token'] = consultation.doctor_token
+            
+            return Response(response_data)
+            
+        except Exception as e:
+            return Response({
+                'error': f'Failed to start consultation: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser])
     def end_consultation(self, request, pk=None):
         """
-        Endpoint for doctors to end a consultation
+        Endpoint for doctors to end a consultation and close the Twilio room
         """
         consultation = self.get_object()
         
@@ -913,19 +946,255 @@ class ConsultationViewSet(viewsets.ModelViewSet):
             return Response({
                 'error': f'Cannot end a consultation with status: {consultation.status}'
             }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # If there's a Twilio room, close it
+            if consultation.twilio_room_sid:
+                close_twilio_room(consultation.twilio_room_sid)
             
-        # End the consultation
-        consultation.status = 'completed'
-        consultation.end_time = timezone.now()
-        consultation.save()
+            # End the consultation
+            consultation.status = 'completed'
+            consultation.end_time = timezone.now()
+            consultation.save()
+            
+            # Update appointment status
+            appointment = consultation.appointment
+            appointment.status = 'fulfilled'
+            appointment.save()
+            
+            serializer = self.get_serializer(consultation)
+            return Response(serializer.data)
+            
+        except Exception as e:
+            return Response({
+                'error': f'Failed to end consultation: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['get'], permission_classes=[IsPatientOrDoctorOrAdmin])
+    def get_token(self, request, pk=None):
+        """
+        Endpoint for patients and doctors to get their Twilio token
+        """
+        consultation = self.get_object()
         
-        # Update appointment status
-        appointment = consultation.appointment
-        appointment.status = 'fulfilled'
-        appointment.save()
+        # Check if the user is either the patient or doctor for this consultation
+        is_doctor = request.user.roles.filter(name='doctor').exists() and hasattr(request.user, 'doctor') and request.user.doctor == consultation.appointment.doctor
+        is_patient = request.user.roles.filter(name='patient').exists() and hasattr(request.user, 'patient') and request.user.patient == consultation.appointment.patient
+        is_admin = request.user.roles.filter(name='admin').exists()
         
-        serializer = self.get_serializer(consultation)
+        if not (is_doctor or is_patient or is_admin):
+            return Response({
+                'error': 'You are not authorized to access this consultation'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if consultation is in progress
+        if consultation.status != 'in-progress':
+            return Response({
+                'error': f'Cannot join a consultation with status: {consultation.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Return the appropriate token
+            token = None
+            
+            if is_doctor:
+                token = consultation.doctor_token
+            elif is_patient:
+                token = consultation.patient_token
+            
+            # If token doesn't exist or is expired, generate a new one
+            if not token:
+                room_name = consultation.twilio_room_name
+                
+                if is_doctor:
+                    identity = f"doctor-{consultation.appointment.doctor.id}"
+                    token = generate_twilio_token(identity, room_name)
+                    consultation.doctor_token = token
+                elif is_patient:
+                    identity = f"patient-{consultation.appointment.patient.id}"
+                    token = generate_twilio_token(identity, room_name)
+                    consultation.patient_token = token
+                
+                consultation.save()
+            
+            return Response({
+                'token': token,
+                'room_name': consultation.twilio_room_name
+            })
+            
+        except Exception as e:
+            return Response({
+                'error': f'Failed to get token: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+    @action(detail=True, methods=['post'], permission_classes=[IsPatientOrDoctorOrAdmin])
+    def join_consultation(self, request, pk=None):
+        """
+        Endpoint for patients or doctors to join/rejoin a consultation
+        """
+        consultation = self.get_object()
+        
+        # Check if the user is the patient or doctor for this consultation
+        is_patient = request.user.roles.filter(name='patient').exists() and hasattr(request.user, 'patient') and request.user.patient == consultation.appointment.patient
+        is_doctor = request.user.roles.filter(name='doctor').exists() and hasattr(request.user, 'doctor') and request.user.doctor == consultation.appointment.doctor
+        
+        if not (is_patient or is_doctor):
+            return Response({
+                'error': 'You can only join consultations you are a participant in'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if consultation is in progress
+        if consultation.status != 'in-progress':
+            return Response({
+                'error': f'Cannot join a consultation with status: {consultation.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Generate or retrieve token based on user role
+            token = None
+            identity = None
+            
+            if is_doctor:
+                token = consultation.doctor_token
+                identity = f"doctor-{consultation.appointment.doctor.id}"
+            elif is_patient:
+                token = consultation.patient_token
+                identity = f"patient-{consultation.appointment.patient.id}"
+            
+            # If token doesn't exist or is expired, generate a new one
+            if not token:
+                room_name = consultation.twilio_room_name
+                token = generate_twilio_token(identity, room_name)
+                
+                # Save the new token
+                if is_doctor:
+                    consultation.doctor_token = token
+                elif is_patient:
+                    consultation.patient_token = token
+                    
+                consultation.save()
+            
+            return Response({
+                'token': token,
+                'room_name': consultation.twilio_room_name
+            })
+            
+        except Exception as e:
+            return Response({
+                'error': f'Failed to join consultation: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+    @action(detail=True, methods=['get'], permission_classes=[IsPatientOrDoctorOrAdmin])
+    def chat_messages(self, request, pk=None):
+        """
+        Endpoint to get chat messages for a consultation
+        """
+        consultation = self.get_object()
+        
+        # Check if the user is a participant in this consultation
+        is_patient = request.user.roles.filter(name='patient').exists() and hasattr(request.user, 'patient') and request.user.patient == consultation.appointment.patient
+        is_doctor = request.user.roles.filter(name='doctor').exists() and hasattr(request.user, 'doctor') and request.user.doctor == consultation.appointment.doctor
+        is_admin = request.user.roles.filter(name='admin').exists()
+        
+        if not (is_patient or is_doctor or is_admin):
+            return Response({
+                'error': 'You can only access chat messages for consultations you are a participant in'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Get messages with optional limit
+        limit = request.query_params.get('limit', 50)
+        try:
+            limit = int(limit)
+        except ValueError:
+            limit = 50
+            
+        # Get messages
+        messages = ConsultationChat.objects.filter(consultation=consultation).order_by('-created_at')[:limit]
+        serializer = ConsultationChatSerializer(messages, many=True)
+        
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsPatientOrDoctorOrAdmin])
+    def send_message(self, request, pk=None):
+        """
+        Endpoint to send a chat message in a consultation
+        """
+        consultation = self.get_object()
+        
+        # Check if the user is a participant in this consultation
+        is_patient = request.user.roles.filter(name='patient').exists() and hasattr(request.user, 'patient') and request.user.patient == consultation.appointment.patient
+        is_doctor = request.user.roles.filter(name='doctor').exists() and hasattr(request.user, 'doctor') and request.user.doctor == consultation.appointment.doctor
+        
+        if not (is_patient or is_doctor):
+            return Response({
+                'error': 'You can only send messages in consultations you are a participant in'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if consultation is in progress
+        if consultation.status != 'in-progress':
+            return Response({
+                'error': f'Cannot send messages in a consultation with status: {consultation.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get message content
+        message_content = request.data.get('message')
+        if not message_content:
+            return Response({
+                'error': 'Message content is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Create the message
+        is_doctor = request.user.roles.filter(name='doctor').exists()
+        
+        chat_message = ConsultationChat.objects.create(
+            consultation=consultation,
+            message=message_content,
+            sender=request.user,
+            is_doctor=is_doctor
+        )
+        
+        serializer = ConsultationChatSerializer(chat_message)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsPatientOrDoctorOrAdmin])
+    def mark_messages_read(self, request, pk=None):
+        """
+        Endpoint to mark all unread messages as read
+        """
+        consultation = self.get_object()
+        
+        # Check if the user is a participant in this consultation
+        is_patient = request.user.roles.filter(name='patient').exists() and hasattr(request.user, 'patient') and request.user.patient == consultation.appointment.patient
+        is_doctor = request.user.roles.filter(name='doctor').exists() and hasattr(request.user, 'doctor') and request.user.doctor == consultation.appointment.doctor
+        
+        if not (is_patient or is_doctor):
+            return Response({
+                'error': 'You can only mark messages as read in consultations you are a participant in'
+            }, status=status.HTTP_403_FORBIDDEN)
+            
+        # Get all unread messages sent by the other participant
+        if is_doctor:
+            unread_messages = ConsultationChat.objects.filter(
+                consultation=consultation,
+                is_read=False,
+                is_doctor=False  # Messages from patient
+            )
+        else:
+            unread_messages = ConsultationChat.objects.filter(
+                consultation=consultation,
+                is_read=False,
+                is_doctor=True  # Messages from doctor
+            )
+            
+        # Mark them as read
+        now = timezone.now()
+        count = unread_messages.count()
+        unread_messages.update(is_read=True, read_at=now)
+        
+        return Response({
+            'status': 'success',
+            'messages_marked_read': count
+        })
 
 
 class PackageViewSet(viewsets.ModelViewSet):
@@ -1236,3 +1505,379 @@ class DoctorRatingViewSet(viewsets.ModelViewSet):
             'average_rating': average_rating['rating__avg'] or 0,
             'total_ratings': total_ratings
         })
+
+
+class ArticleViewSet(viewsets.ModelViewSet):
+    queryset = Article.objects.all()
+    serializer_class = ArticleSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_permissions(self):
+        if self.action in ['create']:
+            permission_classes = [IsDoctorUser]
+        elif self.action in ['update', 'partial_update']:
+            permission_classes = [IsDoctorUser]  # Only author can edit, enforced in perform_update
+        elif self.action in ['destroy']:
+            permission_classes = [IsAdminUser]
+        else:
+            permission_classes = [permissions.IsAuthenticated]
+        return [permission() for permission in permission_classes]
+    
+    def get_queryset(self):
+        # Basic queryset filtering
+        if self.request.user.roles.filter(name='admin').exists():
+            # Admins can see all articles including unapproved ones
+            queryset = Article.objects.all()
+        elif self.request.user.roles.filter(name='doctor').exists():
+            # Doctors can see all approved/published articles + their own drafts
+            try:
+                doctor = self.request.user.doctor
+                queryset = Article.objects.filter(
+                    Q(is_approved=True, is_published=True) | Q(author=doctor)
+                )
+            except Doctor.DoesNotExist:
+                queryset = Article.objects.filter(is_approved=True, is_published=True)
+        else:
+            # Patients and other users can only see approved and published articles
+            queryset = Article.objects.filter(is_approved=True, is_published=True)
+            
+        # Additional filtering
+        category = self.request.query_params.get('category')
+        if category:
+            queryset = queryset.filter(category=category)
+            
+        author_id = self.request.query_params.get('author_id')
+        if author_id:
+            queryset = queryset.filter(author_id=author_id)
+            
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(title__icontains=search) | 
+                Q(content__icontains=search) |
+                Q(summary__icontains=search) |
+                Q(tags__icontains=search)
+            )
+            
+        # Filter by approval status (admin only)
+        if self.request.user.roles.filter(name='admin').exists():
+            is_approved = self.request.query_params.get('is_approved')
+            if is_approved:
+                queryset = queryset.filter(is_approved=is_approved.lower() == 'true')
+                
+        # Filter by publication status
+        is_published = self.request.query_params.get('is_published')
+        if is_published:
+            queryset = queryset.filter(is_published=is_published.lower() == 'true')
+            
+        return queryset
+    
+    def perform_create(self, serializer):
+        try:
+            # Set author to current user's doctor profile
+            doctor = self.request.user.doctor
+            serializer.save(author=doctor)
+        except Doctor.DoesNotExist:
+            raise serializers.ValidationError("Doctor profile not found")
+    
+    def perform_update(self, serializer):
+        # Get the article instance
+        instance = self.get_object()
+        
+        # Check if user is the author
+        try:
+            doctor = self.request.user.doctor
+            if instance.author != doctor and not self.request.user.roles.filter(name='admin').exists():
+                raise serializers.ValidationError("You can only edit your own articles")
+                
+            # If this is an already approved article being edited by its author, 
+            # reset the approval status
+            if instance.is_approved and instance.author == doctor:
+                serializer.save(is_approved=False, approval_date=None, approved_by=None)
+            else:
+                serializer.save()
+                
+        except Doctor.DoesNotExist:
+            # If user is admin, they can edit regardless
+            if self.request.user.roles.filter(name='admin').exists():
+                serializer.save()
+            else:
+                raise serializers.ValidationError("Doctor profile not found")
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
+    def approve(self, request, pk=None):
+        """
+        Endpoint for admins to approve an article
+        """
+        article = self.get_object()
+        
+        # Check if article is already approved
+        if article.is_approved:
+            return Response({
+                'error': 'Article is already approved'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Approve the article
+        article.is_approved = True
+        article.approved_by = request.user
+        article.approval_date = timezone.now()
+        
+        # Add approval notes if provided
+        approval_notes = request.data.get('approval_notes')
+        if approval_notes:
+            article.approval_notes = approval_notes
+            
+        # Set publish status if provided
+        publish = request.data.get('publish')
+        if publish and publish.lower() == 'true':
+            article.is_published = True
+            article.publish_date = timezone.now()
+            
+        article.save()
+        
+        serializer = self.get_serializer(article)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser | IsAdminUser])
+    def publish(self, request, pk=None):
+        """
+        Endpoint to publish an approved article
+        """
+        article = self.get_object()
+        
+        # Check if article is approved
+        if not article.is_approved:
+            return Response({
+                'error': 'Article must be approved before publishing'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Check if user is the author or admin
+        is_admin = request.user.roles.filter(name='admin').exists()
+        try:
+            doctor = request.user.doctor
+            is_author = (article.author == doctor)
+            
+            if not (is_author or is_admin):
+                return Response({
+                    'error': 'You can only publish your own articles'
+                }, status=status.HTTP_403_FORBIDDEN)
+                
+            # Publish the article
+            article.is_published = True
+            article.publish_date = timezone.now()
+            article.save()
+            
+            serializer = self.get_serializer(article)
+            return Response(serializer.data)
+            
+        except Doctor.DoesNotExist:
+            if is_admin:
+                # Admin can publish regardless
+                article.is_published = True
+                article.publish_date = timezone.now()
+                article.save()
+                
+                serializer = self.get_serializer(article)
+                return Response(serializer.data)
+            else:
+                return Response({
+                    'error': 'Doctor profile not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser | IsAdminUser])
+    def unpublish(self, request, pk=None):
+        """
+        Endpoint to unpublish an article
+        """
+        article = self.get_object()
+        
+        # Check if article is published
+        if not article.is_published:
+            return Response({
+                'error': 'Article is not published'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Check if user is the author or admin
+        is_admin = request.user.roles.filter(name='admin').exists()
+        try:
+            doctor = request.user.doctor
+            is_author = (article.author == doctor)
+            
+            if not (is_author or is_admin):
+                return Response({
+                    'error': 'You can only unpublish your own articles'
+                }, status=status.HTTP_403_FORBIDDEN)
+                
+            # Unpublish the article
+            article.is_published = False
+            article.save()
+            
+            serializer = self.get_serializer(article)
+            return Response(serializer.data)
+            
+        except Doctor.DoesNotExist:
+            if is_admin:
+                # Admin can unpublish regardless
+                article.is_published = False
+                article.save()
+                
+                serializer = self.get_serializer(article)
+                return Response(serializer.data)
+            else:
+                return Response({
+                    'error': 'Doctor profile not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+    
+    @action(detail=True, methods=['post'])
+    def view(self, request, pk=None):
+        """
+        Endpoint to increment view count for an article
+        """
+        article = self.get_object()
+        article.view_count += 1
+        article.save()
+        
+        return Response({'status': 'view counted', 'view_count': article.view_count})
+    
+    @action(detail=False, methods=['get'])
+    def my_articles(self, request):
+        """
+        Endpoint for doctors to view their own articles
+        """
+        try:
+            doctor = request.user.doctor
+            articles = Article.objects.filter(author=doctor)
+            
+            # Optional filtering
+            status_param = request.query_params.get('status')
+            if status_param == 'draft':
+                articles = articles.filter(is_published=False)
+            elif status_param == 'published':
+                articles = articles.filter(is_published=True)
+            elif status_param == 'pending':
+                articles = articles.filter(is_approved=False)
+            
+            serializer = self.get_serializer(articles, many=True)
+            return Response(serializer.data)
+        except Doctor.DoesNotExist:
+            return Response({
+                'error': 'Doctor profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+
+class ArticleCommentViewSet(viewsets.ModelViewSet):
+    queryset = ArticleComment.objects.all()
+    serializer_class = ArticleCommentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = ArticleComment.objects.all()
+        
+        # Only show top-level comments by default
+        top_level_only = self.request.query_params.get('top_level_only')
+        if top_level_only and top_level_only.lower() == 'true':
+            queryset = queryset.filter(parent_comment__isnull=True)
+            
+        # Filter by article
+        article_id = self.request.query_params.get('article_id')
+        if article_id:
+            queryset = queryset.filter(article_id=article_id)
+            
+        # Filter by user
+        user_id = self.request.query_params.get('user_id')
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
+            
+        return queryset
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+    def perform_update(self, serializer):
+        # Ensure users can only edit their own comments
+        comment = self.get_object()
+        if comment.user != self.request.user and not self.request.user.roles.filter(name='admin').exists():
+            raise serializers.ValidationError("You can only edit your own comments")
+        serializer.save()
+    
+    @action(detail=True, methods=['post'])
+    def like(self, request, pk=None):
+        """
+        Endpoint to like a comment
+        """
+        comment = self.get_object()
+        user = request.user
+        
+        # Check if user already liked this comment
+        existing_like = ArticleCommentLike.objects.filter(comment=comment, user=user).exists()
+        if existing_like:
+            return Response({
+                'error': 'You have already liked this comment'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Create a new like
+        ArticleCommentLike.objects.create(comment=comment, user=user)
+        
+        # Update the comment's like count
+        comment.like_count += 1
+        comment.save()
+        
+        return Response({'status': 'comment liked', 'like_count': comment.like_count})
+    
+    @action(detail=True, methods=['post'])
+    def unlike(self, request, pk=None):
+        """
+        Endpoint to unlike a comment
+        """
+        comment = self.get_object()
+        user = request.user
+        
+        # Check if user has liked this comment
+        try:
+            like = ArticleCommentLike.objects.get(comment=comment, user=user)
+            like.delete()
+            
+            # Update the comment's like count
+            comment.like_count = max(0, comment.like_count - 1)
+            comment.save()
+            
+            return Response({'status': 'comment unliked', 'like_count': comment.like_count})
+        except ArticleCommentLike.DoesNotExist:
+            return Response({
+                'error': 'You have not liked this comment'
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def reply(self, request, pk=None):
+        """
+        Endpoint to reply to a comment
+        """
+        parent_comment = self.get_object()
+        
+        # Ensure this is a top-level comment (no nested replies beyond 1 level)
+        if parent_comment.parent_comment is not None:
+            return Response({
+                'error': 'Cannot reply to a reply. Only one level of nesting is allowed.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Get the content from request data
+        content = request.data.get('content')
+        if not content:
+            return Response({
+                'error': 'Content is required for a reply'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Create the reply
+        user = request.user
+        is_doctor = user.roles.filter(name='doctor').exists()
+        
+        reply = ArticleComment.objects.create(
+            article=parent_comment.article,
+            content=content,
+            user=user,
+            is_doctor=is_doctor,
+            parent_comment=parent_comment
+        )
+        
+        serializer = ArticleCommentReplySerializer(reply)
+        return Response(serializer.data)

@@ -61,6 +61,13 @@ class Doctor(models.Model):
     license_system = models.CharField(max_length=255, default="urn:panacare:license", blank=True)
     communication_languages = models.CharField(max_length=255, blank=True, default="en")
     
+    # Consultation preferences
+    accepts_referrals = models.BooleanField(default=True, help_text="Whether the doctor accepts patient referrals")
+    consultation_modes = models.CharField(max_length=50, default="audio,video", 
+                                        help_text="Comma-separated list of consultation modes (audio,video)")
+    facility_name = models.CharField(max_length=255, blank=True, 
+                                   help_text="Name of the doctor's primary healthcare facility")
+    
     # Metadata fields
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -75,7 +82,10 @@ class Doctor(models.Model):
         if not languages:
             languages = ['en']
             
-        return {
+        # Parse consultation modes
+        consultation_modes = [mode.strip() for mode in self.consultation_modes.split(',') if mode.strip()]
+        
+        fhir_json = {
             "resourceType": "Practitioner",
             "id": str(self.id),
             "identifier": [
@@ -150,4 +160,38 @@ class Doctor(models.Model):
                 } for lang in languages
             ]
         }
+        
+        # Add consultation preferences as extension
+        consultation_prefs = []
+        
+        # Add accepts referrals
+        consultation_prefs.append({
+            "url": "accepts-referrals",
+            "valueBoolean": self.accepts_referrals
+        })
+        
+        # Add consultation modes
+        if consultation_modes:
+            consultation_prefs.append({
+                "url": "consultation-modes",
+                "valueString": self.consultation_modes
+            })
+        
+        # Add facility name if available
+        if self.facility_name:
+            consultation_prefs.append({
+                "url": "facility-name",
+                "valueString": self.facility_name
+            })
+            
+        # Add the extension to the FHIR JSON
+        if consultation_prefs:
+            fhir_json["extension"] = fhir_json.get("extension", []) + [
+                {
+                    "url": "http://panacare.com/fhir/StructureDefinition/practitioner-consultation-preferences",
+                    "extension": consultation_prefs
+                }
+            ]
+            
+        return fhir_json
 

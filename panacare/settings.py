@@ -277,6 +277,12 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@panacare.com')
 
+# Twilio Video Configuration
+TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
+TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
+TWILIO_API_KEY_SID = os.environ.get('TWILIO_API_KEY_SID', '')
+TWILIO_API_KEY_SECRET = os.environ.get('TWILIO_API_KEY_SECRET', '')
+
 # Custom User model
 AUTH_USER_MODEL = 'users.User'
 
