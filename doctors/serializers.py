@@ -50,6 +50,13 @@ class DoctorSerializer(serializers.ModelSerializer):
                                          help_text="FHIR license identifier system URI")
     communication_languages = serializers.CharField(required=False, 
                                                  help_text="Comma-separated list of language codes, e.g., 'en,es,fr'")
+    # Consultation preferences
+    accepts_referrals = serializers.BooleanField(required=False, 
+                                               help_text="Whether the doctor accepts patient referrals")
+    consultation_modes = serializers.CharField(required=False, 
+                                             help_text="Comma-separated list of consultation modes, e.g., 'audio,video'")
+    facility_name = serializers.CharField(required=False, 
+                                        help_text="Name of the doctor's primary healthcare facility")
     
     class Meta:
         model = Doctor
@@ -58,6 +65,7 @@ class DoctorSerializer(serializers.ModelSerializer):
             'experience_years', 'bio', 'education', 'education_details', 
             'is_verified', 'is_available', 'identifier_system', 
             'license_system', 'communication_languages',
+            'accepts_referrals', 'consultation_modes', 'facility_name',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']

@@ -559,6 +559,37 @@ class Consultation(models.Model):
         return f"Consultation for {self.appointment}"
 
 
+class ConsultationChat(models.Model):
+    """
+    Chat messages within a consultation
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    consultation = models.ForeignKey(Consultation, on_delete=models.CASCADE, related_name='chat_messages')
+    
+    # Message content
+    message = models.TextField()
+    
+    # Sender info
+    sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sent_chat_messages')
+    is_doctor = models.BooleanField(default=False, help_text="Whether the sender is a doctor")
+    
+    # Message status
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Consultation Chat Message"
+        verbose_name_plural = "Consultation Chat Messages"
+        ordering = ['created_at']
+        
+    def __str__(self):
+        return f"Message from {self.sender.get_full_name()} in {self.consultation}"
+
+
 class Package(models.Model):
     """
     Subscription package for patients
@@ -714,3 +745,117 @@ class DoctorRating(models.Model):
         
     def __str__(self):
         return f"{self.patient.user.get_full_name()} rated Dr. {self.doctor.user.get_full_name()} {self.rating} stars"
+
+
+class Article(models.Model):
+    """
+    Articles created by doctors and read by both doctors and patients
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=255)
+    content = models.TextField()
+    summary = models.TextField(blank=True)
+    
+    # Article metadata
+    author = models.ForeignKey('doctors.Doctor', on_delete=models.CASCADE, related_name='articles')
+    category = models.CharField(max_length=50, choices=[
+        ('general', 'General Health'),
+        ('nutrition', 'Nutrition'),
+        ('fitness', 'Fitness'),
+        ('mental', 'Mental Health'),
+        ('children', 'Children\'s Health'),
+        ('chronic', 'Chronic Conditions'),
+        ('prevention', 'Preventive Care'),
+        ('research', 'Medical Research'),
+        ('other', 'Other'),
+    ])
+    tags = models.CharField(max_length=255, blank=True, help_text="Comma-separated tags")
+    
+    # Featured image
+    featured_image = models.ImageField(upload_to='articles/images/%Y/%m/', blank=True, null=True)
+    
+    # Approval status
+    is_approved = models.BooleanField(default=False)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, blank=True, 
+        related_name='approved_articles'
+    )
+    approval_date = models.DateTimeField(null=True, blank=True)
+    approval_notes = models.TextField(blank=True)
+    
+    # Publication status
+    is_published = models.BooleanField(default=False)
+    publish_date = models.DateTimeField(null=True, blank=True)
+    
+    # Stats
+    view_count = models.PositiveIntegerField(default=0)
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Article"
+        verbose_name_plural = "Articles"
+        ordering = ['-created_at']
+        
+    def __str__(self):
+        return self.title
+
+
+class ArticleComment(models.Model):
+    """
+    Comments on articles by doctors and patients
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name='comments')
+    
+    # Comment content
+    content = models.TextField()
+    
+    # Author - can be either a doctor or a patient
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='article_comments')
+    is_doctor = models.BooleanField(default=False, help_text="Whether the commenter is a doctor")
+    
+    # Reply structure - limited to one level
+    parent_comment = models.ForeignKey(
+        'self', 
+        on_delete=models.CASCADE, 
+        null=True, blank=True, 
+        related_name='replies'
+    )
+    
+    # Likes
+    like_count = models.PositiveIntegerField(default=0)
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Article Comment"
+        verbose_name_plural = "Article Comments"
+        ordering = ['created_at']
+        
+    def __str__(self):
+        return f"Comment by {self.user.get_full_name()} on {self.article.title}"
+
+
+class ArticleCommentLike(models.Model):
+    """
+    Likes on article comments by users
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    comment = models.ForeignKey(ArticleComment, on_delete=models.CASCADE, related_name='likes')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='comment_likes')
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "Comment Like"
+        verbose_name_plural = "Comment Likes"
+        unique_together = ('comment', 'user')
+        
+    def __str__(self):
+        return f"{self.user.get_full_name()} liked comment on {self.comment.article.title}"
