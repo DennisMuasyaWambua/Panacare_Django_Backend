@@ -9,6 +9,8 @@ ENV PYTHONUNBUFFERED 1
 # Install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+# Make sure twilio is installed
+RUN pip install --no-cache-dir twilio
 
 # Copy project
 COPY . .

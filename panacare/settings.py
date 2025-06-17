@@ -69,6 +69,7 @@ SWAGGER_SETTINGS = {
             'name': 'Authorization',
             'in': 'header'
         }
+        
     },
     'JSON_EDITOR': True,
     'VALIDATOR_URL': None,
