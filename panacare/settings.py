@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'doctors',
     'healthcare',
     'clinical_support',
+    'fhir_api',
 ]
 
 # Swagger Settings
