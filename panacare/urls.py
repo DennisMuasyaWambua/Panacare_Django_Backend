@@ -42,6 +42,15 @@ schema_view = get_schema_view(
       description="""
       API documentation for Panacare Healthcare System
       
+      ## Authentication
+      
+      Most endpoints require authentication with a JWT token. 
+      To authenticate, include the token in the Authorization header as follows:
+      
+      `Authorization: Bearer <your_token>`
+      
+      Tokens can be obtained through the login endpoint: `POST /api/users/login/`
+      
       ## FHIR Compliance
       
       All GET endpoints support FHIR format responses by adding the `format=fhir` query parameter.
@@ -49,6 +58,31 @@ schema_view = get_schema_view(
       Example: `GET /api/patients/?format=fhir`
       
       The response will follow FHIR R4 (4.0.1) standards with appropriate resource types.
+      
+      ## Response Formats
+      
+      The API returns data in JSON format by default. Responses typically follow this structure:
+      
+      ```json
+      {
+          "status": "success",  // or "error"
+          "data": { ... },     // The requested data, or null in case of error
+          "message": "...",   // Human-readable message
+          "errors": { ... }    // Validation errors if applicable
+      }
+      ```
+      
+      ## Error Handling
+      
+      The API uses standard HTTP status codes to indicate the success or failure of requests:
+      
+      - 200: Success
+      - 201: Created
+      - 400: Bad Request
+      - 401: Unauthorized
+      - 403: Forbidden
+      - 404: Not Found
+      - 500: Server Error
       """,
       terms_of_service="https://www.panacare.com/terms/",
       contact=openapi.Contact(email="contact@panacare.com"),

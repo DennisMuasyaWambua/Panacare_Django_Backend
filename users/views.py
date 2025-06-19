@@ -308,9 +308,39 @@ class UserActivateAPIView(APIView):
                 'error': 'Activation link is invalid!'
             }, status=status.HTTP_400_BAD_REQUEST)
 
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
 class UserLoginAPIView(APIView):
     permission_classes = [permissions.AllowAny]
     
+    @swagger_auto_schema(
+        operation_description="Log in a user and obtain access token",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['username', 'password'],
+            properties={
+                'username': openapi.Schema(type=openapi.TYPE_STRING, description="Username or email"),
+                'password': openapi.Schema(type=openapi.TYPE_STRING, format="password", description="Password")
+            }
+        ),
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'refresh': openapi.Schema(type=openapi.TYPE_STRING, description="JWT refresh token"),
+                    'access': openapi.Schema(type=openapi.TYPE_STRING, description="JWT access token"),
+                    'user': openapi.Schema(type=openapi.TYPE_OBJECT, description="User details")
+                }
+            )),
+            401: openapi.Response("Unauthorized", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'detail': openapi.Schema(type=openapi.TYPE_STRING, description="Error message")
+                }
+            ))
+        }
+    )
     def post(self, request):
         email = request.data.get('email')
         password = request.data.get('password')
