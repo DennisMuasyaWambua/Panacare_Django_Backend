@@ -571,7 +571,22 @@ class AppointmentViewSet(viewsets.ModelViewSet):
                 'end_time': openapi.Schema(type=openapi.TYPE_STRING, format='time', description='New end time (HH:MM:SS)'),
                 'reschedule_reason': openapi.Schema(type=openapi.TYPE_STRING, description='Reason for rescheduling the appointment')
             }
-        )
+        ),
+        responses={
+            200: AppointmentSerializer,
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, description="Error message")
+                }
+            )),
+            403: openapi.Response("Forbidden", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, description="Permission error message")
+                }
+            ))
+        }
     )
     @action(detail=True, methods=['post'], permission_classes=[IsPatientUser])
     def patient_reschedule(self, request, pk=None):
@@ -869,6 +884,43 @@ class ConsultationViewSet(viewsets.ModelViewSet):
                 
         return queryset
 
+    @swagger_auto_schema(
+        operation_description="Start a video consultation with a patient",
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                    'appointment': openapi.Schema(type=openapi.TYPE_OBJECT),
+                    'status': openapi.Schema(type=openapi.TYPE_STRING),
+                    'start_time': openapi.Schema(type=openapi.TYPE_STRING, format="datetime"),
+                    'end_time': openapi.Schema(type=openapi.TYPE_STRING, format="datetime"),
+                    'session_id': openapi.Schema(type=openapi.TYPE_STRING),
+                    'twilio_room_name': openapi.Schema(type=openapi.TYPE_STRING),
+                    'twilio_room_sid': openapi.Schema(type=openapi.TYPE_STRING),
+                    'token': openapi.Schema(type=openapi.TYPE_STRING, description="Twilio token for doctor")
+                }
+            )),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            403: openapi.Response("Forbidden", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            500: openapi.Response("Server Error", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
     @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser])
     def start_consultation(self, request, pk=None):
         """
@@ -1027,6 +1079,36 @@ class ConsultationViewSet(viewsets.ModelViewSet):
                 'error': f'Failed to get token: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
+    @swagger_auto_schema(
+        operation_description="Join or rejoin an ongoing consultation as a patient or doctor",
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'token': openapi.Schema(type=openapi.TYPE_STRING, description="Twilio token"),
+                    'room_name': openapi.Schema(type=openapi.TYPE_STRING, description="Twilio room name")
+                }
+            )),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            403: openapi.Response("Forbidden", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            500: openapi.Response("Server Error", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
     @action(detail=True, methods=['post'], permission_classes=[IsPatientOrDoctorOrAdmin])
     def join_consultation(self, request, pk=None):
         """
@@ -1114,6 +1196,31 @@ class ConsultationViewSet(viewsets.ModelViewSet):
         
         return Response(serializer.data)
     
+    @swagger_auto_schema(
+        operation_description="Send a chat message in a consultation",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['message'],
+            properties={
+                'message': openapi.Schema(type=openapi.TYPE_STRING, description="Chat message content")
+            }
+        ),
+        responses={
+            200: ConsultationChatSerializer,
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            403: openapi.Response("Forbidden", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
     @action(detail=True, methods=['post'], permission_classes=[IsPatientOrDoctorOrAdmin])
     def send_message(self, request, pk=None):
         """
@@ -1511,6 +1618,45 @@ class ArticleViewSet(viewsets.ModelViewSet):
     queryset = Article.objects.all()
     serializer_class = ArticleSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="List all articles with filtering options",
+        manual_parameters=[
+            openapi.Parameter('category', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by category"),
+            openapi.Parameter('author_id', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by author ID"),
+            openapi.Parameter('featured', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by featured status"),
+            openapi.Parameter('visibility', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by visibility (public, subscribers, private)"),
+            openapi.Parameter('condition', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by related health condition"),
+            openapi.Parameter('date_from', openapi.IN_QUERY, type=openapi.TYPE_STRING, format="date", description="Filter by publish date (from)"),
+            openapi.Parameter('date_to', openapi.IN_QUERY, type=openapi.TYPE_STRING, format="date", description="Filter by publish date (to)"),
+            openapi.Parameter('sort_by', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Sort by (popular, newest, oldest)"),
+            openapi.Parameter('search', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Search across title, content, summary, tags, and related_conditions"),
+            openapi.Parameter('is_approved', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by approval status (admin only)"),
+            openapi.Parameter('is_published', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by publication status"),
+            openapi.Parameter('reading_time', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description="Filter by reading time (in minutes)")
+        ],
+        responses={
+            200: ArticleSerializer(many=True)
+        }
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+        operation_description="Create a new article (doctors only)",
+        request_body=ArticleSerializer,
+        responses={
+            201: ArticleSerializer,
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
     
     def get_permissions(self):
         if self.action in ['create']:
