@@ -1541,6 +1541,29 @@ class ArticleViewSet(viewsets.ModelViewSet):
             # Patients and other users can only see approved and published articles
             queryset = Article.objects.filter(is_approved=True, is_published=True)
             
+            # Apply visibility filtering for patients
+            # If patient has an active subscription, they can see 'subscribers' articles
+            # Otherwise, they can only see 'public' articles
+            has_active_subscription = False
+            try:
+                if hasattr(self.request.user, 'patient'):
+                    # Check if patient has active subscription
+                    patient = self.request.user.patient
+                    has_active_subscription = PatientSubscription.objects.filter(
+                        patient=patient,
+                        status='active',
+                        end_date__gte=timezone.now().date()
+                    ).exists()
+            except Exception:
+                pass  # If anything goes wrong, default to no subscription
+                
+            if not has_active_subscription:
+                # Filter to only show public articles to non-subscribers
+                queryset = queryset.filter(visibility='public')
+            else:
+                # Subscribers can see both public and subscriber-only content
+                queryset = queryset.filter(visibility__in=['public', 'subscribers'])
+            
         # Additional filtering
         category = self.request.query_params.get('category')
         if category:
@@ -1550,13 +1573,57 @@ class ArticleViewSet(viewsets.ModelViewSet):
         if author_id:
             queryset = queryset.filter(author_id=author_id)
             
+        # Filter by featured status
+        featured = self.request.query_params.get('featured')
+        if featured and featured.lower() == 'true':
+            queryset = queryset.filter(is_featured=True)
+            
+        # Filter by visibility
+        visibility = self.request.query_params.get('visibility')
+        if visibility:
+            queryset = queryset.filter(visibility=visibility)
+            
+        # Filter by related health condition
+        condition = self.request.query_params.get('condition')
+        if condition:
+            queryset = queryset.filter(related_conditions__icontains=condition)
+            
+        # Date range filtering
+        date_from = self.request.query_params.get('date_from')
+        if date_from:
+            try:
+                date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+                queryset = queryset.filter(publish_date__date__gte=date_from)
+            except ValueError:
+                pass
+                
+        date_to = self.request.query_params.get('date_to')
+        if date_to:
+            try:
+                date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+                queryset = queryset.filter(publish_date__date__lte=date_to)
+            except ValueError:
+                pass
+            
+        # Sort by options
+        sort_by = self.request.query_params.get('sort_by')
+        if sort_by:
+            if sort_by == 'popular':
+                queryset = queryset.order_by('-view_count')
+            elif sort_by == 'newest':
+                queryset = queryset.order_by('-publish_date')
+            elif sort_by == 'oldest':
+                queryset = queryset.order_by('publish_date')
+                
+        # Free text search across multiple fields
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(
                 Q(title__icontains=search) | 
                 Q(content__icontains=search) |
                 Q(summary__icontains=search) |
-                Q(tags__icontains=search)
+                Q(tags__icontains=search) |
+                Q(related_conditions__icontains=search)
             )
             
         # Filter by approval status (admin only)
@@ -1569,6 +1636,15 @@ class ArticleViewSet(viewsets.ModelViewSet):
         is_published = self.request.query_params.get('is_published')
         if is_published:
             queryset = queryset.filter(is_published=is_published.lower() == 'true')
+            
+        # Reading time filter
+        reading_time = self.request.query_params.get('reading_time')
+        if reading_time:
+            try:
+                reading_time = int(reading_time)
+                queryset = queryset.filter(reading_time__lte=reading_time)
+            except ValueError:
+                pass
             
         return queryset
     
@@ -1633,6 +1709,16 @@ class ArticleViewSet(viewsets.ModelViewSet):
             article.is_published = True
             article.publish_date = timezone.now()
             
+        # Set visibility if provided
+        visibility = request.data.get('visibility')
+        if visibility in ['public', 'subscribers', 'private']:
+            article.visibility = visibility
+            
+        # Set featured status if provided
+        featured = request.data.get('featured')
+        if featured is not None:
+            article.is_featured = featured.lower() == 'true'
+            
         article.save()
         
         serializer = self.get_serializer(article)
@@ -1665,6 +1751,12 @@ class ArticleViewSet(viewsets.ModelViewSet):
             # Publish the article
             article.is_published = True
             article.publish_date = timezone.now()
+            
+            # Set visibility if provided
+            visibility = request.data.get('visibility')
+            if visibility in ['public', 'subscribers', 'private']:
+                article.visibility = visibility
+            
             article.save()
             
             serializer = self.get_serializer(article)
@@ -1675,6 +1767,12 @@ class ArticleViewSet(viewsets.ModelViewSet):
                 # Admin can publish regardless
                 article.is_published = True
                 article.publish_date = timezone.now()
+                
+                # Set visibility if provided
+                visibility = request.data.get('visibility')
+                if visibility in ['public', 'subscribers', 'private']:
+                    article.visibility = visibility
+                    
                 article.save()
                 
                 serializer = self.get_serializer(article)
@@ -1756,6 +1854,23 @@ class ArticleViewSet(viewsets.ModelViewSet):
                 articles = articles.filter(is_published=True)
             elif status_param == 'pending':
                 articles = articles.filter(is_approved=False)
+            elif status_param == 'approved':
+                articles = articles.filter(is_approved=True)
+                
+            # Filter by visibility
+            visibility = request.query_params.get('visibility')
+            if visibility:
+                articles = articles.filter(visibility=visibility)
+                
+            # Sort options
+            sort_by = self.request.query_params.get('sort_by')
+            if sort_by:
+                if sort_by == 'popular':
+                    articles = articles.order_by('-view_count')
+                elif sort_by == 'newest':
+                    articles = articles.order_by('-created_at')
+                elif sort_by == 'oldest':
+                    articles = articles.order_by('created_at')
             
             serializer = self.get_serializer(articles, many=True)
             return Response(serializer.data)
@@ -1763,6 +1878,95 @@ class ArticleViewSet(viewsets.ModelViewSet):
             return Response({
                 'error': 'Doctor profile not found'
             }, status=status.HTTP_404_NOT_FOUND)
+            
+    @action(detail=False, methods=['get'])
+    def featured(self, request):
+        """
+        Endpoint to get featured articles
+        """
+        # Get the base queryset with proper permissions applied
+        queryset = self.get_queryset()
+        
+        # Further filter to only featured articles
+        queryset = queryset.filter(is_featured=True)
+        
+        # Limit to a reasonable number
+        limit = request.query_params.get('limit', 5)
+        try:
+            limit = int(limit)
+        except ValueError:
+            limit = 5
+            
+        queryset = queryset[:limit]
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+        
+    @action(detail=False, methods=['get'])
+    def popular(self, request):
+        """
+        Endpoint to get popular articles based on view count
+        """
+        # Get the base queryset with proper permissions applied
+        queryset = self.get_queryset()
+        
+        # Order by view count (most viewed first)
+        queryset = queryset.order_by('-view_count')
+        
+        # Limit to a reasonable number
+        limit = request.query_params.get('limit', 10)
+        try:
+            limit = int(limit)
+        except ValueError:
+            limit = 10
+            
+        queryset = queryset[:limit]
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+        
+    @action(detail=False, methods=['get'])
+    def recent(self, request):
+        """
+        Endpoint to get recently published articles
+        """
+        # Get the base queryset with proper permissions applied
+        queryset = self.get_queryset()
+        
+        # Order by publish date (most recent first)
+        queryset = queryset.filter(publish_date__isnull=False).order_by('-publish_date')
+        
+        # Limit to a reasonable number
+        limit = request.query_params.get('limit', 10)
+        try:
+            limit = int(limit)
+        except ValueError:
+            limit = 10
+            
+        queryset = queryset[:limit]
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+        
+    @action(detail=False, methods=['get'])
+    def by_condition(self, request):
+        """
+        Endpoint to get articles related to specific health conditions
+        """
+        condition = request.query_params.get('condition')
+        if not condition:
+            return Response({
+                'error': 'condition parameter is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Get the base queryset with proper permissions applied
+        queryset = self.get_queryset()
+        
+        # Filter by related conditions
+        queryset = queryset.filter(related_conditions__icontains=condition)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
 
 class ArticleCommentViewSet(viewsets.ModelViewSet):
