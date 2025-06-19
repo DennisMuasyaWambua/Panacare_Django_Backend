@@ -1629,11 +1629,11 @@ class ArticleViewSet(viewsets.ModelViewSet):
             openapi.Parameter('condition', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by related health condition"),
             openapi.Parameter('date_from', openapi.IN_QUERY, type=openapi.TYPE_STRING, format="date", description="Filter by publish date (from)"),
             openapi.Parameter('date_to', openapi.IN_QUERY, type=openapi.TYPE_STRING, format="date", description="Filter by publish date (to)"),
-            openapi.Parameter('sort_by', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Sort by (popular, newest, oldest)"),
+            openapi.Parameter('sort_by', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=["popular", "newest", "oldest"], description="Sort by view count (popular), newest publish date (newest), or oldest publish date (oldest)"),
             openapi.Parameter('search', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Search across title, content, summary, tags, and related_conditions"),
             openapi.Parameter('is_approved', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by approval status (admin only)"),
             openapi.Parameter('is_published', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by publication status"),
-            openapi.Parameter('reading_time', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description="Filter by reading time (in minutes)")
+            openapi.Parameter('reading_time', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description="Filter by reading time in minutes (returns articles with reading time <= specified value)")
         ],
         responses={
             200: ArticleSerializer(many=True)
@@ -1643,8 +1643,22 @@ class ArticleViewSet(viewsets.ModelViewSet):
         return super().list(request, *args, **kwargs)
     
     @swagger_auto_schema(
-        operation_description="Create a new article (doctors only)",
-        request_body=ArticleSerializer,
+        operation_description="Create a new article (doctors only). Note: featured_image should be sent as a file upload in a multipart form request.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['title', 'content', 'category'],
+            properties={
+                'title': openapi.Schema(type=openapi.TYPE_STRING, description='Article title'),
+                'content': openapi.Schema(type=openapi.TYPE_STRING, description='Article content'),
+                'summary': openapi.Schema(type=openapi.TYPE_STRING, description='Brief summary of the article'),
+                'category': openapi.Schema(type=openapi.TYPE_STRING, description='Article category'),
+                'tags': openapi.Schema(type=openapi.TYPE_STRING, description='Comma-separated tags'),
+                'featured_image': openapi.Schema(type=openapi.TYPE_FILE, description='Featured image for the article'),
+                'visibility': openapi.Schema(type=openapi.TYPE_STRING, enum=['public', 'subscribers', 'private'], description='Controls who can view this article'),
+                'related_conditions': openapi.Schema(type=openapi.TYPE_STRING, description='Comma-separated health conditions'),
+                'reading_time': openapi.Schema(type=openapi.TYPE_INTEGER, description='Estimated reading time in minutes')
+            }
+        ),
         responses={
             201: ArticleSerializer,
             400: openapi.Response("Bad Request", openapi.Schema(
