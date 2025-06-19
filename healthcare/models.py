@@ -774,6 +774,13 @@ class Article(models.Model):
     # Featured image
     featured_image = models.ImageField(upload_to='articles/images/%Y/%m/', blank=True, null=True)
     
+    # Visibility and access control
+    visibility = models.CharField(max_length=20, choices=[
+        ('public', 'Public - Available to all users'),
+        ('subscribers', 'Subscribers Only - Available to paying patients'),
+        ('private', 'Private - Only visible to author and admins'),
+    ], default='public', help_text="Controls who can view this article")
+    
     # Approval status
     is_approved = models.BooleanField(default=False)
     approved_by = models.ForeignKey(
@@ -791,6 +798,13 @@ class Article(models.Model):
     
     # Stats
     view_count = models.PositiveIntegerField(default=0)
+    is_featured = models.BooleanField(default=False, help_text="Featured articles appear prominently on the home page")
+    
+    # Related health conditions for better filtering
+    related_conditions = models.CharField(max_length=255, blank=True, help_text="Comma-separated health conditions this article relates to")
+    
+    # Reading time estimate (in minutes)
+    reading_time = models.PositiveSmallIntegerField(default=5, help_text="Estimated reading time in minutes")
     
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
