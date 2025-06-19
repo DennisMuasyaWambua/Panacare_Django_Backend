@@ -510,7 +510,8 @@ class ArticleSerializer(serializers.ModelSerializer):
         model = Article
         fields = [
             'id', 'title', 'content', 'summary', 'author', 'author_name',
-            'category', 'category_display', 'tags', 'featured_image',
+            'category', 'category_display', 'tags', 'featured_image', 'visibility',
+            'is_featured', 'related_conditions', 'reading_time',
             'is_approved', 'approved_by', 'approved_by_name', 'approval_date', 'approval_notes',
             'is_published', 'publish_date', 'view_count', 'comments_count',
             'created_at', 'updated_at'
@@ -531,7 +532,7 @@ class ArticleSerializer(serializers.ModelSerializer):
         return None
     
     def get_comments_count(self, obj):
-        return obj.comments.count()
+        return obj.comments.count()  # This returns an integer that will be converted to a string in the JSON response
     
     def get_category_display(self, obj):
         return dict(obj._meta.get_field('category').choices).get(obj.category, obj.category)
