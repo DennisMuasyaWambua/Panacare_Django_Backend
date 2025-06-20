@@ -1705,24 +1705,29 @@ class ArticleViewSet(viewsets.ModelViewSet):
             # If patient has an active subscription, they can see 'subscribers' articles
             # Otherwise, they can only see 'public' articles
             has_active_subscription = False
-            try:
-                if hasattr(self.request.user, 'patient'):
-                    # Check if patient has active subscription
+            has_patient_profile = hasattr(self.request.user, 'patient')
+            
+            if has_patient_profile:
+                # Case 1: User has a patient profile, check for active subscription
+                try:
                     patient = self.request.user.patient
                     has_active_subscription = PatientSubscription.objects.filter(
                         patient=patient,
                         status='active',
                         end_date__gte=timezone.now().date()
                     ).exists()
-            except Exception:
-                pass  # If anything goes wrong, default to no subscription
-                
-            if not has_active_subscription:
-                # Filter to only show public articles to non-subscribers
-                queryset = queryset.filter(visibility='public')
-            else:
+                except Exception:
+                    # Case 2: Error getting subscription info, default to no subscription
+                    has_active_subscription = False
+            
+            # Case 3: Normal subscriber with active subscription can see subscriber content
+            # Users without patient profile or without active subscription see only public articles
+            if has_active_subscription:
                 # Subscribers can see both public and subscriber-only content
                 queryset = queryset.filter(visibility__in=['public', 'subscribers'])
+            else:
+                # Filter to only show public articles to non-subscribers
+                queryset = queryset.filter(visibility='public')
             
         # Additional filtering
         category = self.request.query_params.get('category')
