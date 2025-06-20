@@ -1,11 +1,3 @@
-INFO 2025-06-17 19:00:52,618 autoreload Watching for file changes with StatReloader
 Performing system checks...
 
 System check identified no issues (0 silenced).
-June 17, 2025 - 19:00:55
-Django version 5.2.3, using settings 'panacare.settings'
-Starting development server at http://127.0.0.1:8000/
-Quit the server with CONTROL-C.
-
-WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
-For more information on production servers see: https://docs.djangoproject.com/en/5.2/howto/deployment/

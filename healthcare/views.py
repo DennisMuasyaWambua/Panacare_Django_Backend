@@ -1620,12 +1620,28 @@ class ArticleViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     @swagger_auto_schema(
-        operation_description="List all articles with filtering options",
+        operation_description="""
+List all articles with filtering options.
+
+This endpoint fetches articles based on user permissions:
+- Admins: Can see all articles, including unapproved and unpublished
+- Doctors: Can see all approved/published articles plus their own drafts
+- Patients with active subscription: Can see public and subscriber-only articles
+- Other users: Can see only public articles
+
+Examples:
+- Get all articles: GET /api/articles/
+- Get articles in nutrition category: GET /api/articles/?category=nutrition
+- Get featured articles: GET /api/articles/?featured=true
+- Get articles by condition: GET /api/articles/?condition=diabetes
+- Get articles sorted by popularity: GET /api/articles/?sort_by=popular
+- Search articles: GET /api/articles/?search=diabetes
+        """,
         manual_parameters=[
-            openapi.Parameter('category', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by category"),
+            openapi.Parameter('category', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by category (general, nutrition, fitness, mental, children, chronic, prevention, research, other)"),
             openapi.Parameter('author_id', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by author ID"),
             openapi.Parameter('featured', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by featured status"),
-            openapi.Parameter('visibility', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by visibility (public, subscribers, private)"),
+            openapi.Parameter('visibility', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=["public", "subscribers", "private"], description="Filter by visibility level"),
             openapi.Parameter('condition', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by related health condition"),
             openapi.Parameter('date_from', openapi.IN_QUERY, type=openapi.TYPE_STRING, format="date", description="Filter by publish date (from)"),
             openapi.Parameter('date_to', openapi.IN_QUERY, type=openapi.TYPE_STRING, format="date", description="Filter by publish date (to)"),
@@ -1633,7 +1649,8 @@ class ArticleViewSet(viewsets.ModelViewSet):
             openapi.Parameter('search', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Search across title, content, summary, tags, and related_conditions"),
             openapi.Parameter('is_approved', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by approval status (admin only)"),
             openapi.Parameter('is_published', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by publication status"),
-            openapi.Parameter('reading_time', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description="Filter by reading time in minutes (returns articles with reading time <= specified value)")
+            openapi.Parameter('reading_time', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description="Filter by reading time in minutes (returns articles with reading time <= specified value)"),
+            openapi.Parameter('limit', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description="Limit number of results returned")
         ],
         responses={
             200: ArticleSerializer(many=True)
@@ -1845,6 +1862,28 @@ class ArticleViewSet(viewsets.ModelViewSet):
             else:
                 raise serializers.ValidationError("Doctor profile not found")
     
+    @swagger_auto_schema(
+        method='post',
+        operation_description="Endpoint for admins to approve an article. Can also set publication status, visibility and featured status.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'approval_notes': openapi.Schema(type=openapi.TYPE_STRING, description='Notes regarding the approval decision'),
+                'publish': openapi.Schema(type=openapi.TYPE_STRING, enum=['true', 'false'], description='Whether to also publish the article'),
+                'visibility': openapi.Schema(type=openapi.TYPE_STRING, enum=['public', 'subscribers', 'private'], description='Visibility level for the article'),
+                'featured': openapi.Schema(type=openapi.TYPE_STRING, enum=['true', 'false'], description='Whether to feature the article')
+            }
+        ),
+        responses={
+            200: ArticleSerializer,
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def approve(self, request, pk=None):
         """
@@ -1889,6 +1928,31 @@ class ArticleViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(article)
         return Response(serializer.data)
     
+    @swagger_auto_schema(
+        method='post',
+        operation_description="Publish an approved article. Can only be done by the article author or an admin.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'visibility': openapi.Schema(type=openapi.TYPE_STRING, enum=['public', 'subscribers', 'private'], description='Optional visibility level for the article')
+            }
+        ),
+        responses={
+            200: ArticleSerializer,
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            403: openapi.Response("Forbidden", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
     @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser | IsAdminUser])
     def publish(self, request, pk=None):
         """
@@ -1947,6 +2011,31 @@ class ArticleViewSet(viewsets.ModelViewSet):
                     'error': 'Doctor profile not found'
                 }, status=status.HTTP_404_NOT_FOUND)
     
+    @swagger_auto_schema(
+        method='post',
+        operation_description="Unpublish a published article. Can only be done by the article author or an admin.",
+        responses={
+            200: ArticleSerializer,
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            403: openapi.Response("Forbidden", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            404: openapi.Response("Not Found", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
     @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser | IsAdminUser])
     def unpublish(self, request, pk=None):
         """
@@ -1991,6 +2080,19 @@ class ArticleViewSet(viewsets.ModelViewSet):
                     'error': 'Doctor profile not found'
                 }, status=status.HTTP_404_NOT_FOUND)
     
+    @swagger_auto_schema(
+        method='post',
+        operation_description="Increment the view count for an article. Call this when a user views the article.",
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'status': openapi.Schema(type=openapi.TYPE_STRING),
+                    'view_count': openapi.Schema(type=openapi.TYPE_INTEGER)
+                }
+            ))
+        }
+    )
     @action(detail=True, methods=['post'])
     def view(self, request, pk=None):
         """
@@ -2002,6 +2104,21 @@ class ArticleViewSet(viewsets.ModelViewSet):
         
         return Response({'status': 'view counted', 'view_count': article.view_count})
     
+    @swagger_auto_schema(
+        method='get',
+        operation_description="Endpoint for doctors to view their own articles",
+        manual_parameters=[
+            openapi.Parameter('status', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=['draft', 'published', 'pending', 'approved'], 
+                            description="Filter by article status"),
+            openapi.Parameter('visibility', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=['public', 'subscribers', 'private'], 
+                            description="Filter by visibility level"),
+            openapi.Parameter('sort_by', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=["popular", "newest", "oldest"], 
+                            description="Sort by view count (popular), newest first (newest), or oldest first (oldest)")
+        ],
+        responses={
+            200: ArticleSerializer(many=True)
+        }
+    )
     @action(detail=False, methods=['get'])
     def my_articles(self, request):
         """
@@ -2044,6 +2161,17 @@ class ArticleViewSet(viewsets.ModelViewSet):
                 'error': 'Doctor profile not found'
             }, status=status.HTTP_404_NOT_FOUND)
             
+    @swagger_auto_schema(
+        method='get',
+        operation_description="Get featured articles that have been marked as featured by an admin",
+        manual_parameters=[
+            openapi.Parameter('limit', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, 
+                            description="Maximum number of featured articles to return (default: 5)")
+        ],
+        responses={
+            200: ArticleSerializer(many=True)
+        }
+    )
     @action(detail=False, methods=['get'])
     def featured(self, request):
         """
@@ -2067,6 +2195,17 @@ class ArticleViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
         
+    @swagger_auto_schema(
+        method='get',
+        operation_description="Get popular articles sorted by view count (most viewed first)",
+        manual_parameters=[
+            openapi.Parameter('limit', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, 
+                            description="Maximum number of popular articles to return (default: 10)")
+        ],
+        responses={
+            200: ArticleSerializer(many=True)
+        }
+    )
     @action(detail=False, methods=['get'])
     def popular(self, request):
         """
@@ -2090,6 +2229,17 @@ class ArticleViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
         
+    @swagger_auto_schema(
+        method='get',
+        operation_description="Get recently published articles sorted by publish date (newest first)",
+        manual_parameters=[
+            openapi.Parameter('limit', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, 
+                            description="Maximum number of recent articles to return (default: 10)")
+        ],
+        responses={
+            200: ArticleSerializer(many=True)
+        }
+    )
     @action(detail=False, methods=['get'])
     def recent(self, request):
         """
@@ -2113,6 +2263,25 @@ class ArticleViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
         
+    @swagger_auto_schema(
+        method='get',
+        operation_description="Get articles related to specific health conditions",
+        manual_parameters=[
+            openapi.Parameter('condition', openapi.IN_QUERY, type=openapi.TYPE_STRING, required=True, 
+                            description="The health condition to find articles for (e.g., 'diabetes')"),
+            openapi.Parameter('sort_by', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=["popular", "newest", "oldest"], 
+                            description="Sort by popularity, newest, or oldest")
+        ],
+        responses={
+            200: ArticleSerializer(many=True),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
     @action(detail=False, methods=['get'])
     def by_condition(self, request):
         """
@@ -2138,6 +2307,23 @@ class ArticleCommentViewSet(viewsets.ModelViewSet):
     queryset = ArticleComment.objects.all()
     serializer_class = ArticleCommentSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="List all comments with filtering options",
+        manual_parameters=[
+            openapi.Parameter('article_id', openapi.IN_QUERY, type=openapi.TYPE_STRING, 
+                            description="Filter by article ID"),
+            openapi.Parameter('user_id', openapi.IN_QUERY, type=openapi.TYPE_STRING, 
+                            description="Filter by user ID"),
+            openapi.Parameter('top_level_only', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, 
+                            description="Only return top-level comments (no replies)")
+        ],
+        responses={
+            200: ArticleCommentSerializer(many=True)
+        }
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
     
     def get_queryset(self):
         queryset = ArticleComment.objects.all()
@@ -2169,6 +2355,25 @@ class ArticleCommentViewSet(viewsets.ModelViewSet):
             raise serializers.ValidationError("You can only edit your own comments")
         serializer.save()
     
+    @swagger_auto_schema(
+        method='post',
+        operation_description="Like a comment. Users can only like a comment once.",
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'status': openapi.Schema(type=openapi.TYPE_STRING),
+                    'like_count': openapi.Schema(type=openapi.TYPE_INTEGER)
+                }
+            )),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
     @action(detail=True, methods=['post'])
     def like(self, request, pk=None):
         """
@@ -2193,6 +2398,25 @@ class ArticleCommentViewSet(viewsets.ModelViewSet):
         
         return Response({'status': 'comment liked', 'like_count': comment.like_count})
     
+    @swagger_auto_schema(
+        method='post',
+        operation_description="Remove a like from a comment. Users can only unlike comments they've previously liked.",
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'status': openapi.Schema(type=openapi.TYPE_STRING),
+                    'like_count': openapi.Schema(type=openapi.TYPE_INTEGER)
+                }
+            )),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
     @action(detail=True, methods=['post'])
     def unlike(self, request, pk=None):
         """
@@ -2216,6 +2440,26 @@ class ArticleCommentViewSet(viewsets.ModelViewSet):
                 'error': 'You have not liked this comment'
             }, status=status.HTTP_400_BAD_REQUEST)
     
+    @swagger_auto_schema(
+        method='post',
+        operation_description="Reply to a top-level comment. Only one level of nesting is allowed (no replies to replies).",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['content'],
+            properties={
+                'content': openapi.Schema(type=openapi.TYPE_STRING, description="The text content of the reply")
+            }
+        ),
+        responses={
+            200: ArticleCommentReplySerializer,
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
     @action(detail=True, methods=['post'])
     def reply(self, request, pk=None):
         """
