@@ -35,6 +35,34 @@ class IsVerifiedUser(permissions.BasePermission):
         # Check if user is verified
         return request.user.is_verified
 
+class IsAdminOrOwnerDoctor(permissions.BasePermission):
+    """
+    Permission class to allow admin users or doctors to update their own profile
+    """
+    def has_permission(self, request, view):
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return False
+        
+        # Allow admin users
+        if request.user.roles.filter(name='admin').exists():
+            return True
+        
+        # Allow if user has a doctor profile
+        return hasattr(request.user, 'doctor')
+    
+    def has_object_permission(self, request, view, obj):
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return False
+        
+        # Allow admin users
+        if request.user.roles.filter(name='admin').exists():
+            return True
+        
+        # Allow doctors to update their own profile
+        return hasattr(request.user, 'doctor') and obj.user == request.user
+
 class IsPatientUser(permissions.BasePermission):
     """
     Permission class to check if the user has patient role
@@ -193,7 +221,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
         Override to set custom permissions for different actions
         """
         if self.action in ['update', 'partial_update', 'destroy']:
-            permission_classes = [IsAdminUser]
+            permission_classes = [IsAdminOrOwnerDoctor]
         elif self.action == 'create':
             # For create, allow either admin users or verified users with doctor role
             permission_classes = [IsAdminUser | IsVerifiedUser]
