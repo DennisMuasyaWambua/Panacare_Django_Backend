@@ -1,3 +1,6 @@
 Performing system checks...
 
 System check identified no issues (0 silenced).
+Performing system checks...
+
+System check identified no issues (0 silenced).
