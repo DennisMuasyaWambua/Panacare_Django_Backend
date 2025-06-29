@@ -2156,7 +2156,7 @@ Examples:
             
             serializer = self.get_serializer(articles, many=True)
             return Response(serializer.data)
-        except Doctor.DoesNotExist:
+        except (Doctor.DoesNotExist, AttributeError):
             return Response({
                 'error': 'Doctor profile not found'
             }, status=status.HTTP_404_NOT_FOUND)
