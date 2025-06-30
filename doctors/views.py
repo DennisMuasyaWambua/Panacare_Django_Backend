@@ -8,7 +8,8 @@ from users.serializers import UserSerializer, PatientSerializer
 from django.shortcuts import get_object_or_404
 from django.db import models
 from django.db.models import Avg, Count
-from healthcare.models import DoctorRating
+from django.apps import apps
+DoctorRating = apps.get_model('healthcare', 'DoctorRating')
 from healthcare.serializers import DoctorRatingSerializer
 
 class IsAdminUser(permissions.BasePermission):

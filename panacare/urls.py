@@ -17,10 +17,9 @@ from users.views import (
 from doctors.views import DoctorViewSet
 import doctors.views
 from healthcare.views import (
-    HealthCareViewSet, DoctorAvailabilityViewSet, AppointmentViewSet,
-    AppointmentDocumentViewSet, ConsultationViewSet, PackageViewSet,
-    PatientSubscriptionViewSet, ResourceViewSet, DoctorRatingViewSet,
-    ArticleViewSet, ArticleCommentViewSet
+    HealthCareViewSet, AppointmentViewSet, ConsultationViewSet, DoctorRatingViewSet
+    # DoctorAvailabilityViewSet, AppointmentDocumentViewSet, PackageViewSet,
+    # PatientSubscriptionViewSet, ResourceViewSet, ArticleViewSet, ArticleCommentViewSet
 )
 from rest_framework_simplejwt.views import (
     TokenRefreshView, TokenVerifyView
@@ -97,16 +96,16 @@ from rest_framework.routers import DefaultRouter
 router = DefaultRouter()
 router.register(r'doctors', DoctorViewSet, basename='doctor')
 router.register(r'healthcare', HealthCareViewSet, basename='healthcare')
-router.register(r'doctor-availability', DoctorAvailabilityViewSet, basename='doctor-availability')
+# router.register(r'doctor-availability', DoctorAvailabilityViewSet, basename='doctor-availability')
 router.register(r'appointments', AppointmentViewSet, basename='appointment')
-router.register(r'appointment-documents', AppointmentDocumentViewSet, basename='appointment-document')
+# router.register(r'appointment-documents', AppointmentDocumentViewSet, basename='appointment-document')
 router.register(r'consultations', ConsultationViewSet, basename='consultation')
-router.register(r'packages', PackageViewSet, basename='package')
-router.register(r'subscriptions', PatientSubscriptionViewSet, basename='subscription')
-router.register(r'resources', ResourceViewSet, basename='resource')
+# router.register(r'packages', PackageViewSet, basename='package')
+# router.register(r'subscriptions', PatientSubscriptionViewSet, basename='subscription')
+# router.register(r'resources', ResourceViewSet, basename='resource')
 router.register(r'doctor-ratings', DoctorRatingViewSet, basename='doctor-rating')
-router.register(r'articles', ArticleViewSet, basename='article')
-router.register(r'article-comments', ArticleCommentViewSet, basename='article-comment')
+# router.register(r'articles', ArticleViewSet, basename='article')
+# router.register(r'article-comments', ArticleCommentViewSet, basename='article-comment')
 
 # Generate the router URLs
 router_urls = router.urls

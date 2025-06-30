@@ -16,7 +16,7 @@ from fhir.resources.codeableconcept import CodeableConcept
 
 from users.models import User, Patient
 from doctors.models import Doctor, Education
-from healthcare.models import HealthCare, PatientDoctorAssignment
+from healthcare.models import HealthCare  # , PatientDoctorAssignment
 import datetime
 import uuid
 
@@ -374,71 +374,71 @@ def create_fhir_organization(healthcare):
     return fhir_organization
 
 
-def create_fhir_encounter(assignment, type_code="AMB"):
-    """Convert a PatientDoctorAssignment to a FHIR Encounter resource
-    Default encounter type is ambulatory (AMB)
-    """
-    
-    # Create FHIR Encounter
-    fhir_encounter = FHIREncounter()
-    
-    # Set ID
-    fhir_encounter.id = str(assignment.id)
-    
-    # Set meta
-    fhir_encounter.meta = Meta(
-        profile=["http://hl7.org/fhir/us/core/StructureDefinition/us-core-encounter"]
-    )
-    
-    # Set status (finished, in-progress, etc.)
-    fhir_encounter.status = "finished" if not assignment.is_active else "in-progress"
-    
-    # Set class (inpatient, outpatient, etc.)
-    fhir_encounter.class_fhir = Coding(
-        system="http://terminology.hl7.org/CodeSystem/v3-ActCode",
-        code=type_code,
-        display="Ambulatory" if type_code == "AMB" else "Virtual"
-    )
-    
-    # Set type
-    fhir_encounter.type = [
-        CodeableConcept(
-            coding=[Coding(
-                system="http://terminology.hl7.org/CodeSystem/encounter-type",
-                code="FOLLOWUP",
-                display="Follow-up visit"
-            )]
-        )
-    ]
-    
-    # Set patient
-    fhir_encounter.subject = Reference(
-        reference=f"Patient/{assignment.patient.id}",
-        display=assignment.patient.user.get_full_name() or assignment.patient.user.username
-    )
-    
-    # Set practitioner
-    fhir_encounter.participant = [
-        {
-            "individual": Reference(
-                reference=f"Practitioner/{assignment.doctor.id}",
-                display=assignment.doctor.user.get_full_name() or assignment.doctor.user.username
-            )
-        }
-    ]
-    
-    # Set date
-    fhir_encounter.period = {
-        "start": assignment.created_at.isoformat(),
-        "end": assignment.updated_at.isoformat() if not assignment.is_active else None
-    }
-    
-    # Set notes
-    if assignment.notes:
-        fhir_encounter.reasonCode = [
-            CodeableConcept(
-                text=assignment.notes
-            )
-        ]
-    
-    return fhir_encounter
+# def create_fhir_encounter(assignment, type_code="AMB"):
+#     """Convert a PatientDoctorAssignment to a FHIR Encounter resource
+#     Default encounter type is ambulatory (AMB)
+#     """
+#     
+#     # Create FHIR Encounter
+#     fhir_encounter = FHIREncounter()
+#     
+#     # Set ID
+#     fhir_encounter.id = str(assignment.id)
+#     
+#     # Set meta
+#     fhir_encounter.meta = Meta(
+#         profile=["http://hl7.org/fhir/us/core/StructureDefinition/us-core-encounter"]
+#     )
+#     
+#     # Set status (finished, in-progress, etc.)
+#     fhir_encounter.status = "finished" if not assignment.is_active else "in-progress"
+#     
+#     # Set class (inpatient, outpatient, etc.)
+#     fhir_encounter.class_fhir = Coding(
+#         system="http://terminology.hl7.org/CodeSystem/v3-ActCode",
+#         code=type_code,
+#         display="Ambulatory" if type_code == "AMB" else "Virtual"
+#     )
+#     
+#     # Set type
+#     fhir_encounter.type = [
+#         CodeableConcept(
+#             coding=[Coding(
+#                 system="http://terminology.hl7.org/CodeSystem/encounter-type",
+#                 code="FOLLOWUP",
+#                 display="Follow-up visit"
+#             )]
+#         )
+#     ]
+#     
+#     # Set patient
+#     fhir_encounter.subject = Reference(
+#         reference=f"Patient/{assignment.patient.id}",
+#         display=assignment.patient.user.get_full_name() or assignment.patient.user.username
+#     )
+#     
+#     # Set practitioner
+#     fhir_encounter.participant = [
+#         {
+#             "individual": Reference(
+#                 reference=f"Practitioner/{assignment.doctor.id}",
+#                 display=assignment.doctor.user.get_full_name() or assignment.doctor.user.username
+#             )
+#         }
+#     ]
+#     
+#     # Set date
+#     fhir_encounter.period = {
+#         "start": assignment.created_at.isoformat(),
+#         "end": assignment.updated_at.isoformat() if not assignment.is_active else None
+#     }
+#     
+#     # Set notes
+#     if assignment.notes:
+#         fhir_encounter.reasonCode = [
+#             CodeableConcept(
+#                 text=assignment.notes
+#             )
+#         ]
+#     
+#     return fhir_encounter

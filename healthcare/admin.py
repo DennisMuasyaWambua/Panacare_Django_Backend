@@ -6,5 +6,5 @@ class HealthCareAdmin(admin.ModelAdmin):
     list_display = ('name', 'category', 'address', 'phone_number', 'email', 'is_verified', 'is_active')
     list_filter = ('category', 'is_verified', 'is_active')
     search_fields = ('name', 'description', 'address', 'email')
-    filter_horizontal = ('doctors',)
+    # filter_horizontal = ('doctors',)  # Commented out as doctors field is not active
 

@@ -6,7 +6,7 @@ router = DefaultRouter()
 router.register(r'Patient', views.FHIRPatientViewSet, basename='fhir-patient')
 router.register(r'Practitioner', views.FHIRPractitionerViewSet, basename='fhir-practitioner')
 router.register(r'Organization', views.FHIROrganizationViewSet, basename='fhir-organization')
-router.register(r'Encounter', views.FHIREncounterViewSet, basename='fhir-encounter')
+# router.register(r'Encounter', views.FHIREncounterViewSet, basename='fhir-encounter')
 
 urlpatterns = [
     # FHIR metadata endpoint
