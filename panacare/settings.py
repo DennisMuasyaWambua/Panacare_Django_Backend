@@ -55,7 +55,7 @@ INSTALLED_APPS = [
     # Local apps
     'users',
     'doctors',
-    'healthcare',
+        'healthcare',
     'clinical_support',
     'fhir_api',
 ]

@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 
 from users.models import Patient
 from doctors.models import Doctor
-from healthcare.models import HealthCare, PatientDoctorAssignment
+from healthcare.models import HealthCare  # , PatientDoctorAssignment
 
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
@@ -24,8 +24,8 @@ format_parameter = openapi.Parameter(
 from .adapters import (
     create_fhir_patient, 
     create_fhir_practitioner, 
-    create_fhir_organization,
-    create_fhir_encounter
+    create_fhir_organization
+    # create_fhir_encounter
 )
 from .serializers import (
     PatientFHIRSerializer,
@@ -199,60 +199,60 @@ class FHIROrganizationViewSet(viewsets.ViewSet):
         return response
 
 
-class FHIREncounterViewSet(viewsets.ViewSet):
-    """
-    ViewSet for FHIR Encounter resources
-    """
-    permission_classes = [permissions.IsAuthenticated]
-    
-    @swagger_auto_schema(
-        operation_description="Return a list of all patient-doctor assignments as FHIR Encounter resources",
-        responses={200: EncounterFHIRSerializer(many=True)}
-    )
-    def list(self, request):
-        """
-        Return a list of all patient-doctor assignments as FHIR Encounter resources
-        """
-        assignments = PatientDoctorAssignment.objects.all()
-        
-        # Convert each PatientDoctorAssignment to a FHIR Encounter
-        fhir_encounters = [create_fhir_encounter(assignment) for assignment in assignments]
-        
-        # Create a Bundle containing all encounters
-        bundle = create_bundle(fhir_encounters)
-        
-        # Serialize the bundle
-        serializer = BundleSerializer(bundle)
-        
-        # Set appropriate content type for FHIR responses
-        response = Response(serializer.data)
-        response["Content-Type"] = "application/fhir+json"
-        
-        return response
-    
-    @swagger_auto_schema(
-        operation_description="Return a single patient-doctor assignment as a FHIR Encounter resource",
-        responses={200: EncounterFHIRSerializer()}
-    )
-    def retrieve(self, request, pk=None):
-        """
-        Return a single patient-doctor assignment as a FHIR Encounter resource
-        """
-        assignment = get_object_or_404(PatientDoctorAssignment, pk=pk)
-        
-        # Convert PatientDoctorAssignment to FHIR Encounter
-        fhir_encounter = create_fhir_encounter(assignment)
-        
-        # Serialize the FHIR Encounter
-        serializer = EncounterFHIRSerializer(fhir_encounter)
-        
-        # Set appropriate content type for FHIR responses
-        response = Response(serializer.data)
-        response["Content-Type"] = "application/fhir+json"
-        
-        return response
-
-
+# class FHIREncounterViewSet(viewsets.ViewSet):
+#     """
+#     ViewSet for FHIR Encounter resources
+#     """
+#     permission_classes = [permissions.IsAuthenticated]
+#     
+#     @swagger_auto_schema(
+#         operation_description="Return a list of all patient-doctor assignments as FHIR Encounter resources",
+#         responses={200: EncounterFHIRSerializer(many=True)}
+#     )
+#     def list(self, request):
+#         """
+#         Return a list of all patient-doctor assignments as FHIR Encounter resources
+#         """
+#         assignments = PatientDoctorAssignment.objects.all()
+#         
+#         # Convert each PatientDoctorAssignment to a FHIR Encounter
+#         fhir_encounters = [create_fhir_encounter(assignment) for assignment in assignments]
+#         
+#         # Create a Bundle containing all encounters
+#         bundle = create_bundle(fhir_encounters)
+#         
+#         # Serialize the bundle
+#         serializer = BundleSerializer(bundle)
+#         
+#         # Set appropriate content type for FHIR responses
+#         response = Response(serializer.data)
+#         response["Content-Type"] = "application/fhir+json"
+#         
+#         return response
+#     
+#     @swagger_auto_schema(
+#         operation_description="Return a single patient-doctor assignment as a FHIR Encounter resource",
+#         responses={200: EncounterFHIRSerializer()}
+#     )
+#     def retrieve(self, request, pk=None):
+#         """
+#         Return a single patient-doctor assignment as a FHIR Encounter resource
+#         """
+#         assignment = get_object_or_404(PatientDoctorAssignment, pk=pk)
+#         
+#         # Convert PatientDoctorAssignment to FHIR Encounter
+#         fhir_encounter = create_fhir_encounter(assignment)
+#         
+#         # Serialize the FHIR Encounter
+#         serializer = EncounterFHIRSerializer(fhir_encounter)
+#         
+#         # Set appropriate content type for FHIR responses
+#         response = Response(serializer.data)
+#         response["Content-Type"] = "application/fhir+json"
+#         
+#         return response
+# 
+# 
 # FHIR metadata endpoint
 @swagger_auto_schema(
     method='get',
