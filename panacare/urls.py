@@ -5,6 +5,8 @@ import os
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.generic import RedirectView
+from django.conf import settings
+from django.conf.urls.static import static
 
 # Import views
 from users.views import (
@@ -195,3 +197,7 @@ urlpatterns = [
     # Clinical Decision Support
     path('', include('clinical_support.urls')),
 ]
+
+# Media files serving in development
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

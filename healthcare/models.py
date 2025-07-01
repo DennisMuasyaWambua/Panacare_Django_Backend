@@ -152,59 +152,42 @@ class HealthCare(models.Model):
 Healthcare = HealthCare
 
 # Commented out other models for testing
-# class EncounterStatus(models.TextChoices):
-#     PLANNED = 'planned', 'Planned'
-#     ARRIVED = 'arrived', 'Arrived'
-#     TRIAGED = 'triaged', 'Triaged'
-#     IN_PROGRESS = 'in-progress', 'In Progress'
-#     ONLEAVE = 'onleave', 'On Leave'
-#     FINISHED = 'finished', 'Finished'
-#     CANCELLED = 'cancelled', 'Cancelled'
-#     ENTERED_IN_ERROR = 'entered-in-error', 'Entered in Error'
-#     UNKNOWN = 'unknown', 'Unknown'
+class EncounterStatus(models.TextChoices):
+    PLANNED = 'planned', 'Planned'
+    ARRIVED = 'arrived', 'Arrived'
+    TRIAGED = 'triaged', 'Triaged'
+    IN_PROGRESS = 'in-progress', 'In Progress'
+    ONLEAVE = 'onleave', 'On Leave'
+    FINISHED = 'finished', 'Finished'
+    CANCELLED = 'cancelled', 'Cancelled'
+    ENTERED_IN_ERROR = 'entered-in-error', 'Entered in Error'
+    UNKNOWN = 'unknown', 'Unknown'
 
-# class EncounterType(models.TextChoices):
-#     AMBULATORY = 'AMB', 'Ambulatory'
-#     EMERGENCY = 'EMER', 'Emergency'
-#     FIELD = 'FLD', 'Field'
-#     HOME_HEALTH = 'HH', 'Home Health'
-#     INPATIENT_ACUTE = 'IMP', 'Inpatient Acute'
-#     VIRTUAL = 'VR', 'Virtual'
-#     OBSERVATION = 'OBS', 'Observation'
-#     OUTPATIENT = 'OP', 'Outpatient'
-#     STANDARD = 'SS', 'Standard Scheduled'
+class EncounterType(models.TextChoices):
+    AMBULATORY = 'AMB', 'Ambulatory'
+    EMERGENCY = 'EMER', 'Emergency'
+    FIELD = 'FLD', 'Field'
+    HOME_HEALTH = 'HH', 'Home Health'
+    INPATIENT_ACUTE = 'IMP', 'Inpatient Acute'
+    VIRTUAL = 'VR', 'Virtual'
+    OBSERVATION = 'OBS', 'Observation'
+    OUTPATIENT = 'OP', 'Outpatient'
+    STANDARD = 'SS', 'Standard Scheduled'
 
-# class PatientDoctorAssignment(models.Model):
-#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-#     patient = models.ForeignKey('users.Patient', on_delete=models.CASCADE, related_name='doctor_assignments')
-#     doctor = models.ForeignKey('doctors.Doctor', on_delete=models.CASCADE, related_name='patient_assignments')
-#     notes = models.TextField(blank=True)
-#     is_active = models.BooleanField(default=True)
-#     status = models.CharField(
-#         max_length=20,
-#         choices=EncounterStatus.choices,
-#         default=EncounterStatus.PLANNED
-#     )
-#     encounter_type = models.CharField(
-#         max_length=10,
-#         choices=EncounterType.choices,
-#         default=EncounterType.STANDARD
-#     )
-#     identifier_system = models.CharField(max_length=255, default="urn:panacare:encounter", blank=True)
-#     reason = models.CharField(max_length=255, blank=True)
-#     healthcare_facility = models.ForeignKey(HealthCare, on_delete=models.SET_NULL, null=True, blank=True, related_name='encounters')
-#     scheduled_start = models.DateTimeField(null=True, blank=True)
-#     scheduled_end = models.DateTimeField(null=True, blank=True)
-#     actual_start = models.DateTimeField(null=True, blank=True)
-#     actual_end = models.DateTimeField(null=True, blank=True)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
+class PatientDoctorAssignment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    patient = models.ForeignKey('users.Patient', on_delete=models.CASCADE, related_name='doctor_assignments')
+    doctor = models.ForeignKey('doctors.Doctor', on_delete=models.CASCADE, related_name='patient_assignments')
+    notes = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
-#     class Meta:
-#         unique_together = ('patient', 'doctor')
+    class Meta:
+        unique_together = ('patient', 'doctor')
        
-#     def __str__(self):
-#         return f"Patient: {self.patient.user.get_full_name()} - Doctor: {self.doctor.user.get_full_name()}"
+    def __str__(self):
+        return f"Patient: {self.patient.user.get_full_name()} - Doctor: {self.doctor.user.get_full_name()}"
     
 #     def to_fhir_json(self):
 #         from django.utils import timezone

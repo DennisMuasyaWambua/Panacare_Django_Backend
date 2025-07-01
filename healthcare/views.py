@@ -1,4 +1,4 @@
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions, status, serializers
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.utils import timezone
@@ -6,9 +6,8 @@ from django.db.models import Q, Avg
 from datetime import datetime, timedelta
 from .models import (
     HealthCare, Appointment, Consultation, ConsultationChat, DoctorRating,
-    Article, ArticleComment, ArticleCommentLike
-    # PatientDoctorAssignment, DoctorAvailability, 
-    # AppointmentDocument, Package, PatientSubscription, Resource,
+    Article, ArticleComment, ArticleCommentLike, PatientDoctorAssignment
+    # DoctorAvailability, AppointmentDocument, Package, PatientSubscription, Resource,
 )
 from .serializers import (
     HealthCareSerializer, AppointmentSerializer,
@@ -944,15 +943,10 @@ class ConsultationViewSet(viewsets.ModelViewSet):
             # Generate a unique room name
             room_name = f"panacare-consultation-{str(consultation.id)}"
             
-            # Create a Twilio room
-            room = create_twilio_room(room_name)
-            
-            # Start the consultation
+            # Start the consultation (update status first)
             consultation.status = 'in-progress'
             consultation.start_time = timezone.now()
             consultation.twilio_room_name = room_name
-            consultation.twilio_room_sid = room.sid
-            consultation.session_id = room.sid  # Use Twilio room SID as session ID
             consultation.save()
             
             # Update appointment status
@@ -960,25 +954,49 @@ class ConsultationViewSet(viewsets.ModelViewSet):
             appointment.status = 'arrived'
             appointment.save()
             
-            # Generate tokens for doctor and patient
-            doctor_identity = f"doctor-{consultation.appointment.doctor.id}"
-            patient_identity = f"patient-{consultation.appointment.patient.id}"
-            
-            consultation.doctor_token = generate_twilio_token(doctor_identity, room_name)
-            consultation.patient_token = generate_twilio_token(patient_identity, room_name)
-            consultation.save()
-            
-            # Return the consultation data with doctor token
-            serializer = self.get_serializer(consultation)
-            response_data = serializer.data
-            response_data['token'] = consultation.doctor_token
-            
-            return Response(response_data)
+            try:
+                # Try to create Twilio room and tokens
+                room = create_twilio_room(room_name)
+                consultation.twilio_room_sid = room.sid
+                consultation.session_id = room.sid
+                
+                # Generate tokens for doctor and patient
+                doctor_identity = f"doctor-{consultation.appointment.doctor.id}"
+                patient_identity = f"patient-{consultation.appointment.patient.id}"
+                
+                consultation.doctor_token = generate_twilio_token(doctor_identity, room_name)
+                consultation.patient_token = generate_twilio_token(patient_identity, room_name)
+                consultation.save()
+                
+                # Return the consultation data with doctor token
+                serializer = self.get_serializer(consultation)
+                response_data = serializer.data
+                response_data['token'] = consultation.doctor_token
+                
+                return Response(response_data)
+                
+            except Exception as twilio_error:
+                # If Twilio fails, still allow consultation to proceed without video
+                consultation.save()
+                
+                serializer = self.get_serializer(consultation)
+                response_data = serializer.data
+                response_data['warning'] = f'Consultation started but video calling unavailable: {str(twilio_error)}'
+                response_data['token'] = None
+                
+                return Response(response_data)
             
         except Exception as e:
-            return Response({
-                'error': f'Failed to start consultation: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # Check if it's a Twilio credentials error
+            error_msg = str(e)
+            if "Authentication Error" in error_msg or "credentials" in error_msg.lower():
+                return Response({
+                    'error': f'Failed to start consultation: Twilio credentials not configured properly - {str(e)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            else:
+                return Response({
+                    'error': f'Failed to start consultation: {str(e)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser])
     def end_consultation(self, request, pk=None):
@@ -1058,16 +1076,23 @@ class ConsultationViewSet(viewsets.ModelViewSet):
             if not token:
                 room_name = consultation.twilio_room_name
                 
-                if is_doctor:
-                    identity = f"doctor-{consultation.appointment.doctor.id}"
-                    token = generate_twilio_token(identity, room_name)
-                    consultation.doctor_token = token
-                elif is_patient:
-                    identity = f"patient-{consultation.appointment.patient.id}"
-                    token = generate_twilio_token(identity, room_name)
-                    consultation.patient_token = token
-                
-                consultation.save()
+                try:
+                    if is_doctor:
+                        identity = f"doctor-{consultation.appointment.doctor.id}"
+                        token = generate_twilio_token(identity, room_name)
+                        consultation.doctor_token = token
+                    elif is_patient:
+                        identity = f"patient-{consultation.appointment.patient.id}"
+                        token = generate_twilio_token(identity, room_name)
+                        consultation.patient_token = token
+                    
+                    consultation.save()
+                except Exception as twilio_error:
+                    return Response({
+                        'error': f'Video calling unavailable: {str(twilio_error)}',
+                        'consultation_active': True,
+                        'room_name': consultation.twilio_room_name
+                    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
             
             return Response({
                 'token': token,
@@ -1695,7 +1720,7 @@ class ArticleViewSet(viewsets.ModelViewSet):
         elif self.action in ['update', 'partial_update']:
             permission_classes = [IsDoctorUser]  # Only author can edit, enforced in perform_update
         elif self.action in ['destroy']:
-            permission_classes = [IsAdminUser]
+            permission_classes = [IsDoctorUser]  # Allow doctors to delete their own articles
         else:
             permission_classes = [permissions.IsAuthenticated]
         return [permission() for permission in permission_classes]
@@ -1706,14 +1731,8 @@ class ArticleViewSet(viewsets.ModelViewSet):
             # Admins can see all articles including unapproved ones
             queryset = Article.objects.all()
         elif self.request.user.roles.filter(name='doctor').exists():
-            # Doctors can see all approved/published articles + their own drafts
-            try:
-                doctor = self.request.user.doctor
-                queryset = Article.objects.filter(
-                    Q(is_approved=True, is_published=True) | Q(author=doctor)
-                )
-            except Doctor.DoesNotExist:
-                queryset = Article.objects.filter(is_approved=True, is_published=True)
+            # Doctors can see all approved/published articles (no drafts in general listing)
+            queryset = Article.objects.filter(is_approved=True, is_published=True)
         else:
             # Patients and other users can only see approved and published articles
             queryset = Article.objects.filter(is_approved=True, is_published=True)
@@ -1859,6 +1878,20 @@ class ArticleViewSet(viewsets.ModelViewSet):
             # If user is admin, they can edit regardless
             if self.request.user.roles.filter(name='admin').exists():
                 serializer.save()
+            else:
+                raise serializers.ValidationError("Doctor profile not found")
+    
+    def perform_destroy(self, instance):
+        # Check if user is the author or admin
+        try:
+            doctor = self.request.user.doctor
+            if instance.author != doctor and not self.request.user.roles.filter(name='admin').exists():
+                raise serializers.ValidationError("You can only delete your own articles")
+            instance.delete()
+        except Doctor.DoesNotExist:
+            # If user is admin, they can delete regardless
+            if self.request.user.roles.filter(name='admin').exists():
+                instance.delete()
             else:
                 raise serializers.ValidationError("Doctor profile not found")
     
