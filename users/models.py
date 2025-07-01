@@ -53,9 +53,11 @@ class User(AbstractUser):
         activation_url = f"{protocol}://{domain}/api/users/activate/{uid}/{token}/"
         
         subject = 'Activate Your Panacare Account'
+        logo_url = f"{protocol}://{domain}/static/images/logo.jpg"
         message = render_to_string('users/activation_email.html', {
             'user': self,
             'activation_url': activation_url,
+            'logo_url': logo_url,
         })
         
         # Use DEFAULT_FROM_EMAIL as fallback if EMAIL_HOST_USER is empty
