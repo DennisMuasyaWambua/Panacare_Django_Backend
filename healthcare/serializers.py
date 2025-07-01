@@ -1,9 +1,9 @@
 from rest_framework import serializers
 from .models import (
-    HealthCare, Appointment, Consultation, ConsultationChat, DoctorRating
+    HealthCare, Appointment, Consultation, ConsultationChat, DoctorRating,
+    Article, ArticleComment, ArticleCommentLike
     # PatientDoctorAssignment, DoctorAvailability, 
     # AppointmentDocument, Package, PatientSubscription, Resource,
-    # Article, ArticleComment, ArticleCommentLike
 )
 from doctors.serializers import DoctorSerializer
 from doctors.models import Doctor
@@ -410,129 +410,129 @@ class DoctorRatingSerializer(serializers.ModelSerializer):
         return obj.doctor.user.get_full_name() or obj.doctor.user.username
 
 # 
-# class ArticleCommentSerializer(serializers.ModelSerializer):
-#     user_name = serializers.SerializerMethodField(read_only=True)
-#     user_role = serializers.SerializerMethodField(read_only=True)
-#     replies = serializers.SerializerMethodField(read_only=True)
-#     
-#     class Meta:
-#         model = ArticleComment
-#         fields = [
-#             'id', 'article', 'content', 'user', 'user_name', 'user_role',
-#             'is_doctor', 'parent_comment', 'like_count', 'replies',
-#             'created_at', 'updated_at'
-#         ]
-#         read_only_fields = ['id', 'is_doctor', 'like_count', 'created_at', 'updated_at']
-#         
-#     def get_user_name(self, obj):
-#         return obj.user.get_full_name() or obj.user.username
-#     
-#     def get_user_role(self, obj):
-#         # Get user role based on roles many-to-many field
-#         roles = obj.user.roles.all().values_list('name', flat=True)
-#         if 'doctor' in roles:
-#             return 'doctor'
-#         elif 'patient' in roles:
-#             return 'patient'
-#         elif 'admin' in roles:
-#             return 'admin'
-#         return 'user'
-#     
-#     def get_replies(self, obj):
-#         # Don't recursively serialize replies for parent comments to avoid circular serialization
-#         if obj.parent_comment is None:  # Only for top-level comments
-#             replies = obj.replies.all()
-#             return ArticleCommentReplySerializer(replies, many=True).data
-#         return []
-#     
-#     def create(self, validated_data):
-#         # Set is_doctor flag based on user role
-#         user = validated_data.get('user')
-#         is_doctor = user.roles.filter(name='doctor').exists()
-#         
-#         # Create comment with proper is_doctor flag
-#         comment = ArticleComment.objects.create(
-#             **validated_data,
-#             is_doctor=is_doctor
-#         )
-#         return comment
+class ArticleCommentSerializer(serializers.ModelSerializer):
+     user_name = serializers.SerializerMethodField(read_only=True)
+     user_role = serializers.SerializerMethodField(read_only=True)
+     replies = serializers.SerializerMethodField(read_only=True)
+     
+     class Meta:
+         model = ArticleComment
+         fields = [
+             'id', 'article', 'content', 'user', 'user_name', 'user_role',
+             'is_doctor', 'parent_comment', 'like_count', 'replies',
+             'created_at', 'updated_at'
+         ]
+         read_only_fields = ['id', 'is_doctor', 'like_count', 'created_at', 'updated_at']
+         
+     def get_user_name(self, obj):
+         return obj.user.get_full_name() or obj.user.username
+     
+     def get_user_role(self, obj):
+         # Get user role based on roles many-to-many field
+         roles = obj.user.roles.all().values_list('name', flat=True)
+         if 'doctor' in roles:
+             return 'doctor'
+         elif 'patient' in roles:
+             return 'patient'
+         elif 'admin' in roles:
+             return 'admin'
+         return 'user'
+     
+     def get_replies(self, obj):
+         # Don't recursively serialize replies for parent comments to avoid circular serialization
+         if obj.parent_comment is None:  # Only for top-level comments
+             replies = obj.replies.all()
+             return ArticleCommentReplySerializer(replies, many=True).data
+         return []
+     
+     def create(self, validated_data):
+         # Set is_doctor flag based on user role
+         user = validated_data.get('user')
+         is_doctor = user.roles.filter(name='doctor').exists()
+         
+         # Create comment with proper is_doctor flag
+         comment = ArticleComment.objects.create(
+             **validated_data,
+             is_doctor=is_doctor
+         )
+         return comment
+ 
+ 
+class ArticleCommentReplySerializer(serializers.ModelSerializer):
+     """
+     Simplified serializer for comment replies to avoid circular nesting
+     """
+     user_name = serializers.SerializerMethodField(read_only=True)
+     user_role = serializers.SerializerMethodField(read_only=True)
+     
+     class Meta:
+         model = ArticleComment
+         fields = [
+             'id', 'content', 'user', 'user_name', 'user_role',
+             'is_doctor', 'like_count', 'created_at', 'updated_at'
+         ]
+         read_only_fields = ['id', 'is_doctor', 'like_count', 'created_at', 'updated_at']
+         
+     def get_user_name(self, obj):
+         return obj.user.get_full_name() or obj.user.username
+     
+     def get_user_role(self, obj):
+         # Get user role based on roles many-to-many field
+         roles = obj.user.roles.all().values_list('name', flat=True)
+         if 'doctor' in roles:
+             return 'doctor'
+         elif 'patient' in roles:
+             return 'patient'
+         elif 'admin' in roles:
+             return 'admin'
+         return 'user'
+ 
+ 
+class ArticleCommentLikeSerializer(serializers.ModelSerializer):
+     user_name = serializers.SerializerMethodField(read_only=True)
+     
+     class Meta:
+         model = ArticleCommentLike
+         fields = ['id', 'comment', 'user', 'user_name', 'created_at']
+         read_only_fields = ['id', 'created_at']
+         
+     def get_user_name(self, obj):
+         return obj.user.get_full_name() or obj.user.username
 # 
 # 
-# class ArticleCommentReplySerializer(serializers.ModelSerializer):
-#     """
-#     Simplified serializer for comment replies to avoid circular nesting
-#     """
-#     user_name = serializers.SerializerMethodField(read_only=True)
-#     user_role = serializers.SerializerMethodField(read_only=True)
-#     
-#     class Meta:
-#         model = ArticleComment
-#         fields = [
-#             'id', 'content', 'user', 'user_name', 'user_role',
-#             'is_doctor', 'like_count', 'created_at', 'updated_at'
-#         ]
-#         read_only_fields = ['id', 'is_doctor', 'like_count', 'created_at', 'updated_at']
-#         
-#     def get_user_name(self, obj):
-#         return obj.user.get_full_name() or obj.user.username
-#     
-#     def get_user_role(self, obj):
-#         # Get user role based on roles many-to-many field
-#         roles = obj.user.roles.all().values_list('name', flat=True)
-#         if 'doctor' in roles:
-#             return 'doctor'
-#         elif 'patient' in roles:
-#             return 'patient'
-#         elif 'admin' in roles:
-#             return 'admin'
-#         return 'user'
-# 
-# 
-# class ArticleCommentLikeSerializer(serializers.ModelSerializer):
-#     user_name = serializers.SerializerMethodField(read_only=True)
-#     
-#     class Meta:
-#         model = ArticleCommentLike
-#         fields = ['id', 'comment', 'user', 'user_name', 'created_at']
-#         read_only_fields = ['id', 'created_at']
-#         
-#     def get_user_name(self, obj):
-#         return obj.user.get_full_name() or obj.user.username
-# 
-# 
-# class ArticleSerializer(serializers.ModelSerializer):
-#     author_name = serializers.SerializerMethodField(read_only=True)
-#     approved_by_name = serializers.SerializerMethodField(read_only=True)
-#     comments_count = serializers.SerializerMethodField(read_only=True)
-#     category_display = serializers.SerializerMethodField(read_only=True)
-#     
-#     class Meta:
-#         model = Article
-#         fields = [
-#             'id', 'title', 'content', 'summary', 'author', 'author_name',
-#             'category', 'category_display', 'tags', 'featured_image', 'visibility',
-#             'is_featured', 'related_conditions', 'reading_time',
-#             'is_approved', 'approved_by', 'approved_by_name', 'approval_date', 'approval_notes',
-#             'is_published', 'publish_date', 'view_count', 'comments_count',
-#             'created_at', 'updated_at'
-#         ]
-#         read_only_fields = [
-#             'id', 'is_approved', 'approved_by', 'approval_date', 'approval_notes',
-#             'view_count', 'comments_count', 'created_at', 'updated_at'
-#         ]
-#         
-#     def get_author_name(self, obj):
-#         if obj.author:
-#             return obj.author.user.get_full_name() or obj.author.user.username
-#         return None
-#     
-#     def get_approved_by_name(self, obj):
-#         if obj.approved_by:
-#             return obj.approved_by.get_full_name() or obj.approved_by.username
-#         return None
-#     
-#     def get_comments_count(self, obj):
-#         return obj.comments.count()  # This returns an integer that will be converted to a string in the JSON response
-#     
-#     def get_category_display(self, obj):
-#         return dict(obj._meta.get_field('category').choices).get(obj.category, obj.category)
+class ArticleSerializer(serializers.ModelSerializer):
+     author_name = serializers.SerializerMethodField(read_only=True)
+     approved_by_name = serializers.SerializerMethodField(read_only=True)
+     comments_count = serializers.SerializerMethodField(read_only=True)
+     category_display = serializers.SerializerMethodField(read_only=True)
+     
+     class Meta:
+         model = Article
+         fields = [
+             'id', 'title', 'content', 'summary', 'author', 'author_name',
+             'category', 'category_display', 'tags', 'featured_image', 'visibility',
+             'is_featured', 'related_conditions', 'reading_time',
+             'is_approved', 'approved_by', 'approved_by_name', 'approval_date', 'approval_notes',
+             'is_published', 'publish_date', 'view_count', 'comments_count',
+             'created_at', 'updated_at'
+         ]
+         read_only_fields = [
+             'id', 'is_approved', 'approved_by', 'approval_date', 'approval_notes',
+             'view_count', 'comments_count', 'created_at', 'updated_at'
+         ]
+         
+     def get_author_name(self, obj):
+         if obj.author:
+             return obj.author.user.get_full_name() or obj.author.user.username
+         return None
+     
+     def get_approved_by_name(self, obj):
+         if obj.approved_by:
+             return obj.approved_by.get_full_name() or obj.approved_by.username
+         return None
+     
+     def get_comments_count(self, obj):
+         return obj.comments.count()  # This returns an integer that will be converted to a string in the JSON response
+     
+     def get_category_display(self, obj):
+         return dict(obj._meta.get_field('category').choices).get(obj.category, obj.category)

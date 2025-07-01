@@ -15,29 +15,29 @@ class HealthCareCategory(models.TextChoices):
     
     @classmethod
     def to_fhir_code(cls, value):
-        """Convert category to FHIR code"""
-        code_map = {
-            cls.GENERAL: "prov",
-            cls.PEDIATRIC: "prov",
-            cls.MENTAL: "prov",
-            cls.DENTAL: "prov",
-            cls.VISION: "prov",
-            cls.OTHER: "other"
-        }
-        return code_map.get(value, "other")
+       """Convert category to FHIR code"""
+       code_map = {
+           cls.GENERAL: "prov",
+           cls.PEDIATRIC: "prov",
+           cls.MENTAL: "prov",
+           cls.DENTAL: "prov",
+           cls.VISION: "prov",
+           cls.OTHER: "other"
+       }
+       return code_map.get(value, "other")
     
     @classmethod
     def to_fhir_display(cls, value):
-        """Convert category to FHIR display name"""
-        display_map = {
-            cls.GENERAL: "Healthcare Provider",
-            cls.PEDIATRIC: "Pediatric Healthcare Provider",
-            cls.MENTAL: "Mental Healthcare Provider",
-            cls.DENTAL: "Dental Healthcare Provider",
-            cls.VISION: "Vision Healthcare Provider",
-            cls.OTHER: "Other Healthcare Provider"
-        }
-        return display_map.get(value, "Other")
+       """Convert category to FHIR display name"""
+       display_map = {
+           cls.GENERAL: "Healthcare Provider",
+           cls.PEDIATRIC: "Pediatric Healthcare Provider",
+           cls.MENTAL: "Mental Healthcare Provider",
+           cls.DENTAL: "Dental Healthcare Provider",
+           cls.VISION: "Vision Healthcare Provider",
+           cls.OTHER: "Other Healthcare Provider"
+       }
+       return display_map.get(value, "Other")
 
 class HealthCare(models.Model):
     """
@@ -47,9 +47,9 @@ class HealthCare(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField()
     category = models.CharField(
-        max_length=20,
-        choices=HealthCareCategory.choices,
-        default=HealthCareCategory.GENERAL
+       max_length=20,
+       choices=HealthCareCategory.choices,
+       default=HealthCareCategory.GENERAL
     )
     
     # Contact information
@@ -78,75 +78,75 @@ class HealthCare(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     def __str__(self):
-        return f"{self.name} - {self.category}"
+       return f"{self.name} - {self.category}"
     
     def to_fhir_json(self):
-        """Return FHIR-compliant representation of healthcare facility"""
-        # Get FHIR code and display for category
-        category_code = HealthCareCategory.to_fhir_code(self.category)
-        category_display = HealthCareCategory.to_fhir_display(self.category)
-        
-        fhir_json = {
-            "resourceType": "Organization",
-            "id": str(self.id),
-            "identifier": [
-                {
-                    "system": self.identifier_system,
-                    "value": str(self.id)
-                }
-            ],
-            "active": self.is_active and self.is_verified,
-            "type": [
-                {
-                    "coding": [
-                        {
-                            "system": "http://terminology.hl7.org/CodeSystem/organization-type",
-                            "code": category_code,
-                            "display": category_display
-                        }
-                    ],
-                    "text": self.get_category_display()
-                }
-            ],
-            "name": self.name,
-            "telecom": [
-                {
-                    "system": "phone",
-                    "value": self.phone_number,
-                    "use": "work"
-                } if self.phone_number else None,
-                {
-                    "system": "email",
-                    "value": self.email,
-                    "use": "work"
-                } if self.email else None,
-                {
-                    "system": "url",
-                    "value": self.website,
-                    "use": "work"
-                } if self.website else None
-            ],
-            "address": [
-                {
-                    "use": "work",
-                    "line": [self.address] if self.address else [],
-                    "city": self.city,
-                    "state": self.state,
-                    "postalCode": self.postal_code,
-                    "country": self.country,
-                    "text": self.address
-                }
-            ]
-        }
-        
-        # Add part_of if applicable
-        if self.part_of:
-            fhir_json["partOf"] = {
-                "reference": f"Organization/{self.part_of.id}",
-                "display": self.part_of.name
-            }
-        
-        return fhir_json
+       """Return FHIR-compliant representation of healthcare facility"""
+       # Get FHIR code and display for category
+       category_code = HealthCareCategory.to_fhir_code(self.category)
+       category_display = HealthCareCategory.to_fhir_display(self.category)
+       
+       fhir_json = {
+           "resourceType": "Organization",
+           "id": str(self.id),
+           "identifier": [
+               {
+                   "system": self.identifier_system,
+                   "value": str(self.id)
+               }
+           ],
+           "active": self.is_active and self.is_verified,
+           "type": [
+               {
+                   "coding": [
+                       {
+                           "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+                           "code": category_code,
+                           "display": category_display
+                       }
+                   ],
+                   "text": self.get_category_display()
+               }
+           ],
+           "name": self.name,
+           "telecom": [
+               {
+                   "system": "phone",
+                   "value": self.phone_number,
+                   "use": "work"
+               } if self.phone_number else None,
+               {
+                   "system": "email",
+                   "value": self.email,
+                   "use": "work"
+               } if self.email else None,
+               {
+                   "system": "url",
+                   "value": self.website,
+                   "use": "work"
+               } if self.website else None
+           ],
+           "address": [
+               {
+                   "use": "work",
+                   "line": [self.address] if self.address else [],
+                   "city": self.city,
+                   "state": self.state,
+                   "postalCode": self.postal_code,
+                   "country": self.country,
+                   "text": self.address
+               }
+           ]
+       }
+       
+       # Add part_of if applicable
+       if self.part_of:
+           fhir_json["partOf"] = {
+               "reference": f"Organization/{self.part_of.id}",
+               "display": self.part_of.name
+           }
+       
+       return fhir_json
 
 # Alias for compatibility
 Healthcare = HealthCare
@@ -202,7 +202,7 @@ Healthcare = HealthCare
     
 #     class Meta:
 #         unique_together = ('patient', 'doctor')
-        
+       
 #     def __str__(self):
 #         return f"Patient: {self.patient.user.get_full_name()} - Doctor: {self.doctor.user.get_full_name()}"
     
@@ -300,7 +300,7 @@ Healthcare = HealthCare
 #     class Meta:
 #         verbose_name = "Doctor Availability"
 #         verbose_name_plural = "Doctor Availabilities"
-        
+       
 #     def __str__(self):
 #         day_name = dict(self._meta.get_field('day_of_week').choices).get(self.day_of_week)
 #         if self.specific_date:
@@ -328,28 +328,28 @@ class Appointment(models.Model):
     start_time = models.TimeField()
     end_time = models.TimeField()
     status = models.CharField(
-        max_length=20,
-        choices=AppointmentStatus.choices,
-        default=AppointmentStatus.BOOKED
+       max_length=20,
+       choices=AppointmentStatus.choices,
+       default=AppointmentStatus.BOOKED
     )
     appointment_type = models.CharField(max_length=50, choices=[
-        ('routine', 'Routine Checkup'),
-        ('follow-up', 'Follow Up'),
-        ('emergency', 'Emergency'),
-        ('consultation', 'Consultation'),
-        ('procedure', 'Procedure'),
-        ('checkup', 'Checkup'),
-        ('other', 'Other')
+       ('routine', 'Routine Checkup'),
+       ('follow-up', 'Follow Up'),
+       ('emergency', 'Emergency'),
+       ('consultation', 'Consultation'),
+       ('procedure', 'Procedure'),
+       ('checkup', 'Checkup'),
+       ('other', 'Other')
     ], default='consultation')
     reason = models.TextField(blank=True)
     diagnosis = models.TextField(blank=True)
     treatment = models.TextField(blank=True)
     notes = models.TextField(blank=True)
     risk_level = models.CharField(max_length=20, choices=[
-        ('low', 'Low'),
-        ('medium', 'Medium'),
-        ('high', 'High'),
-        ('critical', 'Critical'),
+       ('low', 'Low'),
+       ('medium', 'Medium'),
+       ('high', 'High'),
+       ('critical', 'Critical'),
     ], blank=True)
     identifier_system = models.CharField(max_length=255, default="urn:panacare:appointment", blank=True)
     healthcare_facility = models.ForeignKey(HealthCare, on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments')
@@ -357,73 +357,73 @@ class Appointment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        verbose_name = "Appointment"
-        verbose_name_plural = "Appointments"
-        ordering = ['-appointment_date', '-start_time']
+       verbose_name = "Appointment"
+       verbose_name_plural = "Appointments"
+       ordering = ['-appointment_date', '-start_time']
     
     def __str__(self):
-        return f"{self.patient.user.get_full_name()} with Dr. {self.doctor.user.get_full_name()} on {self.appointment_date} at {self.start_time}"
+       return f"{self.patient.user.get_full_name()} with Dr. {self.doctor.user.get_full_name()} on {self.appointment_date} at {self.start_time}"
     
     def to_fhir_json(self):
-        from django.utils import timezone
-        start_datetime = timezone.make_aware(
-            timezone.datetime.combine(self.appointment_date, self.start_time)
-        )
-        end_datetime = timezone.make_aware(
-            timezone.datetime.combine(self.appointment_date, self.end_time)
-        )
-        fhir_json = {
-            "resourceType": "Appointment",
-            "id": str(self.id),
-            "identifier": [
-                {
-                    "system": self.identifier_system,
-                    "value": str(self.id)
-                }
-            ],
-            "status": self.status,
-            "appointmentType": {
-                "coding": [
-                    {
-                        "system": "http://terminology.hl7.org/CodeSystem/v2-0276",
-                        "code": self.appointment_type,
-                        "display": dict(self._meta.get_field('appointment_type').choices).get(self.appointment_type)
-                    }
-                ]
-            },
-            "reason": [
-                {
-                    "text": self.reason
-                }
-            ] if self.reason else [],
-            "start": start_datetime.isoformat(),
-            "end": end_datetime.isoformat(),
-            "participant": [
-                {
-                    "actor": {
-                        "reference": f"Patient/{self.patient.id}",
-                        "display": self.patient.user.get_full_name() or self.patient.user.email
-                    },
-                    "status": "accepted"
-                },
-                {
-                    "actor": {
-                        "reference": f"Practitioner/{self.doctor.id}",
-                        "display": f"Dr. {self.doctor.user.get_full_name()}"
-                    },
-                    "status": "accepted"
-                }
-            ]
-        }
-        if self.healthcare_facility:
-            fhir_json["participant"].append({
-                "actor": {
-                    "reference": f"Organization/{self.healthcare_facility.id}",
-                    "display": self.healthcare_facility.name
-                },
-                "status": "accepted"
-            })
-        return fhir_json
+       from django.utils import timezone
+       start_datetime = timezone.make_aware(
+           timezone.datetime.combine(self.appointment_date, self.start_time)
+       )
+       end_datetime = timezone.make_aware(
+           timezone.datetime.combine(self.appointment_date, self.end_time)
+       )
+       fhir_json = {
+           "resourceType": "Appointment",
+           "id": str(self.id),
+           "identifier": [
+               {
+                   "system": self.identifier_system,
+                   "value": str(self.id)
+               }
+           ],
+           "status": self.status,
+           "appointmentType": {
+               "coding": [
+                   {
+                       "system": "http://terminology.hl7.org/CodeSystem/v2-0276",
+                       "code": self.appointment_type,
+                       "display": dict(self._meta.get_field('appointment_type').choices).get(self.appointment_type)
+                   }
+               ]
+           },
+           "reason": [
+               {
+                   "text": self.reason
+               }
+           ] if self.reason else [],
+           "start": start_datetime.isoformat(),
+           "end": end_datetime.isoformat(),
+           "participant": [
+               {
+                   "actor": {
+                       "reference": f"Patient/{self.patient.id}",
+                       "display": self.patient.user.get_full_name() or self.patient.user.email
+                   },
+                   "status": "accepted"
+               },
+               {
+                   "actor": {
+                       "reference": f"Practitioner/{self.doctor.id}",
+                       "display": f"Dr. {self.doctor.user.get_full_name()}"
+                   },
+                   "status": "accepted"
+               }
+           ]
+       }
+       if self.healthcare_facility:
+           fhir_json["participant"].append({
+               "actor": {
+                   "reference": f"Organization/{self.healthcare_facility.id}",
+                   "display": self.healthcare_facility.name
+               },
+               "status": "accepted"
+           })
+       return fhir_json
 
 
 # class AppointmentDocument(models.Model):
@@ -449,7 +449,7 @@ class Appointment(models.Model):
 #     class Meta:
 #         verbose_name = "Appointment Document"
 #         verbose_name_plural = "Appointment Documents"
-        
+       
 #     def __str__(self):
 #         return f"{self.title} - {self.appointment}"
 
@@ -458,11 +458,11 @@ class Consultation(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     appointment = models.OneToOneField(Appointment, on_delete=models.CASCADE, related_name='consultation')
     status = models.CharField(max_length=20, choices=[
-        ('scheduled', 'Scheduled'),
-        ('in-progress', 'In Progress'),
-        ('completed', 'Completed'),
-        ('cancelled', 'Cancelled'),
-        ('missed', 'Missed'),
+       ('scheduled', 'Scheduled'),
+       ('in-progress', 'In Progress'),
+       ('completed', 'Completed'),
+       ('cancelled', 'Cancelled'),
+       ('missed', 'Missed'),
     ], default='scheduled')
     start_time = models.DateTimeField(null=True, blank=True)
     end_time = models.DateTimeField(null=True, blank=True)
@@ -476,11 +476,11 @@ class Consultation(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        verbose_name = "Consultation"
-        verbose_name_plural = "Consultations"
-       
+       verbose_name = "Consultation"
+       verbose_name_plural = "Consultations"
+      
     def __str__(self):
-        return f"Consultation for {self.appointment}"
+       return f"Consultation for {self.appointment}"
 
 
 class ConsultationChat(models.Model):
@@ -495,12 +495,12 @@ class ConsultationChat(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        verbose_name = "Consultation Chat Message"
-        verbose_name_plural = "Consultation Chat Messages"
-        ordering = ['created_at']
-       
+       verbose_name = "Consultation Chat Message"
+       verbose_name_plural = "Consultation Chat Messages"
+       ordering = ['created_at']
+      
     def __str__(self):
-        return f"Message from {self.sender.get_full_name()} in {self.consultation}"
+       return f"Message from {self.sender.get_full_name()} in {self.consultation}"
 
 
 # class Package(models.Model):
@@ -520,7 +520,7 @@ class ConsultationChat(models.Model):
 #     class Meta:
 #         verbose_name = "Package"
 #         verbose_name_plural = "Packages"
-        
+       
 #     def __str__(self):
 #         return self.name
 
@@ -546,7 +546,7 @@ class ConsultationChat(models.Model):
 #     class Meta:
 #         verbose_name = "Patient Subscription"
 #         verbose_name_plural = "Patient Subscriptions"
-        
+       
 #     def __str__(self):
 #         return f"{self.patient.user.get_full_name()} - {self.package.name}"
 
@@ -592,7 +592,7 @@ class ConsultationChat(models.Model):
 #     class Meta:
 #         verbose_name = "Resource"
 #         verbose_name_plural = "Resources"
-        
+       
 #     def __str__(self):
 #         return self.title
 
@@ -602,11 +602,11 @@ class DoctorRating(models.Model):
     doctor = models.ForeignKey('doctors.Doctor', on_delete=models.CASCADE, related_name='ratings')
     patient = models.ForeignKey('users.Patient', on_delete=models.CASCADE, related_name='doctor_ratings')
     rating = models.PositiveSmallIntegerField(choices=[
-        (1, '1 Star'),
-        (2, '2 Stars'),
-        (3, '3 Stars'),
-        (4, '4 Stars'),
-        (5, '5 Stars'),
+       (1, '1 Star'),
+       (2, '2 Stars'),
+       (3, '3 Stars'),
+       (4, '4 Stars'),
+       (5, '5 Stars'),
     ])
     review = models.TextField(blank=True)
     is_anonymous = models.BooleanField(default=False)
@@ -614,100 +614,101 @@ class DoctorRating(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        verbose_name = "Doctor Rating"
-        verbose_name_plural = "Doctor Ratings"
-        unique_together = ('doctor', 'patient')
-       
+       verbose_name = "Doctor Rating"
+       verbose_name_plural = "Doctor Ratings"
+       unique_together = ('doctor', 'patient')
+      
     def __str__(self):
-        return f"{self.patient.user.get_full_name()} rated Dr. {self.doctor.user.get_full_name()} {self.rating} stars"
+       return f"{self.patient.user.get_full_name()} rated Dr. {self.doctor.user.get_full_name()} {self.rating} stars"
 
 
-# class Article(models.Model):
-#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-#     title = models.CharField(max_length=255)
-#     content = models.TextField()
-#     summary = models.TextField(blank=True)
-#     author = models.ForeignKey('doctors.Doctor', on_delete=models.CASCADE, related_name='articles')
-#     category = models.CharField(max_length=50, choices=[
-#         ('general', 'General Health'),
-#         ('nutrition', 'Nutrition'),
-#         ('fitness', 'Fitness'),
-#         ('mental', 'Mental Health'),
-#         ('children', 'Children\'s Health'),
-#         ('chronic', 'Chronic Conditions'),
-#         ('prevention', 'Preventive Care'),
-#         ('research', 'Medical Research'),
-#         ('other', 'Other'),
-#     ])
-#     tags = models.CharField(max_length=255, blank=True)
-#     featured_image = models.ImageField(upload_to='articles/images/%Y/%m/', blank=True, null=True)
-#     visibility = models.CharField(max_length=20, choices=[
-#         ('public', 'Public - Available to all users'),
-#         ('subscribers', 'Subscribers Only - Available to paying patients'),
-#         ('private', 'Private - Only visible to author and admins'),
-#     ], default='public')
-#     is_approved = models.BooleanField(default=False)
-#     approved_by = models.ForeignKey(
-#         settings.AUTH_USER_MODEL, 
-#         on_delete=models.SET_NULL, 
-#         null=True, blank=True, 
-#         related_name='approved_articles'
-#     )
-#     approval_date = models.DateTimeField(null=True, blank=True)
-#     approval_notes = models.TextField(blank=True)
-#     is_published = models.BooleanField(default=False)
-#     publish_date = models.DateTimeField(null=True, blank=True)
-#     view_count = models.PositiveIntegerField(default=0)
-#     is_featured = models.BooleanField(default=False)
-#     related_conditions = models.CharField(max_length=255, blank=True)
-#     reading_time = models.PositiveSmallIntegerField(default=5)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
+
+class Article(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=255)
+    content = models.TextField()
+    summary = models.TextField(blank=True)
+    author = models.ForeignKey('doctors.Doctor', on_delete=models.CASCADE, related_name='articles')
+    category = models.CharField(max_length=50, choices=[
+        ('general', 'General Health'),
+        ('nutrition', 'Nutrition'),
+        ('fitness', 'Fitness'),
+        ('mental', 'Mental Health'),
+        ('children', 'Children\'s Health'),
+        ('chronic', 'Chronic Conditions'),
+        ('prevention', 'Preventive Care'),
+        ('research', 'Medical Research'),
+        ('other', 'Other'),
+    ])
+    tags = models.CharField(max_length=255, blank=True)
+    featured_image = models.ImageField(upload_to='articles/images/%Y/%m/', blank=True, null=True)
+    visibility = models.CharField(max_length=20, choices=[
+        ('public', 'Public - Available to all users'),
+        ('subscribers', 'Subscribers Only - Available to paying patients'),
+        ('private', 'Private - Only visible to author and admins'),
+    ], default='public')
+    is_approved = models.BooleanField(default=False)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, blank=True, 
+        related_name='approved_articles'
+    )
+    approval_date = models.DateTimeField(null=True, blank=True)
+    approval_notes = models.TextField(blank=True)
+    is_published = models.BooleanField(default=False)
+    publish_date = models.DateTimeField(null=True, blank=True)
+    view_count = models.PositiveIntegerField(default=0)
+    is_featured = models.BooleanField(default=False)
+    related_conditions = models.CharField(max_length=255, blank=True)
+    reading_time = models.PositiveSmallIntegerField(default=5)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
-#     class Meta:
-#         verbose_name = "Article"
-#         verbose_name_plural = "Articles"
-#         ordering = ['-created_at']
+    class Meta:
+        verbose_name = "Article"
+        verbose_name_plural = "Articles"
+        ordering = ['-created_at']
         
-#     def __str__(self):
-#         return self.title
+    def __str__(self):
+        return self.title
 
 
-# class ArticleComment(models.Model):
-#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-#     article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name='comments')
-#     content = models.TextField()
-#     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='article_comments')
-#     is_doctor = models.BooleanField(default=False)
-#     parent_comment = models.ForeignKey(
-#         'self', 
-#         on_delete=models.CASCADE, 
-#         null=True, blank=True, 
-#         related_name='replies'
-#     )
-#     like_count = models.PositiveIntegerField(default=0)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
+class ArticleComment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name='comments')
+    content = models.TextField()
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='article_comments')
+    is_doctor = models.BooleanField(default=False)
+    parent_comment = models.ForeignKey(
+        'self', 
+        on_delete=models.CASCADE, 
+        null=True, blank=True, 
+        related_name='replies'
+    )
+    like_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
-#     class Meta:
-#         verbose_name = "Article Comment"
-#         verbose_name_plural = "Article Comments"
-#         ordering = ['created_at']
+    class Meta:
+        verbose_name = "Article Comment"
+        verbose_name_plural = "Article Comments"
+        ordering = ['created_at']
         
-#     def __str__(self):
-#         return f"Comment by {self.user.get_full_name()} on {self.article.title}"
+    def __str__(self):
+        return f"Comment by {self.user.get_full_name()} on {self.article.title}"
 
 
-# class ArticleCommentLike(models.Model):
-#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-#     comment = models.ForeignKey(ArticleComment, on_delete=models.CASCADE, related_name='likes')
-#     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='comment_likes')
-#     created_at = models.DateTimeField(auto_now_add=True)
+class ArticleCommentLike(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    comment = models.ForeignKey(ArticleComment, on_delete=models.CASCADE, related_name='likes')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='comment_likes')
+    created_at = models.DateTimeField(auto_now_add=True)
     
-#     class Meta:
-#         verbose_name = "Comment Like"
-#         verbose_name_plural = "Comment Likes"
-#         unique_together = ('comment', 'user')
+    class Meta:
+        verbose_name = "Comment Like"
+        verbose_name_plural = "Comment Likes"
+        unique_together = ('comment', 'user')
         
-#     def __str__(self):
-#         return f"{self.user.get_full_name()} liked comment on {self.comment.article.title}"}
+    def __str__(self):
+        return f"{self.user.get_full_name()} liked comment on {self.comment.article.title}"
