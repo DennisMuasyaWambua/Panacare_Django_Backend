@@ -1,23 +1,22 @@
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions, status, serializers
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.utils import timezone
 from django.db.models import Q, Avg
 from datetime import datetime, timedelta
 from .models import (
-    HealthCare, Appointment, Consultation, ConsultationChat, DoctorRating
-    # PatientDoctorAssignment, DoctorAvailability, 
-    # AppointmentDocument, Package, PatientSubscription, Resource,
-    # Article, ArticleComment, ArticleCommentLike
+    HealthCare, Appointment, Consultation, ConsultationChat, DoctorRating,
+    Article, ArticleComment, ArticleCommentLike, PatientDoctorAssignment
+    # DoctorAvailability, AppointmentDocument, Package, PatientSubscription, Resource,
 )
 from .serializers import (
     HealthCareSerializer, AppointmentSerializer,
     ConsultationSerializer, ConsultationChatSerializer,
-    DoctorRatingSerializer
+    DoctorRatingSerializer, ArticleSerializer, ArticleCommentSerializer, 
+    ArticleCommentLikeSerializer, ArticleCommentReplySerializer
     # PatientDoctorAssignmentSerializer, DoctorAvailabilitySerializer,
     # AppointmentDocumentSerializer, PackageSerializer, PatientSubscriptionSerializer,
-    # ResourceSerializer, ArticleSerializer, ArticleCommentSerializer, 
-    # ArticleCommentLikeSerializer, ArticleCommentReplySerializer
+    # ResourceSerializer,
 )
 from doctors.views import IsAdminUser, IsVerifiedUser, IsPatientUser, IsDoctorUser
 from users.models import User, Role, Patient
@@ -944,15 +943,10 @@ class ConsultationViewSet(viewsets.ModelViewSet):
             # Generate a unique room name
             room_name = f"panacare-consultation-{str(consultation.id)}"
             
-            # Create a Twilio room
-            room = create_twilio_room(room_name)
-            
-            # Start the consultation
+            # Start the consultation (update status first)
             consultation.status = 'in-progress'
             consultation.start_time = timezone.now()
             consultation.twilio_room_name = room_name
-            consultation.twilio_room_sid = room.sid
-            consultation.session_id = room.sid  # Use Twilio room SID as session ID
             consultation.save()
             
             # Update appointment status
@@ -960,25 +954,49 @@ class ConsultationViewSet(viewsets.ModelViewSet):
             appointment.status = 'arrived'
             appointment.save()
             
-            # Generate tokens for doctor and patient
-            doctor_identity = f"doctor-{consultation.appointment.doctor.id}"
-            patient_identity = f"patient-{consultation.appointment.patient.id}"
-            
-            consultation.doctor_token = generate_twilio_token(doctor_identity, room_name)
-            consultation.patient_token = generate_twilio_token(patient_identity, room_name)
-            consultation.save()
-            
-            # Return the consultation data with doctor token
-            serializer = self.get_serializer(consultation)
-            response_data = serializer.data
-            response_data['token'] = consultation.doctor_token
-            
-            return Response(response_data)
+            try:
+                # Try to create Twilio room and tokens
+                room = create_twilio_room(room_name)
+                consultation.twilio_room_sid = room.sid
+                consultation.session_id = room.sid
+                
+                # Generate tokens for doctor and patient
+                doctor_identity = f"doctor-{consultation.appointment.doctor.id}"
+                patient_identity = f"patient-{consultation.appointment.patient.id}"
+                
+                consultation.doctor_token = generate_twilio_token(doctor_identity, room_name)
+                consultation.patient_token = generate_twilio_token(patient_identity, room_name)
+                consultation.save()
+                
+                # Return the consultation data with doctor token
+                serializer = self.get_serializer(consultation)
+                response_data = serializer.data
+                response_data['token'] = consultation.doctor_token
+                
+                return Response(response_data)
+                
+            except Exception as twilio_error:
+                # If Twilio fails, still allow consultation to proceed without video
+                consultation.save()
+                
+                serializer = self.get_serializer(consultation)
+                response_data = serializer.data
+                response_data['warning'] = f'Consultation started but video calling unavailable: {str(twilio_error)}'
+                response_data['token'] = None
+                
+                return Response(response_data)
             
         except Exception as e:
-            return Response({
-                'error': f'Failed to start consultation: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # Check if it's a Twilio credentials error
+            error_msg = str(e)
+            if "Authentication Error" in error_msg or "credentials" in error_msg.lower():
+                return Response({
+                    'error': f'Failed to start consultation: Twilio credentials not configured properly - {str(e)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            else:
+                return Response({
+                    'error': f'Failed to start consultation: {str(e)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser])
     def end_consultation(self, request, pk=None):
@@ -1058,16 +1076,23 @@ class ConsultationViewSet(viewsets.ModelViewSet):
             if not token:
                 room_name = consultation.twilio_room_name
                 
-                if is_doctor:
-                    identity = f"doctor-{consultation.appointment.doctor.id}"
-                    token = generate_twilio_token(identity, room_name)
-                    consultation.doctor_token = token
-                elif is_patient:
-                    identity = f"patient-{consultation.appointment.patient.id}"
-                    token = generate_twilio_token(identity, room_name)
-                    consultation.patient_token = token
-                
-                consultation.save()
+                try:
+                    if is_doctor:
+                        identity = f"doctor-{consultation.appointment.doctor.id}"
+                        token = generate_twilio_token(identity, room_name)
+                        consultation.doctor_token = token
+                    elif is_patient:
+                        identity = f"patient-{consultation.appointment.patient.id}"
+                        token = generate_twilio_token(identity, room_name)
+                        consultation.patient_token = token
+                    
+                    consultation.save()
+                except Exception as twilio_error:
+                    return Response({
+                        'error': f'Video calling unavailable: {str(twilio_error)}',
+                        'consultation_active': True,
+                        'room_name': consultation.twilio_room_name
+                    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
             
             return Response({
                 'token': token,
@@ -1614,883 +1639,891 @@ class DoctorRatingViewSet(viewsets.ModelViewSet):
         })
 
 
-# class ArticleViewSet(viewsets.ModelViewSet):
-#     queryset = Article.objects.all()
-#     serializer_class = ArticleSerializer
-#     permission_classes = [permissions.IsAuthenticated]
-#     
-#     @swagger_auto_schema(
-#         operation_description="""
-# List all articles with filtering options.
-# 
-# This endpoint fetches articles based on user permissions:
-# - Admins: Can see all articles, including unapproved and unpublished
-# - Doctors: Can see all approved/published articles plus their own drafts
-# - Patients with active subscription: Can see public and subscriber-only articles
-# - Other users: Can see only public articles
-# 
-# Examples:
-# - Get all articles: GET /api/articles/
-# - Get articles in nutrition category: GET /api/articles/?category=nutrition
-# - Get featured articles: GET /api/articles/?featured=true
-# - Get articles by condition: GET /api/articles/?condition=diabetes
-# - Get articles sorted by popularity: GET /api/articles/?sort_by=popular
-# - Search articles: GET /api/articles/?search=diabetes
-#         """,
-#         manual_parameters=[
-#             openapi.Parameter('category', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by category (general, nutrition, fitness, mental, children, chronic, prevention, research, other)"),
-#             openapi.Parameter('author_id', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by author ID"),
-#             openapi.Parameter('featured', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by featured status"),
-#             openapi.Parameter('visibility', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=["public", "subscribers", "private"], description="Filter by visibility level"),
-#             openapi.Parameter('condition', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by related health condition"),
-#             openapi.Parameter('date_from', openapi.IN_QUERY, type=openapi.TYPE_STRING, format="date", description="Filter by publish date (from)"),
-#             openapi.Parameter('date_to', openapi.IN_QUERY, type=openapi.TYPE_STRING, format="date", description="Filter by publish date (to)"),
-#             openapi.Parameter('sort_by', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=["popular", "newest", "oldest"], description="Sort by view count (popular), newest publish date (newest), or oldest publish date (oldest)"),
-#             openapi.Parameter('search', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Search across title, content, summary, tags, and related_conditions"),
-#             openapi.Parameter('is_approved', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by approval status (admin only)"),
-#             openapi.Parameter('is_published', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by publication status"),
-#             openapi.Parameter('reading_time', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description="Filter by reading time in minutes (returns articles with reading time <= specified value)"),
-#             openapi.Parameter('limit', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description="Limit number of results returned")
-#         ],
-#         responses={
-#             200: ArticleSerializer(many=True)
-#         }
-#     )
-#     def list(self, request, *args, **kwargs):
-#         return super().list(request, *args, **kwargs)
-#     
-#     @swagger_auto_schema(
-#         operation_description="Create a new article (doctors only). Note: featured_image should be sent as a file upload in a multipart form request.",
-#         request_body=openapi.Schema(
-#             type=openapi.TYPE_OBJECT,
-#             required=['title', 'content', 'category'],
-#             properties={
-#                 'title': openapi.Schema(type=openapi.TYPE_STRING, description='Article title'),
-#                 'content': openapi.Schema(type=openapi.TYPE_STRING, description='Article content'),
-#                 'summary': openapi.Schema(type=openapi.TYPE_STRING, description='Brief summary of the article'),
-#                 'category': openapi.Schema(type=openapi.TYPE_STRING, description='Article category'),
-#                 'tags': openapi.Schema(type=openapi.TYPE_STRING, description='Comma-separated tags'),
-#                 'featured_image': openapi.Schema(type=openapi.TYPE_FILE, description='Featured image for the article'),
-#                 'visibility': openapi.Schema(type=openapi.TYPE_STRING, enum=['public', 'subscribers', 'private'], description='Controls who can view this article'),
-#                 'related_conditions': openapi.Schema(type=openapi.TYPE_STRING, description='Comma-separated health conditions'),
-#                 'reading_time': openapi.Schema(type=openapi.TYPE_INTEGER, description='Estimated reading time in minutes')
-#             }
-#         ),
-#         responses={
-#             201: ArticleSerializer,
-#             400: openapi.Response("Bad Request", openapi.Schema(
-#                 type=openapi.TYPE_OBJECT,
-#                 properties={
-#                     'error': openapi.Schema(type=openapi.TYPE_STRING)
-#                 }
-#             ))
-#         }
-#     )
-#     def create(self, request, *args, **kwargs):
-#         return super().create(request, *args, **kwargs)
-#     
-#     def get_permissions(self):
-#         if self.action in ['create']:
-#             permission_classes = [IsDoctorUser]
-#         elif self.action in ['update', 'partial_update']:
-#             permission_classes = [IsDoctorUser]  # Only author can edit, enforced in perform_update
-#         elif self.action in ['destroy']:
-#             permission_classes = [IsAdminUser]
-#         else:
-#             permission_classes = [permissions.IsAuthenticated]
-#         return [permission() for permission in permission_classes]
-#     
-#     def get_queryset(self):
-#         # Basic queryset filtering
-#         if self.request.user.roles.filter(name='admin').exists():
-#             # Admins can see all articles including unapproved ones
-#             queryset = Article.objects.all()
-#         elif self.request.user.roles.filter(name='doctor').exists():
-#             # Doctors can see all approved/published articles + their own drafts
-#             try:
-#                 doctor = self.request.user.doctor
-#                 queryset = Article.objects.filter(
-#                     Q(is_approved=True, is_published=True) | Q(author=doctor)
-#                 )
-#             except Doctor.DoesNotExist:
-#                 queryset = Article.objects.filter(is_approved=True, is_published=True)
-#         else:
-#             # Patients and other users can only see approved and published articles
-#             queryset = Article.objects.filter(is_approved=True, is_published=True)
-#             
-#             # Apply visibility filtering for patients
-#             # If patient has an active subscription, they can see 'subscribers' articles
-#             # Otherwise, they can only see 'public' articles
-#             has_active_subscription = False
-#             has_patient_profile = hasattr(self.request.user, 'patient')
-#             
-#             if has_patient_profile:
-#                 # Case 1: User has a patient profile, check for active subscription
-#                 try:
-#                     patient = self.request.user.patient
-#                     has_active_subscription = PatientSubscription.objects.filter(
-#                         patient=patient,
-#                         status='active',
-#                         end_date__gte=timezone.now().date()
-#                     ).exists()
-#                 except Exception:
-#                     # Case 2: Error getting subscription info, default to no subscription
-#                     has_active_subscription = False
-#             
-#             # Case 3: Normal subscriber with active subscription can see subscriber content
-#             # Users without patient profile or without active subscription see only public articles
-#             if has_active_subscription:
-#                 # Subscribers can see both public and subscriber-only content
-#                 queryset = queryset.filter(visibility__in=['public', 'subscribers'])
-#             else:
-#                 # Filter to only show public articles to non-subscribers
-#                 queryset = queryset.filter(visibility='public')
-#             
-#         # Additional filtering
-#         category = self.request.query_params.get('category')
-#         if category:
-#             queryset = queryset.filter(category=category)
-#             
-#         author_id = self.request.query_params.get('author_id')
-#         if author_id:
-#             queryset = queryset.filter(author_id=author_id)
-#             
-#         # Filter by featured status
-#         featured = self.request.query_params.get('featured')
-#         if featured and featured.lower() == 'true':
-#             queryset = queryset.filter(is_featured=True)
-#             
-#         # Filter by visibility
-#         visibility = self.request.query_params.get('visibility')
-#         if visibility:
-#             queryset = queryset.filter(visibility=visibility)
-#             
-#         # Filter by related health condition
-#         condition = self.request.query_params.get('condition')
-#         if condition:
-#             queryset = queryset.filter(related_conditions__icontains=condition)
-#             
-#         # Date range filtering
-#         date_from = self.request.query_params.get('date_from')
-#         if date_from:
-#             try:
-#                 date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
-#                 queryset = queryset.filter(publish_date__date__gte=date_from)
-#             except ValueError:
-#                 pass
-#                 
-#         date_to = self.request.query_params.get('date_to')
-#         if date_to:
-#             try:
-#                 date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
-#                 queryset = queryset.filter(publish_date__date__lte=date_to)
-#             except ValueError:
-#                 pass
-#             
-#         # Sort by options
-#         sort_by = self.request.query_params.get('sort_by')
-#         if sort_by:
-#             if sort_by == 'popular':
-#                 queryset = queryset.order_by('-view_count')
-#             elif sort_by == 'newest':
-#                 queryset = queryset.order_by('-publish_date')
-#             elif sort_by == 'oldest':
-#                 queryset = queryset.order_by('publish_date')
-#                 
-#         # Free text search across multiple fields
-#         search = self.request.query_params.get('search')
-#         if search:
-#             queryset = queryset.filter(
-#                 Q(title__icontains=search) | 
-#                 Q(content__icontains=search) |
-#                 Q(summary__icontains=search) |
-#                 Q(tags__icontains=search) |
-#                 Q(related_conditions__icontains=search)
-#             )
-#             
-#         # Filter by approval status (admin only)
-#         if self.request.user.roles.filter(name='admin').exists():
-#             is_approved = self.request.query_params.get('is_approved')
-#             if is_approved:
-#                 queryset = queryset.filter(is_approved=is_approved.lower() == 'true')
-#                 
-#         # Filter by publication status
-#         is_published = self.request.query_params.get('is_published')
-#         if is_published:
-#             queryset = queryset.filter(is_published=is_published.lower() == 'true')
-#             
-#         # Reading time filter
-#         reading_time = self.request.query_params.get('reading_time')
-#         if reading_time:
-#             try:
-#                 reading_time = int(reading_time)
-#                 queryset = queryset.filter(reading_time__lte=reading_time)
-#             except ValueError:
-#                 pass
-#             
-#         return queryset
-#     
-#     def perform_create(self, serializer):
-#         try:
-#             # Set author to current user's doctor profile
-#             doctor = self.request.user.doctor
-#             serializer.save(author=doctor)
-#         except Doctor.DoesNotExist:
-#             raise serializers.ValidationError("Doctor profile not found")
-#     
-#     def perform_update(self, serializer):
-#         # Get the article instance
-#         instance = self.get_object()
-#         
-#         # Check if user is the author
-#         try:
-#             doctor = self.request.user.doctor
-#             if instance.author != doctor and not self.request.user.roles.filter(name='admin').exists():
-#                 raise serializers.ValidationError("You can only edit your own articles")
-#                 
-#             # If this is an already approved article being edited by its author, 
-#             # reset the approval status
-#             if instance.is_approved and instance.author == doctor:
-#                 serializer.save(is_approved=False, approval_date=None, approved_by=None)
-#             else:
-#                 serializer.save()
-#                 
-#         except Doctor.DoesNotExist:
-#             # If user is admin, they can edit regardless
-#             if self.request.user.roles.filter(name='admin').exists():
-#                 serializer.save()
-#             else:
-#                 raise serializers.ValidationError("Doctor profile not found")
-#     
-#     @swagger_auto_schema(
-#         method='post',
-#         operation_description="Endpoint for admins to approve an article. Can also set publication status, visibility and featured status.",
-#         request_body=openapi.Schema(
-#             type=openapi.TYPE_OBJECT,
-#             properties={
-#                 'approval_notes': openapi.Schema(type=openapi.TYPE_STRING, description='Notes regarding the approval decision'),
-#                 'publish': openapi.Schema(type=openapi.TYPE_STRING, enum=['true', 'false'], description='Whether to also publish the article'),
-#                 'visibility': openapi.Schema(type=openapi.TYPE_STRING, enum=['public', 'subscribers', 'private'], description='Visibility level for the article'),
-#                 'featured': openapi.Schema(type=openapi.TYPE_STRING, enum=['true', 'false'], description='Whether to feature the article')
-#             }
-#         ),
-#         responses={
-#             200: ArticleSerializer,
-#             400: openapi.Response("Bad Request", openapi.Schema(
-#                 type=openapi.TYPE_OBJECT,
-#                 properties={
-#                     'error': openapi.Schema(type=openapi.TYPE_STRING)
-#                 }
-#             ))
-#         }
-#     )
-#     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
-#     def approve(self, request, pk=None):
-#         """
-#         Endpoint for admins to approve an article
-#         """
-#         article = self.get_object()
-#         
-#         # Check if article is already approved
-#         if article.is_approved:
-#             return Response({
-#                 'error': 'Article is already approved'
-#             }, status=status.HTTP_400_BAD_REQUEST)
-#             
-#         # Approve the article
-#         article.is_approved = True
-#         article.approved_by = request.user
-#         article.approval_date = timezone.now()
-#         
-#         # Add approval notes if provided
-#         approval_notes = request.data.get('approval_notes')
-#         if approval_notes:
-#             article.approval_notes = approval_notes
-#             
-#         # Set publish status if provided
-#         publish = request.data.get('publish')
-#         if publish and publish.lower() == 'true':
-#             article.is_published = True
-#             article.publish_date = timezone.now()
-#             
-#         # Set visibility if provided
-#         visibility = request.data.get('visibility')
-#         if visibility in ['public', 'subscribers', 'private']:
-#             article.visibility = visibility
-#             
-#         # Set featured status if provided
-#         featured = request.data.get('featured')
-#         if featured is not None:
-#             article.is_featured = featured.lower() == 'true'
-#             
-#         article.save()
-#         
-#         serializer = self.get_serializer(article)
-#         return Response(serializer.data)
-#     
-#     @swagger_auto_schema(
-#         method='post',
-#         operation_description="Publish an approved article. Can only be done by the article author or an admin.",
-#         request_body=openapi.Schema(
-#             type=openapi.TYPE_OBJECT,
-#             properties={
-#                 'visibility': openapi.Schema(type=openapi.TYPE_STRING, enum=['public', 'subscribers', 'private'], description='Optional visibility level for the article')
-#             }
-#         ),
-#         responses={
-#             200: ArticleSerializer,
-#             400: openapi.Response("Bad Request", openapi.Schema(
-#                 type=openapi.TYPE_OBJECT,
-#                 properties={
-#                     'error': openapi.Schema(type=openapi.TYPE_STRING)
-#                 }
-#             )),
-#             403: openapi.Response("Forbidden", openapi.Schema(
-#                 type=openapi.TYPE_OBJECT,
-#                 properties={
-#                     'error': openapi.Schema(type=openapi.TYPE_STRING)
-#                 }
-#             ))
-#         }
-#     )
-#     @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser | IsAdminUser])
-#     def publish(self, request, pk=None):
-#         """
-#         Endpoint to publish an approved article
-#         """
-#         article = self.get_object()
-#         
-#         # Check if article is approved
-#         if not article.is_approved:
-#             return Response({
-#                 'error': 'Article must be approved before publishing'
-#             }, status=status.HTTP_400_BAD_REQUEST)
-#             
-#         # Check if user is the author or admin
-#         is_admin = request.user.roles.filter(name='admin').exists()
-#         try:
-#             doctor = request.user.doctor
-#             is_author = (article.author == doctor)
-#             
-#             if not (is_author or is_admin):
-#                 return Response({
-#                     'error': 'You can only publish your own articles'
-#                 }, status=status.HTTP_403_FORBIDDEN)
-#                 
-#             # Publish the article
-#             article.is_published = True
-#             article.publish_date = timezone.now()
-#             
-#             # Set visibility if provided
-#             visibility = request.data.get('visibility')
-#             if visibility in ['public', 'subscribers', 'private']:
-#                 article.visibility = visibility
-#             
-#             article.save()
-#             
-#             serializer = self.get_serializer(article)
-#             return Response(serializer.data)
-#             
-#         except Doctor.DoesNotExist:
-#             if is_admin:
-#                 # Admin can publish regardless
-#                 article.is_published = True
-#                 article.publish_date = timezone.now()
-#                 
-#                 # Set visibility if provided
-#                 visibility = request.data.get('visibility')
-#                 if visibility in ['public', 'subscribers', 'private']:
-#                     article.visibility = visibility
-#                     
-#                 article.save()
-#                 
-#                 serializer = self.get_serializer(article)
-#                 return Response(serializer.data)
-#             else:
-#                 return Response({
-#                     'error': 'Doctor profile not found'
-#                 }, status=status.HTTP_404_NOT_FOUND)
-#     
-#     @swagger_auto_schema(
-#         method='post',
-#         operation_description="Unpublish a published article. Can only be done by the article author or an admin.",
-#         responses={
-#             200: ArticleSerializer,
-#             400: openapi.Response("Bad Request", openapi.Schema(
-#                 type=openapi.TYPE_OBJECT,
-#                 properties={
-#                     'error': openapi.Schema(type=openapi.TYPE_STRING)
-#                 }
-#             )),
-#             403: openapi.Response("Forbidden", openapi.Schema(
-#                 type=openapi.TYPE_OBJECT,
-#                 properties={
-#                     'error': openapi.Schema(type=openapi.TYPE_STRING)
-#                 }
-#             )),
-#             404: openapi.Response("Not Found", openapi.Schema(
-#                 type=openapi.TYPE_OBJECT,
-#                 properties={
-#                     'error': openapi.Schema(type=openapi.TYPE_STRING)
-#                 }
-#             ))
-#         }
-#     )
-#     @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser | IsAdminUser])
-#     def unpublish(self, request, pk=None):
-#         """
-#         Endpoint to unpublish an article
-#         """
-#         article = self.get_object()
-#         
-#         # Check if article is published
-#         if not article.is_published:
-#             return Response({
-#                 'error': 'Article is not published'
-#             }, status=status.HTTP_400_BAD_REQUEST)
-#             
-#         # Check if user is the author or admin
-#         is_admin = request.user.roles.filter(name='admin').exists()
-#         try:
-#             doctor = request.user.doctor
-#             is_author = (article.author == doctor)
-#             
-#             if not (is_author or is_admin):
-#                 return Response({
-#                     'error': 'You can only unpublish your own articles'
-#                 }, status=status.HTTP_403_FORBIDDEN)
-#                 
-#             # Unpublish the article
-#             article.is_published = False
-#             article.save()
-#             
-#             serializer = self.get_serializer(article)
-#             return Response(serializer.data)
-#             
-#         except Doctor.DoesNotExist:
-#             if is_admin:
-#                 # Admin can unpublish regardless
-#                 article.is_published = False
-#                 article.save()
-#                 
-#                 serializer = self.get_serializer(article)
-#                 return Response(serializer.data)
-#             else:
-#                 return Response({
-#                     'error': 'Doctor profile not found'
-#                 }, status=status.HTTP_404_NOT_FOUND)
-#     
-#     @swagger_auto_schema(
-#         method='post',
-#         operation_description="Increment the view count for an article. Call this when a user views the article.",
-#         responses={
-#             200: openapi.Response("Success", openapi.Schema(
-#                 type=openapi.TYPE_OBJECT,
-#                 properties={
-#                     'status': openapi.Schema(type=openapi.TYPE_STRING),
-#                     'view_count': openapi.Schema(type=openapi.TYPE_INTEGER)
-#                 }
-#             ))
-#         }
-#     )
-#     @action(detail=True, methods=['post'])
-#     def view(self, request, pk=None):
-#         """
-#         Endpoint to increment view count for an article
-#         """
-#         article = self.get_object()
-#         article.view_count += 1
-#         article.save()
-#         
-#         return Response({'status': 'view counted', 'view_count': article.view_count})
-#     
-#     @swagger_auto_schema(
-#         method='get',
-#         operation_description="Endpoint for doctors to view their own articles",
-#         manual_parameters=[
-#             openapi.Parameter('status', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=['draft', 'published', 'pending', 'approved'], 
-#                             description="Filter by article status"),
-#             openapi.Parameter('visibility', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=['public', 'subscribers', 'private'], 
-#                             description="Filter by visibility level"),
-#             openapi.Parameter('sort_by', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=["popular", "newest", "oldest"], 
-#                             description="Sort by view count (popular), newest first (newest), or oldest first (oldest)")
-#         ],
-#         responses={
-#             200: ArticleSerializer(many=True)
-#         }
-#     )
-#     @action(detail=False, methods=['get'])
-#     def my_articles(self, request):
-#         """
-#         Endpoint for doctors to view their own articles
-#         """
-#         try:
-#             doctor = request.user.doctor
-#             articles = Article.objects.filter(author=doctor)
-#             
-#             # Optional filtering
-#             status_param = request.query_params.get('status')
-#             if status_param == 'draft':
-#                 articles = articles.filter(is_published=False)
-#             elif status_param == 'published':
-#                 articles = articles.filter(is_published=True)
-#             elif status_param == 'pending':
-#                 articles = articles.filter(is_approved=False)
-#             elif status_param == 'approved':
-#                 articles = articles.filter(is_approved=True)
-#                 
-#             # Filter by visibility
-#             visibility = request.query_params.get('visibility')
-#             if visibility:
-#                 articles = articles.filter(visibility=visibility)
-#                 
-#             # Sort options
-#             sort_by = self.request.query_params.get('sort_by')
-#             if sort_by:
-#                 if sort_by == 'popular':
-#                     articles = articles.order_by('-view_count')
-#                 elif sort_by == 'newest':
-#                     articles = articles.order_by('-created_at')
-#                 elif sort_by == 'oldest':
-#                     articles = articles.order_by('created_at')
-#             
-#             serializer = self.get_serializer(articles, many=True)
-#             return Response(serializer.data)
-#         except (Doctor.DoesNotExist, AttributeError):
-#             return Response({
-#                 'error': 'Doctor profile not found'
-#             }, status=status.HTTP_404_NOT_FOUND)
-#             
-#     @swagger_auto_schema(
-#         method='get',
-#         operation_description="Get featured articles that have been marked as featured by an admin",
-#         manual_parameters=[
-#             openapi.Parameter('limit', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, 
-#                             description="Maximum number of featured articles to return (default: 5)")
-#         ],
-#         responses={
-#             200: ArticleSerializer(many=True)
-#         }
-#     )
-#     @action(detail=False, methods=['get'])
-#     def featured(self, request):
-#         """
-#         Endpoint to get featured articles
-#         """
-#         # Get the base queryset with proper permissions applied
-#         queryset = self.get_queryset()
-#         
-#         # Further filter to only featured articles
-#         queryset = queryset.filter(is_featured=True)
-#         
-#         # Limit to a reasonable number
-#         limit = request.query_params.get('limit', 5)
-#         try:
-#             limit = int(limit)
-#         except ValueError:
-#             limit = 5
-#             
-#         queryset = queryset[:limit]
-#         
-#         serializer = self.get_serializer(queryset, many=True)
-#         return Response(serializer.data)
-#         
-#     @swagger_auto_schema(
-#         method='get',
-#         operation_description="Get popular articles sorted by view count (most viewed first)",
-#         manual_parameters=[
-#             openapi.Parameter('limit', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, 
-#                             description="Maximum number of popular articles to return (default: 10)")
-#         ],
-#         responses={
-#             200: ArticleSerializer(many=True)
-#         }
-#     )
-#     @action(detail=False, methods=['get'])
-#     def popular(self, request):
-#         """
-#         Endpoint to get popular articles based on view count
-#         """
-#         # Get the base queryset with proper permissions applied
-#         queryset = self.get_queryset()
-#         
-#         # Order by view count (most viewed first)
-#         queryset = queryset.order_by('-view_count')
-#         
-#         # Limit to a reasonable number
-#         limit = request.query_params.get('limit', 10)
-#         try:
-#             limit = int(limit)
-#         except ValueError:
-#             limit = 10
-#             
-#         queryset = queryset[:limit]
-#         
-#         serializer = self.get_serializer(queryset, many=True)
-#         return Response(serializer.data)
-#         
-#     @swagger_auto_schema(
-#         method='get',
-#         operation_description="Get recently published articles sorted by publish date (newest first)",
-#         manual_parameters=[
-#             openapi.Parameter('limit', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, 
-#                             description="Maximum number of recent articles to return (default: 10)")
-#         ],
-#         responses={
-#             200: ArticleSerializer(many=True)
-#         }
-#     )
-#     @action(detail=False, methods=['get'])
-#     def recent(self, request):
-#         """
-#         Endpoint to get recently published articles
-#         """
-#         # Get the base queryset with proper permissions applied
-#         queryset = self.get_queryset()
-#         
-#         # Order by publish date (most recent first)
-#         queryset = queryset.filter(publish_date__isnull=False).order_by('-publish_date')
-#         
-#         # Limit to a reasonable number
-#         limit = request.query_params.get('limit', 10)
-#         try:
-#             limit = int(limit)
-#         except ValueError:
-#             limit = 10
-#             
-#         queryset = queryset[:limit]
-#         
-#         serializer = self.get_serializer(queryset, many=True)
-#         return Response(serializer.data)
-#         
-#     @swagger_auto_schema(
-#         method='get',
-#         operation_description="Get articles related to specific health conditions",
-#         manual_parameters=[
-#             openapi.Parameter('condition', openapi.IN_QUERY, type=openapi.TYPE_STRING, required=True, 
-#                             description="The health condition to find articles for (e.g., 'diabetes')"),
-#             openapi.Parameter('sort_by', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=["popular", "newest", "oldest"], 
-#                             description="Sort by popularity, newest, or oldest")
-#         ],
-#         responses={
-#             200: ArticleSerializer(many=True),
-#             400: openapi.Response("Bad Request", openapi.Schema(
-#                 type=openapi.TYPE_OBJECT,
-#                 properties={
-#                     'error': openapi.Schema(type=openapi.TYPE_STRING)
-#                 }
-#             ))
-#         }
-#     )
-#     @action(detail=False, methods=['get'])
-#     def by_condition(self, request):
-#         """
-#         Endpoint to get articles related to specific health conditions
-#         """
-#         condition = request.query_params.get('condition')
-#         if not condition:
-#             return Response({
-#                 'error': 'condition parameter is required'
-#             }, status=status.HTTP_400_BAD_REQUEST)
-#             
-#         # Get the base queryset with proper permissions applied
-#         queryset = self.get_queryset()
-#         
-#         # Filter by related conditions
-#         queryset = queryset.filter(related_conditions__icontains=condition)
-#         
-#         serializer = self.get_serializer(queryset, many=True)
-#         return Response(serializer.data)
-# 
-# 
-# class ArticleCommentViewSet(viewsets.ModelViewSet):
-#     queryset = ArticleComment.objects.all()
-#     serializer_class = ArticleCommentSerializer
-#     permission_classes = [permissions.IsAuthenticated]
-#     
-#     @swagger_auto_schema(
-#         operation_description="List all comments with filtering options",
-#         manual_parameters=[
-#             openapi.Parameter('article_id', openapi.IN_QUERY, type=openapi.TYPE_STRING, 
-#                             description="Filter by article ID"),
-#             openapi.Parameter('user_id', openapi.IN_QUERY, type=openapi.TYPE_STRING, 
-#                             description="Filter by user ID"),
-#             openapi.Parameter('top_level_only', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, 
-#                             description="Only return top-level comments (no replies)")
-#         ],
-#         responses={
-#             200: ArticleCommentSerializer(many=True)
-#         }
-#     )
-#     def list(self, request, *args, **kwargs):
-#         return super().list(request, *args, **kwargs)
-#     
-#     def get_queryset(self):
-#         queryset = ArticleComment.objects.all()
-#         
-#         # Only show top-level comments by default
-#         top_level_only = self.request.query_params.get('top_level_only')
-#         if top_level_only and top_level_only.lower() == 'true':
-#             queryset = queryset.filter(parent_comment__isnull=True)
-#             
-#         # Filter by article
-#         article_id = self.request.query_params.get('article_id')
-#         if article_id:
-#             queryset = queryset.filter(article_id=article_id)
-#             
-#         # Filter by user
-#         user_id = self.request.query_params.get('user_id')
-#         if user_id:
-#             queryset = queryset.filter(user_id=user_id)
-#             
-#         return queryset
-#     
-#     def perform_create(self, serializer):
-#         serializer.save(user=self.request.user)
-#     
-#     def perform_update(self, serializer):
-#         # Ensure users can only edit their own comments
-#         comment = self.get_object()
-#         if comment.user != self.request.user and not self.request.user.roles.filter(name='admin').exists():
-#             raise serializers.ValidationError("You can only edit your own comments")
-#         serializer.save()
-#     
-#     @swagger_auto_schema(
-#         method='post',
-#         operation_description="Like a comment. Users can only like a comment once.",
-#         responses={
-#             200: openapi.Response("Success", openapi.Schema(
-#                 type=openapi.TYPE_OBJECT,
-#                 properties={
-#                     'status': openapi.Schema(type=openapi.TYPE_STRING),
-#                     'like_count': openapi.Schema(type=openapi.TYPE_INTEGER)
-#                 }
-#             )),
-#             400: openapi.Response("Bad Request", openapi.Schema(
-#                 type=openapi.TYPE_OBJECT,
-#                 properties={
-#                     'error': openapi.Schema(type=openapi.TYPE_STRING)
-#                 }
-#             ))
-#         }
-#     )
-#     @action(detail=True, methods=['post'])
-#     def like(self, request, pk=None):
-#         """
-#         Endpoint to like a comment
-#         """
-#         comment = self.get_object()
-#         user = request.user
-#         
-#         # Check if user already liked this comment
-#         existing_like = ArticleCommentLike.objects.filter(comment=comment, user=user).exists()
-#         if existing_like:
-#             return Response({
-#                 'error': 'You have already liked this comment'
-#             }, status=status.HTTP_400_BAD_REQUEST)
-#             
-#         # Create a new like
-#         ArticleCommentLike.objects.create(comment=comment, user=user)
-#         
-#         # Update the comment's like count
-#         comment.like_count += 1
-#         comment.save()
-#         
-#         return Response({'status': 'comment liked', 'like_count': comment.like_count})
-#     
-#     @swagger_auto_schema(
-#         method='post',
-#         operation_description="Remove a like from a comment. Users can only unlike comments they've previously liked.",
-#         responses={
-#             200: openapi.Response("Success", openapi.Schema(
-#                 type=openapi.TYPE_OBJECT,
-#                 properties={
-#                     'status': openapi.Schema(type=openapi.TYPE_STRING),
-#                     'like_count': openapi.Schema(type=openapi.TYPE_INTEGER)
-#                 }
-#             )),
-#             400: openapi.Response("Bad Request", openapi.Schema(
-#                 type=openapi.TYPE_OBJECT,
-#                 properties={
-#                     'error': openapi.Schema(type=openapi.TYPE_STRING)
-#                 }
-#             ))
-#         }
-#     )
-#     @action(detail=True, methods=['post'])
-#     def unlike(self, request, pk=None):
-#         """
-#         Endpoint to unlike a comment
-#         """
-#         comment = self.get_object()
-#         user = request.user
-#         
-#         # Check if user has liked this comment
-#         try:
-#             like = ArticleCommentLike.objects.get(comment=comment, user=user)
-#             like.delete()
-#             
-#             # Update the comment's like count
-#             comment.like_count = max(0, comment.like_count - 1)
-#             comment.save()
-#             
-#             return Response({'status': 'comment unliked', 'like_count': comment.like_count})
-#         except ArticleCommentLike.DoesNotExist:
-#             return Response({
-#                 'error': 'You have not liked this comment'
-#             }, status=status.HTTP_400_BAD_REQUEST)
-#     
-#     @swagger_auto_schema(
-#         method='post',
-#         operation_description="Reply to a top-level comment. Only one level of nesting is allowed (no replies to replies).",
-#         request_body=openapi.Schema(
-#             type=openapi.TYPE_OBJECT,
-#             required=['content'],
-#             properties={
-#                 'content': openapi.Schema(type=openapi.TYPE_STRING, description="The text content of the reply")
-#             }
-#         ),
-#         responses={
-#             200: ArticleCommentReplySerializer,
-#             400: openapi.Response("Bad Request", openapi.Schema(
-#                 type=openapi.TYPE_OBJECT,
-#                 properties={
-#                     'error': openapi.Schema(type=openapi.TYPE_STRING)
-#                 }
-#             ))
-#         }
-#     )
-#     @action(detail=True, methods=['post'])
-#     def reply(self, request, pk=None):
-#         """
-#         Endpoint to reply to a comment
-#         """
-#         parent_comment = self.get_object()
-#         
-#         # Ensure this is a top-level comment (no nested replies beyond 1 level)
-#         if parent_comment.parent_comment is not None:
-#             return Response({
-#                 'error': 'Cannot reply to a reply. Only one level of nesting is allowed.'
-#             }, status=status.HTTP_400_BAD_REQUEST)
-#             
-#         # Get the content from request data
-#         content = request.data.get('content')
-#         if not content:
-#             return Response({
-#                 'error': 'Content is required for a reply'
-#             }, status=status.HTTP_400_BAD_REQUEST)
-#             
-#         # Create the reply
-#         user = request.user
-#         is_doctor = user.roles.filter(name='doctor').exists()
-#         
-#         reply = ArticleComment.objects.create(
-#             article=parent_comment.article,
-#             content=content,
-#             user=user,
-#             is_doctor=is_doctor,
-#             parent_comment=parent_comment
-#         )
-#         
-#         serializer = ArticleCommentReplySerializer(reply)
-#         return Response(serializer.data)
+class ArticleViewSet(viewsets.ModelViewSet):
+    queryset = Article.objects.all()
+    serializer_class = ArticleSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="""
+ List all articles with filtering options.
+ 
+ This endpoint fetches articles based on user permissions:
+ - Admins: Can see all articles, including unapproved and unpublished
+ - Doctors: Can see all approved/published articles plus their own drafts
+ - Patients with active subscription: Can see public and subscriber-only articles
+ - Other users: Can see only public articles
+ 
+ Examples:
+ - Get all articles: GET /api/articles/
+ - Get articles in nutrition category: GET /api/articles/?category=nutrition
+ - Get featured articles: GET /api/articles/?featured=true
+ - Get articles by condition: GET /api/articles/?condition=diabetes
+ - Get articles sorted by popularity: GET /api/articles/?sort_by=popular
+ - Search articles: GET /api/articles/?search=diabetes
+        """,
+        manual_parameters=[
+            openapi.Parameter('category', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by category (general, nutrition, fitness, mental, children, chronic, prevention, research, other)"),
+            openapi.Parameter('author_id', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by author ID"),
+            openapi.Parameter('featured', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by featured status"),
+            openapi.Parameter('visibility', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=["public", "subscribers", "private"], description="Filter by visibility level"),
+            openapi.Parameter('condition', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by related health condition"),
+            openapi.Parameter('date_from', openapi.IN_QUERY, type=openapi.TYPE_STRING, format="date", description="Filter by publish date (from)"),
+            openapi.Parameter('date_to', openapi.IN_QUERY, type=openapi.TYPE_STRING, format="date", description="Filter by publish date (to)"),
+            openapi.Parameter('sort_by', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=["popular", "newest", "oldest"], description="Sort by view count (popular), newest publish date (newest), or oldest publish date (oldest)"),
+            openapi.Parameter('search', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Search across title, content, summary, tags, and related_conditions"),
+            openapi.Parameter('is_approved', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by approval status (admin only)"),
+            openapi.Parameter('is_published', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by publication status"),
+            openapi.Parameter('reading_time', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description="Filter by reading time in minutes (returns articles with reading time <= specified value)"),
+            openapi.Parameter('limit', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description="Limit number of results returned")
+        ],
+        responses={
+            200: ArticleSerializer(many=True)
+        }
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+        operation_description="Create a new article (doctors only). Note: featured_image should be sent as a file upload in a multipart form request.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['title', 'content', 'category'],
+            properties={
+                'title': openapi.Schema(type=openapi.TYPE_STRING, description='Article title'),
+                'content': openapi.Schema(type=openapi.TYPE_STRING, description='Article content'),
+                'summary': openapi.Schema(type=openapi.TYPE_STRING, description='Brief summary of the article'),
+                'category': openapi.Schema(type=openapi.TYPE_STRING, description='Article category'),
+                'tags': openapi.Schema(type=openapi.TYPE_STRING, description='Comma-separated tags'),
+                'featured_image': openapi.Schema(type=openapi.TYPE_FILE, description='Featured image for the article'),
+                'visibility': openapi.Schema(type=openapi.TYPE_STRING, enum=['public', 'subscribers', 'private'], description='Controls who can view this article'),
+                'related_conditions': openapi.Schema(type=openapi.TYPE_STRING, description='Comma-separated health conditions'),
+                'reading_time': openapi.Schema(type=openapi.TYPE_INTEGER, description='Estimated reading time in minutes')
+            }
+        ),
+        responses={
+            201: ArticleSerializer,
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
+    
+    def get_permissions(self):
+        if self.action in ['create']:
+            permission_classes = [IsDoctorUser]
+        elif self.action in ['update', 'partial_update']:
+            permission_classes = [IsDoctorUser]  # Only author can edit, enforced in perform_update
+        elif self.action in ['destroy']:
+            permission_classes = [IsDoctorUser]  # Allow doctors to delete their own articles
+        else:
+            permission_classes = [permissions.IsAuthenticated]
+        return [permission() for permission in permission_classes]
+    
+    def get_queryset(self):
+        # Basic queryset filtering
+        if self.request.user.roles.filter(name='admin').exists():
+            # Admins can see all articles including unapproved ones
+            queryset = Article.objects.all()
+        elif self.request.user.roles.filter(name='doctor').exists():
+            # Doctors can see all approved/published articles (no drafts in general listing)
+            queryset = Article.objects.filter(is_approved=True, is_published=True)
+        else:
+            # Patients and other users can only see approved and published articles
+            queryset = Article.objects.filter(is_approved=True, is_published=True)
+            
+            # Apply visibility filtering for patients
+            # If patient has an active subscription, they can see 'subscribers' articles
+            # Otherwise, they can only see 'public' articles
+            has_active_subscription = False
+            has_patient_profile = hasattr(self.request.user, 'patient')
+            
+            if has_patient_profile:
+                # Case 1: User has a patient profile, check for active subscription
+                try:
+                    patient = self.request.user.patient
+                    has_active_subscription = PatientSubscription.objects.filter(
+                        patient=patient,
+                        status='active',
+                        end_date__gte=timezone.now().date()
+                    ).exists()
+                except Exception:
+                    # Case 2: Error getting subscription info, default to no subscription
+                    has_active_subscription = False
+            
+            # Case 3: Normal subscriber with active subscription can see subscriber content
+            # Users without patient profile or without active subscription see only public articles
+            if has_active_subscription:
+                # Subscribers can see both public and subscriber-only content
+                queryset = queryset.filter(visibility__in=['public', 'subscribers'])
+            else:
+                # Filter to only show public articles to non-subscribers
+                queryset = queryset.filter(visibility='public')
+            
+        # Additional filtering
+        category = self.request.query_params.get('category')
+        if category:
+            queryset = queryset.filter(category=category)
+            
+        author_id = self.request.query_params.get('author_id')
+        if author_id:
+            queryset = queryset.filter(author_id=author_id)
+            
+        # Filter by featured status
+        featured = self.request.query_params.get('featured')
+        if featured and featured.lower() == 'true':
+            queryset = queryset.filter(is_featured=True)
+            
+        # Filter by visibility
+        visibility = self.request.query_params.get('visibility')
+        if visibility:
+            queryset = queryset.filter(visibility=visibility)
+            
+        # Filter by related health condition
+        condition = self.request.query_params.get('condition')
+        if condition:
+            queryset = queryset.filter(related_conditions__icontains=condition)
+            
+        # Date range filtering
+        date_from = self.request.query_params.get('date_from')
+        if date_from:
+            try:
+                date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+                queryset = queryset.filter(publish_date__date__gte=date_from)
+            except ValueError:
+                pass
+                
+        date_to = self.request.query_params.get('date_to')
+        if date_to:
+            try:
+                date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+                queryset = queryset.filter(publish_date__date__lte=date_to)
+            except ValueError:
+                pass
+            
+        # Sort by options
+        sort_by = self.request.query_params.get('sort_by')
+        if sort_by:
+            if sort_by == 'popular':
+                queryset = queryset.order_by('-view_count')
+            elif sort_by == 'newest':
+                queryset = queryset.order_by('-publish_date')
+            elif sort_by == 'oldest':
+                queryset = queryset.order_by('publish_date')
+                
+        # Free text search across multiple fields
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(title__icontains=search) | 
+                Q(content__icontains=search) |
+                Q(summary__icontains=search) |
+                Q(tags__icontains=search) |
+                Q(related_conditions__icontains=search)
+            )
+            
+        # Filter by approval status (admin only)
+        if self.request.user.roles.filter(name='admin').exists():
+            is_approved = self.request.query_params.get('is_approved')
+            if is_approved:
+                queryset = queryset.filter(is_approved=is_approved.lower() == 'true')
+                
+        # Filter by publication status
+        is_published = self.request.query_params.get('is_published')
+        if is_published:
+            queryset = queryset.filter(is_published=is_published.lower() == 'true')
+            
+        # Reading time filter
+        reading_time = self.request.query_params.get('reading_time')
+        if reading_time:
+            try:
+                reading_time = int(reading_time)
+                queryset = queryset.filter(reading_time__lte=reading_time)
+            except ValueError:
+                pass
+            
+        return queryset
+    
+    def perform_create(self, serializer):
+        try:
+            # Set author to current user's doctor profile
+            doctor = self.request.user.doctor
+            serializer.save(author=doctor)
+        except Doctor.DoesNotExist:
+            raise serializers.ValidationError("Doctor profile not found")
+    
+    def perform_update(self, serializer):
+        # Get the article instance
+        instance = self.get_object()
+        
+        # Check if user is the author
+        try:
+            doctor = self.request.user.doctor
+            if instance.author != doctor and not self.request.user.roles.filter(name='admin').exists():
+                raise serializers.ValidationError("You can only edit your own articles")
+                
+            # If this is an already approved article being edited by its author, 
+            # reset the approval status
+            if instance.is_approved and instance.author == doctor:
+                serializer.save(is_approved=False, approval_date=None, approved_by=None)
+            else:
+                serializer.save()
+                
+        except Doctor.DoesNotExist:
+            # If user is admin, they can edit regardless
+            if self.request.user.roles.filter(name='admin').exists():
+                serializer.save()
+            else:
+                raise serializers.ValidationError("Doctor profile not found")
+    
+    def perform_destroy(self, instance):
+        # Check if user is the author or admin
+        try:
+            doctor = self.request.user.doctor
+            if instance.author != doctor and not self.request.user.roles.filter(name='admin').exists():
+                raise serializers.ValidationError("You can only delete your own articles")
+            instance.delete()
+        except Doctor.DoesNotExist:
+            # If user is admin, they can delete regardless
+            if self.request.user.roles.filter(name='admin').exists():
+                instance.delete()
+            else:
+                raise serializers.ValidationError("Doctor profile not found")
+    
+    @swagger_auto_schema(
+        method='post',
+        operation_description="Endpoint for admins to approve an article. Can also set publication status, visibility and featured status.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'approval_notes': openapi.Schema(type=openapi.TYPE_STRING, description='Notes regarding the approval decision'),
+                'publish': openapi.Schema(type=openapi.TYPE_STRING, enum=['true', 'false'], description='Whether to also publish the article'),
+                'visibility': openapi.Schema(type=openapi.TYPE_STRING, enum=['public', 'subscribers', 'private'], description='Visibility level for the article'),
+                'featured': openapi.Schema(type=openapi.TYPE_STRING, enum=['true', 'false'], description='Whether to feature the article')
+            }
+        ),
+        responses={
+            200: ArticleSerializer,
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
+    def approve(self, request, pk=None):
+        """
+        Endpoint for admins to approve an article
+        """
+        article = self.get_object()
+        
+        # Check if article is already approved
+        if article.is_approved:
+            return Response({
+                'error': 'Article is already approved'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Approve the article
+        article.is_approved = True
+        article.approved_by = request.user
+        article.approval_date = timezone.now()
+        
+        # Add approval notes if provided
+        approval_notes = request.data.get('approval_notes')
+        if approval_notes:
+            article.approval_notes = approval_notes
+            
+        # Set publish status if provided
+        publish = request.data.get('publish')
+        if publish and publish.lower() == 'true':
+            article.is_published = True
+            article.publish_date = timezone.now()
+            
+        # Set visibility if provided
+        visibility = request.data.get('visibility')
+        if visibility in ['public', 'subscribers', 'private']:
+            article.visibility = visibility
+            
+        # Set featured status if provided
+        featured = request.data.get('featured')
+        if featured is not None:
+            article.is_featured = featured.lower() == 'true'
+            
+        article.save()
+        
+        serializer = self.get_serializer(article)
+        return Response(serializer.data)
+    
+    @swagger_auto_schema(
+        method='post',
+        operation_description="Publish an approved article. Can only be done by the article author or an admin.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'visibility': openapi.Schema(type=openapi.TYPE_STRING, enum=['public', 'subscribers', 'private'], description='Optional visibility level for the article')
+            }
+        ),
+        responses={
+            200: ArticleSerializer,
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            403: openapi.Response("Forbidden", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
+    @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser | IsAdminUser])
+    def publish(self, request, pk=None):
+        """
+        Endpoint to publish an approved article
+        """
+        article = self.get_object()
+        
+        # Check if article is approved
+        if not article.is_approved:
+            return Response({
+                'error': 'Article must be approved before publishing'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Check if user is the author or admin
+        is_admin = request.user.roles.filter(name='admin').exists()
+        try:
+            doctor = request.user.doctor
+            is_author = (article.author == doctor)
+            
+            if not (is_author or is_admin):
+                return Response({
+                    'error': 'You can only publish your own articles'
+                }, status=status.HTTP_403_FORBIDDEN)
+                
+            # Publish the article
+            article.is_published = True
+            article.publish_date = timezone.now()
+            
+            # Set visibility if provided
+            visibility = request.data.get('visibility')
+            if visibility in ['public', 'subscribers', 'private']:
+                article.visibility = visibility
+            
+            article.save()
+            
+            serializer = self.get_serializer(article)
+            return Response(serializer.data)
+            
+        except Doctor.DoesNotExist:
+            if is_admin:
+                # Admin can publish regardless
+                article.is_published = True
+                article.publish_date = timezone.now()
+                
+                # Set visibility if provided
+                visibility = request.data.get('visibility')
+                if visibility in ['public', 'subscribers', 'private']:
+                    article.visibility = visibility
+                    
+                article.save()
+                
+                serializer = self.get_serializer(article)
+                return Response(serializer.data)
+            else:
+                return Response({
+                    'error': 'Doctor profile not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+    
+    @swagger_auto_schema(
+        method='post',
+        operation_description="Unpublish a published article. Can only be done by the article author or an admin.",
+        responses={
+            200: ArticleSerializer,
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            403: openapi.Response("Forbidden", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            404: openapi.Response("Not Found", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
+    @action(detail=True, methods=['post'], permission_classes=[IsDoctorUser | IsAdminUser])
+    def unpublish(self, request, pk=None):
+        """
+        Endpoint to unpublish an article
+        """
+        article = self.get_object()
+        
+        # Check if article is published
+        if not article.is_published:
+            return Response({
+                'error': 'Article is not published'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Check if user is the author or admin
+        is_admin = request.user.roles.filter(name='admin').exists()
+        try:
+            doctor = request.user.doctor
+            is_author = (article.author == doctor)
+            
+            if not (is_author or is_admin):
+                return Response({
+                    'error': 'You can only unpublish your own articles'
+                }, status=status.HTTP_403_FORBIDDEN)
+                
+            # Unpublish the article
+            article.is_published = False
+            article.save()
+            
+            serializer = self.get_serializer(article)
+            return Response(serializer.data)
+            
+        except Doctor.DoesNotExist:
+            if is_admin:
+                # Admin can unpublish regardless
+                article.is_published = False
+                article.save()
+                
+                serializer = self.get_serializer(article)
+                return Response(serializer.data)
+            else:
+                return Response({
+                    'error': 'Doctor profile not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+    
+    @swagger_auto_schema(
+        method='post',
+        operation_description="Increment the view count for an article. Call this when a user views the article.",
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'status': openapi.Schema(type=openapi.TYPE_STRING),
+                    'view_count': openapi.Schema(type=openapi.TYPE_INTEGER)
+                }
+            ))
+        }
+    )
+    @action(detail=True, methods=['post'])
+    def view(self, request, pk=None):
+        """
+        Endpoint to increment view count for an article
+        """
+        article = self.get_object()
+        article.view_count += 1
+        article.save()
+        
+        return Response({'status': 'view counted', 'view_count': article.view_count})
+    
+    @swagger_auto_schema(
+        method='get',
+        operation_description="Endpoint for doctors to view their own articles",
+        manual_parameters=[
+            openapi.Parameter('status', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=['draft', 'published', 'pending', 'approved'], 
+                            description="Filter by article status"),
+            openapi.Parameter('visibility', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=['public', 'subscribers', 'private'], 
+                            description="Filter by visibility level"),
+            openapi.Parameter('sort_by', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=["popular", "newest", "oldest"], 
+                            description="Sort by view count (popular), newest first (newest), or oldest first (oldest)")
+        ],
+        responses={
+            200: ArticleSerializer(many=True)
+        }
+    )
+    @action(detail=False, methods=['get'])
+    def my_articles(self, request):
+        """
+        Endpoint for doctors to view their own articles
+        """
+        try:
+            doctor = request.user.doctor
+            articles = Article.objects.filter(author=doctor)
+            
+            # Optional filtering
+            status_param = request.query_params.get('status')
+            if status_param == 'draft':
+                articles = articles.filter(is_published=False)
+            elif status_param == 'published':
+                articles = articles.filter(is_published=True)
+            elif status_param == 'pending':
+                articles = articles.filter(is_approved=False)
+            elif status_param == 'approved':
+                articles = articles.filter(is_approved=True)
+                
+            # Filter by visibility
+            visibility = request.query_params.get('visibility')
+            if visibility:
+                articles = articles.filter(visibility=visibility)
+                
+            # Sort options
+            sort_by = self.request.query_params.get('sort_by')
+            if sort_by:
+                if sort_by == 'popular':
+                    articles = articles.order_by('-view_count')
+                elif sort_by == 'newest':
+                    articles = articles.order_by('-created_at')
+                elif sort_by == 'oldest':
+                    articles = articles.order_by('created_at')
+            
+            serializer = self.get_serializer(articles, many=True)
+            return Response(serializer.data)
+        except (Doctor.DoesNotExist, AttributeError):
+            return Response({
+                'error': 'Doctor profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+            
+    @swagger_auto_schema(
+        method='get',
+        operation_description="Get featured articles that have been marked as featured by an admin",
+        manual_parameters=[
+            openapi.Parameter('limit', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, 
+                            description="Maximum number of featured articles to return (default: 5)")
+        ],
+        responses={
+            200: ArticleSerializer(many=True)
+        }
+    )
+    @action(detail=False, methods=['get'])
+    def featured(self, request):
+        """
+        Endpoint to get featured articles
+        """
+        # Get the base queryset with proper permissions applied
+        queryset = self.get_queryset()
+        
+        # Further filter to only featured articles
+        queryset = queryset.filter(is_featured=True)
+        
+        # Limit to a reasonable number
+        limit = request.query_params.get('limit', 5)
+        try:
+            limit = int(limit)
+        except ValueError:
+            limit = 5
+            
+        queryset = queryset[:limit]
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+        
+    @swagger_auto_schema(
+        method='get',
+        operation_description="Get popular articles sorted by view count (most viewed first)",
+        manual_parameters=[
+            openapi.Parameter('limit', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, 
+                            description="Maximum number of popular articles to return (default: 10)")
+        ],
+        responses={
+            200: ArticleSerializer(many=True)
+        }
+    )
+    @action(detail=False, methods=['get'])
+    def popular(self, request):
+        """
+        Endpoint to get popular articles based on view count
+        """
+        # Get the base queryset with proper permissions applied
+        queryset = self.get_queryset()
+        
+        # Order by view count (most viewed first)
+        queryset = queryset.order_by('-view_count')
+        
+        # Limit to a reasonable number
+        limit = request.query_params.get('limit', 10)
+        try:
+            limit = int(limit)
+        except ValueError:
+            limit = 10
+            
+        queryset = queryset[:limit]
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+        
+    @swagger_auto_schema(
+        method='get',
+        operation_description="Get recently published articles sorted by publish date (newest first)",
+        manual_parameters=[
+            openapi.Parameter('limit', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, 
+                            description="Maximum number of recent articles to return (default: 10)")
+        ],
+        responses={
+            200: ArticleSerializer(many=True)
+        }
+    )
+    @action(detail=False, methods=['get'])
+    def recent(self, request):
+        """
+        Endpoint to get recently published articles
+        """
+        # Get the base queryset with proper permissions applied
+        queryset = self.get_queryset()
+        
+        # Order by publish date (most recent first)
+        queryset = queryset.filter(publish_date__isnull=False).order_by('-publish_date')
+        
+        # Limit to a reasonable number
+        limit = request.query_params.get('limit', 10)
+        try:
+            limit = int(limit)
+        except ValueError:
+            limit = 10
+            
+        queryset = queryset[:limit]
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+        
+    @swagger_auto_schema(
+        method='get',
+        operation_description="Get articles related to specific health conditions",
+        manual_parameters=[
+            openapi.Parameter('condition', openapi.IN_QUERY, type=openapi.TYPE_STRING, required=True, 
+                            description="The health condition to find articles for (e.g., 'diabetes')"),
+            openapi.Parameter('sort_by', openapi.IN_QUERY, type=openapi.TYPE_STRING, enum=["popular", "newest", "oldest"], 
+                            description="Sort by popularity, newest, or oldest")
+        ],
+        responses={
+            200: ArticleSerializer(many=True),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
+    @action(detail=False, methods=['get'])
+    def by_condition(self, request):
+        """
+        Endpoint to get articles related to specific health conditions
+        """
+        condition = request.query_params.get('condition')
+        if not condition:
+            return Response({
+                'error': 'condition parameter is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Get the base queryset with proper permissions applied
+        queryset = self.get_queryset()
+        
+        # Filter by related conditions
+        queryset = queryset.filter(related_conditions__icontains=condition)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+ 
+ 
+class ArticleCommentViewSet(viewsets.ModelViewSet):
+    queryset = ArticleComment.objects.all()
+    serializer_class = ArticleCommentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="List all comments with filtering options",
+        manual_parameters=[
+            openapi.Parameter('article_id', openapi.IN_QUERY, type=openapi.TYPE_STRING, 
+                            description="Filter by article ID"),
+            openapi.Parameter('user_id', openapi.IN_QUERY, type=openapi.TYPE_STRING, 
+                            description="Filter by user ID"),
+            openapi.Parameter('top_level_only', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, 
+                            description="Only return top-level comments (no replies)")
+        ],
+        responses={
+            200: ArticleCommentSerializer(many=True)
+        }
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+    
+    def get_queryset(self):
+        queryset = ArticleComment.objects.all()
+        
+        # Only show top-level comments by default
+        top_level_only = self.request.query_params.get('top_level_only')
+        if top_level_only and top_level_only.lower() == 'true':
+            queryset = queryset.filter(parent_comment__isnull=True)
+            
+        # Filter by article
+        article_id = self.request.query_params.get('article_id')
+        if article_id:
+            queryset = queryset.filter(article_id=article_id)
+            
+        # Filter by user
+        user_id = self.request.query_params.get('user_id')
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
+            
+        return queryset
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+    def perform_update(self, serializer):
+        # Ensure users can only edit their own comments
+        comment = self.get_object()
+        if comment.user != self.request.user and not self.request.user.roles.filter(name='admin').exists():
+            raise serializers.ValidationError("You can only edit your own comments")
+        serializer.save()
+    
+    @swagger_auto_schema(
+        method='post',
+        operation_description="Like a comment. Users can only like a comment once.",
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'status': openapi.Schema(type=openapi.TYPE_STRING),
+                    'like_count': openapi.Schema(type=openapi.TYPE_INTEGER)
+                }
+            )),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
+    @action(detail=True, methods=['post'])
+    def like(self, request, pk=None):
+        """
+        Endpoint to like a comment
+        """
+        comment = self.get_object()
+        user = request.user
+        
+        # Check if user already liked this comment
+        existing_like = ArticleCommentLike.objects.filter(comment=comment, user=user).exists()
+        if existing_like:
+            return Response({
+                'error': 'You have already liked this comment'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Create a new like
+        ArticleCommentLike.objects.create(comment=comment, user=user)
+        
+        # Update the comment's like count
+        comment.like_count += 1
+        comment.save()
+        
+        return Response({'status': 'comment liked', 'like_count': comment.like_count})
+    
+    @swagger_auto_schema(
+        method='post',
+        operation_description="Remove a like from a comment. Users can only unlike comments they've previously liked.",
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'status': openapi.Schema(type=openapi.TYPE_STRING),
+                    'like_count': openapi.Schema(type=openapi.TYPE_INTEGER)
+                }
+            )),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
+    @action(detail=True, methods=['post'])
+    def unlike(self, request, pk=None):
+        """
+        Endpoint to unlike a comment
+        """
+        comment = self.get_object()
+        user = request.user
+        
+        # Check if user has liked this comment
+        try:
+            like = ArticleCommentLike.objects.get(comment=comment, user=user)
+            like.delete()
+            
+            # Update the comment's like count
+            comment.like_count = max(0, comment.like_count - 1)
+            comment.save()
+            
+            return Response({'status': 'comment unliked', 'like_count': comment.like_count})
+        except ArticleCommentLike.DoesNotExist:
+            return Response({
+                'error': 'You have not liked this comment'
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @swagger_auto_schema(
+        method='post',
+        operation_description="Reply to a top-level comment. Only one level of nesting is allowed (no replies to replies).",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['content'],
+            properties={
+                'content': openapi.Schema(type=openapi.TYPE_STRING, description="The text content of the reply")
+            }
+        ),
+        responses={
+            200: ArticleCommentReplySerializer,
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
+    @action(detail=True, methods=['post'])
+    def reply(self, request, pk=None):
+        """
+        Endpoint to reply to a comment
+        """
+        parent_comment = self.get_object()
+        
+        # Ensure this is a top-level comment (no nested replies beyond 1 level)
+        if parent_comment.parent_comment is not None:
+            return Response({
+                'error': 'Cannot reply to a reply. Only one level of nesting is allowed.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Get the content from request data
+        content = request.data.get('content')
+        if not content:
+            return Response({
+                'error': 'Content is required for a reply'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Create the reply
+        user = request.user
+        is_doctor = user.roles.filter(name='doctor').exists()
+        
+        reply = ArticleComment.objects.create(
+            article=parent_comment.article,
+            content=content,
+            user=user,
+            is_doctor=is_doctor,
+            parent_comment=parent_comment
+        )
+        
+        serializer = ArticleCommentReplySerializer(reply)
+        return Response(serializer.data)
