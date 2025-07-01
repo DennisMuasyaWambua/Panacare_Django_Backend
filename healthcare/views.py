@@ -1849,6 +1849,41 @@ class ArticleViewSet(viewsets.ModelViewSet):
             
         return queryset
     
+    def get_object(self):
+        """
+        Override get_object to handle admin/author access for specific actions
+        """
+        # For admin actions like approve, publish, retrieve, update, delete - 
+        # allow admins and authors to access any article (bypass filtering)
+        if self.action in ['retrieve', 'update', 'partial_update', 'destroy', 'approve', 'publish', 'unpublish', 'view']:
+            # Check if user is admin
+            if self.request.user.roles.filter(name='admin').exists():
+                # Admins can access any article
+                return get_object_or_404(Article, pk=self.kwargs.get('pk'))
+            
+            # Check if user is a doctor and this is their own article
+            try:
+                doctor = self.request.user.doctor
+                article = get_object_or_404(Article, pk=self.kwargs.get('pk'))
+                
+                # For retrieve action, use normal filtering
+                if self.action == 'retrieve':
+                    return super().get_object()
+                
+                # For other actions, doctors can only access their own articles
+                if article.author == doctor:
+                    return article
+                else:
+                    # For non-authors, fall back to normal filtering
+                    return super().get_object()
+                    
+            except Doctor.DoesNotExist:
+                # User is not a doctor, use normal filtering
+                return super().get_object()
+        
+        # For all other actions (list, etc.), use the normal queryset filtering
+        return super().get_object()
+    
     def perform_create(self, serializer):
         try:
             # Set author to current user's doctor profile

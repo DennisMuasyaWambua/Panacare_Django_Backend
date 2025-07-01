@@ -11,6 +11,10 @@ def get_twilio_client():
     Returns a Twilio client instance
     """
     try:
+        # Validate credentials are set
+        if not settings.TWILIO_ACCOUNT_SID or not settings.TWILIO_AUTH_TOKEN:
+            raise ValueError("TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be set")
+            
         return Client(
             settings.TWILIO_ACCOUNT_SID,
             settings.TWILIO_AUTH_TOKEN
@@ -68,6 +72,10 @@ def generate_twilio_token(identity, room_name):
         str: The generated token
     """
     try:
+        # Validate JWT credentials are set
+        if not settings.TWILIO_ACCOUNT_SID or not settings.TWILIO_API_KEY_SID or not settings.TWILIO_API_KEY_SECRET:
+            raise ValueError("JWT does not have a signing key configured. Please set TWILIO_ACCOUNT_SID, TWILIO_API_KEY_SID, and TWILIO_API_KEY_SECRET")
+            
         # Create access token with the user identity
         token = AccessToken(
             settings.TWILIO_ACCOUNT_SID,
