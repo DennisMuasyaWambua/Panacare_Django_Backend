@@ -3296,13 +3296,34 @@ class PaymentViewSet(viewsets.ModelViewSet):
                     'error': 'Failed to verify payment status'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Update payment record
-            payment.gateway_response = status_response
+            # Update payment record - preserve existing gateway_response data
+            existing_response = payment.gateway_response or {}
+            upgrade_cancel_subscription_id = existing_response.get('upgrade_cancel_subscription_id')
+            
+            # Merge with new status response
+            payment.gateway_response = {**existing_response, **status_response}
             payment_status = status_response.get('payment_status_description', '').upper()
             
             if payment_status == 'COMPLETED':
                 payment.status = 'completed'
                 payment.save()
+                
+                # Check if this is an upgrade payment and handle old subscription cancellation
+                if upgrade_cancel_subscription_id:
+                    try:
+                        old_subscription = PatientSubscription.objects.get(id=upgrade_cancel_subscription_id)
+                        old_subscription.status = 'cancelled'
+                        old_subscription.save()
+                        
+                        # Log the cancellation for tracking
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.info(f"Cancelled old subscription {upgrade_cancel_subscription_id} after upgrade payment completion")
+                    except PatientSubscription.DoesNotExist:
+                        # Log error but don't fail the IPN processing
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.error(f"Old subscription {upgrade_cancel_subscription_id} not found for cancellation after upgrade")
                 
                 # Activate associated subscriptions
                 subscriptions = payment.subscriptions.all()

@@ -117,9 +117,14 @@ class SubscriptionManager:
                     status='pending'
                 )
                 
-                # Update current subscription to cancelled
-                current_subscription.status = 'cancelled'
-                current_subscription.save()
+                # Store current subscription ID in payment metadata for cancellation after payment
+                payment.gateway_response = {
+                    'upgrade_cancel_subscription_id': str(current_subscription.id)
+                }
+                payment.save()
+                
+                # Keep current subscription active until payment is completed
+                # It will be cancelled via IPN webhook after successful payment
                 
                 # Create new subscription
                 new_subscription = PatientSubscription.objects.create(
