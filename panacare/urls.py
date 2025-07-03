@@ -20,9 +20,9 @@ from doctors.views import DoctorViewSet
 import doctors.views
 from healthcare.views import (
     HealthCareViewSet, AppointmentViewSet, ConsultationViewSet, DoctorRatingViewSet,
-    ArticleViewSet, ArticleCommentViewSet
-    # DoctorAvailabilityViewSet, AppointmentDocumentViewSet, PackageViewSet,
-    # PatientSubscriptionViewSet, ResourceViewSet,
+    ArticleViewSet, ArticleCommentViewSet, PackageViewSet, PatientSubscriptionViewSet, 
+    DoctorAvailabilityViewSet
+    # AppointmentDocumentViewSet, ResourceViewSet,
 )
 from rest_framework_simplejwt.views import (
     TokenRefreshView, TokenVerifyView
@@ -99,12 +99,12 @@ from rest_framework.routers import DefaultRouter
 router = DefaultRouter()
 router.register(r'doctors', DoctorViewSet, basename='doctor')
 router.register(r'healthcare', HealthCareViewSet, basename='healthcare')
-# router.register(r'doctor-availability', DoctorAvailabilityViewSet, basename='doctor-availability')
+router.register(r'doctor-availability', DoctorAvailabilityViewSet, basename='doctor-availability')
 router.register(r'appointments', AppointmentViewSet, basename='appointment')
 # router.register(r'appointment-documents', AppointmentDocumentViewSet, basename='appointment-document')
 router.register(r'consultations', ConsultationViewSet, basename='consultation')
-# router.register(r'packages', PackageViewSet, basename='package')
-# router.register(r'subscriptions', PatientSubscriptionViewSet, basename='subscription')
+router.register(r'packages', PackageViewSet, basename='package')
+router.register(r'subscriptions', PatientSubscriptionViewSet, basename='subscription')
 # router.register(r'resources', ResourceViewSet, basename='resource')
 router.register(r'doctor-ratings', DoctorRatingViewSet, basename='doctor-rating')
 router.register(r'articles', ArticleViewSet, basename='article')

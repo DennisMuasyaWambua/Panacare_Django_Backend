@@ -6,17 +6,18 @@ from django.db.models import Q, Avg
 from datetime import datetime, timedelta
 from .models import (
     HealthCare, Appointment, Consultation, ConsultationChat, DoctorRating,
-    Article, ArticleComment, ArticleCommentLike, PatientDoctorAssignment
-    # DoctorAvailability, AppointmentDocument, Package, PatientSubscription, Resource,
+    Article, ArticleComment, ArticleCommentLike, PatientDoctorAssignment,
+    Package, PatientSubscription, DoctorAvailability
+    # AppointmentDocument, Resource,
 )
 from .serializers import (
     HealthCareSerializer, AppointmentSerializer,
     ConsultationSerializer, ConsultationChatSerializer,
     DoctorRatingSerializer, ArticleSerializer, ArticleCommentSerializer, 
-    ArticleCommentLikeSerializer, ArticleCommentReplySerializer
-    # PatientDoctorAssignmentSerializer, DoctorAvailabilitySerializer,
-    # AppointmentDocumentSerializer, PackageSerializer, PatientSubscriptionSerializer,
-    # ResourceSerializer,
+    ArticleCommentLikeSerializer, ArticleCommentReplySerializer,
+    PackageSerializer, PatientSubscriptionSerializer, DoctorAvailabilitySerializer
+    # PatientDoctorAssignmentSerializer,
+    # AppointmentDocumentSerializer, ResourceSerializer,
 )
 from doctors.views import IsAdminUser, IsVerifiedUser, IsPatientUser, IsDoctorUser
 from users.models import User, Role, Patient
@@ -374,6 +375,17 @@ class IsPatientOrDoctorOrAdmin(permissions.BasePermission):
 # 
 # 
 class AppointmentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing appointments
+    
+    Status Flow:
+    - booked: Initial appointment status
+    - arrived: When consultation starts (appointment.status changes to 'arrived')
+    - fulfilled: When consultation ends (appointment.status changes to 'fulfilled')
+    
+    Note: Patients should be able to see all their appointments regardless of status.
+    Frontend apps should not filter by status to hide 'arrived' or 'fulfilled' appointments.
+    """
     queryset = Appointment.objects.all()
     serializer_class = AppointmentSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -1684,6 +1696,69 @@ class ArticleViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
     
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Custom retrieve method to handle article access permissions
+        """
+        instance = self.get_object()
+        
+        # Check if user has permission to view this article
+        if self.request.user.roles.filter(name='admin').exists():
+            # Admin can view any article
+            pass
+        elif self.request.user.roles.filter(name='doctor').exists():
+            # Doctors can view all published articles or their own articles
+            try:
+                doctor = self.request.user.doctor
+                if not (instance.is_approved and instance.is_published) and instance.author != doctor:
+                    # Article is not published and doctor is not the author
+                    return Response({
+                        'error': 'Article not found or access denied'
+                    }, status=status.HTTP_404_NOT_FOUND)
+            except Doctor.DoesNotExist:
+                # If doctor profile doesn't exist, only allow published articles
+                if not (instance.is_approved and instance.is_published):
+                    return Response({
+                        'error': 'Article not found or access denied'
+                    }, status=status.HTTP_404_NOT_FOUND)
+        else:
+            # Patients and other users
+            if not (instance.is_approved and instance.is_published):
+                return Response({
+                    'error': 'Article not found or access denied'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Check visibility permissions for patients
+            if instance.visibility == 'private':
+                return Response({
+                    'error': 'Article not found or access denied'
+                }, status=status.HTTP_404_NOT_FOUND)
+            elif instance.visibility == 'subscribers':
+                # Check if patient has active subscription
+                has_active_subscription = False
+                if hasattr(self.request.user, 'patient'):
+                    try:
+                        patient = self.request.user.patient
+                        has_active_subscription = PatientSubscription.objects.filter(
+                            patient=patient,
+                            status='active',
+                            end_date__gte=timezone.now().date()
+                        ).exists()
+                    except Exception:
+                        has_active_subscription = False
+                
+                if not has_active_subscription:
+                    return Response({
+                        'error': 'This article is only available to subscribers'
+                    }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Update view count
+        instance.view_count += 1
+        instance.save(update_fields=['view_count'])
+        
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+    
     @swagger_auto_schema(
         operation_description="Create a new article (doctors only). Note: featured_image should be sent as a file upload in a multipart form request.",
         request_body=openapi.Schema(
@@ -1731,8 +1806,16 @@ class ArticleViewSet(viewsets.ModelViewSet):
             # Admins can see all articles including unapproved ones
             queryset = Article.objects.all()
         elif self.request.user.roles.filter(name='doctor').exists():
-            # Doctors can see all approved/published articles (no drafts in general listing)
-            queryset = Article.objects.filter(is_approved=True, is_published=True)
+            # Doctors can see all approved/published articles plus their own drafts
+            try:
+                doctor = self.request.user.doctor
+                queryset = Article.objects.filter(
+                    Q(is_approved=True, is_published=True) |  # All published articles
+                    Q(author=doctor)  # Their own articles regardless of approval/publish status
+                )
+            except Doctor.DoesNotExist:
+                # If doctor profile doesn't exist, fall back to published articles only
+                queryset = Article.objects.filter(is_approved=True, is_published=True)
         else:
             # Patients and other users can only see approved and published articles
             queryset = Article.objects.filter(is_approved=True, is_published=True)
@@ -2562,3 +2645,170 @@ class ArticleCommentViewSet(viewsets.ModelViewSet):
         
         serializer = ArticleCommentReplySerializer(reply)
         return Response(serializer.data)
+
+
+class PackageViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing subscription packages
+    """
+    queryset = Package.objects.all()
+    serializer_class = PackageSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_permissions(self):
+        """
+        Admin can create/update/delete packages
+        All authenticated users can view packages
+        """
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            permission_classes = [IsAdminUser]
+        else:
+            permission_classes = [permissions.IsAuthenticated]
+        return [permission() for permission in permission_classes]
+    
+    def get_queryset(self):
+        """
+        Filter packages - only show active packages to non-admin users
+        """
+        queryset = Package.objects.all()
+        
+        # Non-admin users only see active packages
+        if not self.request.user.roles.filter(name='admin').exists():
+            queryset = queryset.filter(is_active=True)
+        
+        return queryset.order_by('price')
+
+
+class PatientSubscriptionViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing patient subscriptions
+    """
+    queryset = PatientSubscription.objects.all()
+    serializer_class = PatientSubscriptionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_permissions(self):
+        """
+        Admin can create/view/update all subscriptions
+        Patients can only view their own subscriptions
+        """
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            permission_classes = [IsAdminUser]
+        else:
+            permission_classes = [permissions.IsAuthenticated]
+        return [permission() for permission in permission_classes]
+    
+    def get_queryset(self):
+        """
+        Filter subscriptions by user role
+        """
+        queryset = PatientSubscription.objects.all()
+        
+        if self.request.user.roles.filter(name='admin').exists():
+            # Admin can see all subscriptions
+            pass
+        elif self.request.user.roles.filter(name='patient').exists():
+            # Patients can only see their own subscriptions
+            try:
+                patient = self.request.user.patient
+                queryset = queryset.filter(patient=patient)
+            except Patient.DoesNotExist:
+                return PatientSubscription.objects.none()
+        else:
+            return PatientSubscription.objects.none()
+        
+        return queryset.order_by('-created_at')
+
+
+class DoctorAvailabilityViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing doctor availability
+    """
+    queryset = DoctorAvailability.objects.all()
+    serializer_class = DoctorAvailabilitySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_permissions(self):
+        """
+        Doctors can manage their own availability
+        Admin can manage all availability
+        All authenticated users can view availability
+        """
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            permission_classes = [IsDoctorUser | IsAdminUser]
+        else:
+            permission_classes = [permissions.IsAuthenticated]
+        return [permission() for permission in permission_classes]
+    
+    def get_queryset(self):
+        """
+        Filter availability by doctor
+        """
+        queryset = DoctorAvailability.objects.all()
+        
+        # Filter by doctor_id if provided
+        doctor_id = self.request.query_params.get('doctor_id')
+        if doctor_id:
+            queryset = queryset.filter(doctor_id=doctor_id)
+        
+        # Filter by weekday if provided
+        weekday = self.request.query_params.get('weekday')
+        if weekday:
+            queryset = queryset.filter(weekday=weekday)
+        
+        # Filter by availability status
+        is_available = self.request.query_params.get('is_available')
+        if is_available is not None:
+            queryset = queryset.filter(is_available=is_available.lower() == 'true')
+        
+        return queryset.order_by('weekday', 'start_time')
+    
+    def perform_create(self, serializer):
+        """
+        Ensure doctors can only create their own availability
+        """
+        if self.request.user.roles.filter(name='doctor').exists():
+            try:
+                doctor = self.request.user.doctor
+                serializer.save(doctor=doctor)
+            except Doctor.DoesNotExist:
+                raise serializers.ValidationError("Doctor profile not found")
+        else:
+            # Admin can create for any doctor
+            serializer.save()
+    
+    def perform_update(self, serializer):
+        """
+        Ensure doctors can only update their own availability
+        """
+        if self.request.user.roles.filter(name='doctor').exists():
+            try:
+                doctor = self.request.user.doctor
+                if serializer.instance.doctor != doctor:
+                    raise serializers.ValidationError("You can only update your own availability")
+                serializer.save()
+            except Doctor.DoesNotExist:
+                raise serializers.ValidationError("Doctor profile not found")
+        else:
+            # Admin can update any availability
+            serializer.save()
+    
+    @action(detail=False, methods=['get'])
+    def my_availability(self, request):
+        """
+        Get the current doctor's availability
+        """
+        if not request.user.roles.filter(name='doctor').exists():
+            return Response({
+                'error': 'Only doctors can access this endpoint'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            doctor = request.user.doctor
+            availability = DoctorAvailability.objects.filter(doctor=doctor)
+            serializer = self.get_serializer(availability, many=True)
+            return Response(serializer.data)
+        except Doctor.DoesNotExist:
+            return Response({
+                'error': 'Doctor profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
