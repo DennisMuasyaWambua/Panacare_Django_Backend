@@ -311,6 +311,17 @@ TWILIO_API_KEY_SECRET = os.environ.get('TWILIO_API_KEY_SECRET', '')
 # Custom User model
 AUTH_USER_MODEL = 'users.User'
 
+# Pesapal Configuration
+PESAPAL_CONSUMER_KEY = os.environ.get('PESAPAL_CONSUMER_KEY', '')
+PESAPAL_CONSUMER_SECRET = os.environ.get('PESAPAL_CONSUMER_SECRET', '')
+PESAPAL_SANDBOX = os.environ.get('PESAPAL_SANDBOX', 'True') == 'True'
+PESAPAL_CALLBACK_URL = os.environ.get('PESAPAL_CALLBACK_URL', 'http://localhost:3000/payment/callback')
+PESAPAL_IPN_URL = os.environ.get('PESAPAL_IPN_URL', 'https://your-domain.com/api/payments/pesapal/ipn')
+PESAPAL_IPN_ID = os.environ.get('PESAPAL_IPN_ID', '')
+
+# Frontend URL for payment callbacks
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+
 # Logging configuration
 LOGGING = {
     'version': 1,
