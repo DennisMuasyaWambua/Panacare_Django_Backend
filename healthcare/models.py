@@ -695,3 +695,100 @@ class ArticleCommentLike(models.Model):
         
     def __str__(self):
         return f"{self.user.get_full_name()} liked comment on {self.comment.article.title}"
+
+
+class Package(models.Model):
+    """
+    Subscription package model
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    duration_days = models.IntegerField(help_text="Duration in days")
+    consultation_limit = models.IntegerField(help_text="Number of consultations allowed")
+    features = models.JSONField(default=dict, help_text="Additional features as JSON")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Package"
+        verbose_name_plural = "Packages"
+        ordering = ['price']
+    
+    def __str__(self):
+        return f"{self.name} - ${self.price}"
+
+
+class PatientSubscription(models.Model):
+    """
+    Patient subscription model
+    """
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('expired', 'Expired'),
+        ('cancelled', 'Cancelled'),
+        ('pending', 'Pending'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    patient = models.ForeignKey('users.Patient', on_delete=models.CASCADE, related_name='subscriptions')
+    package = models.ForeignKey(Package, on_delete=models.CASCADE, related_name='subscriptions')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    start_date = models.DateField()
+    end_date = models.DateField()
+    consultations_used = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Patient Subscription"
+        verbose_name_plural = "Patient Subscriptions"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.patient.user.get_full_name()} - {self.package.name}"
+    
+    @property
+    def is_active(self):
+        from django.utils import timezone
+        return (self.status == 'active' and 
+                self.start_date <= timezone.now().date() <= self.end_date)
+    
+    @property
+    def consultations_remaining(self):
+        return max(0, self.package.consultation_limit - self.consultations_used)
+
+
+class DoctorAvailability(models.Model):
+    """
+    Doctor availability model for scheduling
+    """
+    WEEKDAY_CHOICES = [
+        (0, 'Monday'),
+        (1, 'Tuesday'),
+        (2, 'Wednesday'),
+        (3, 'Thursday'),
+        (4, 'Friday'),
+        (5, 'Saturday'),
+        (6, 'Sunday'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.ForeignKey('doctors.Doctor', on_delete=models.CASCADE, related_name='availability')
+    weekday = models.IntegerField(choices=WEEKDAY_CHOICES)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    is_available = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Doctor Availability"
+        verbose_name_plural = "Doctor Availabilities"
+        unique_together = ('doctor', 'weekday', 'start_time')
+        ordering = ['weekday', 'start_time']
+    
+    def __str__(self):
+        return f"Dr. {self.doctor.user.get_full_name()} - {self.get_weekday_display()} {self.start_time}-{self.end_time}"

@@ -1,9 +1,9 @@
 from rest_framework import serializers
 from .models import (
     HealthCare, Appointment, Consultation, ConsultationChat, DoctorRating,
-    Article, ArticleComment, ArticleCommentLike
-    # PatientDoctorAssignment, DoctorAvailability, 
-    # AppointmentDocument, Package, PatientSubscription, Resource,
+    Article, ArticleComment, ArticleCommentLike, Package, PatientSubscription, DoctorAvailability
+    # PatientDoctorAssignment,
+    # AppointmentDocument, Resource,
 )
 from doctors.serializers import DoctorSerializer
 from doctors.models import Doctor
@@ -536,3 +536,67 @@ class ArticleSerializer(serializers.ModelSerializer):
      
      def get_category_display(self, obj):
          return dict(obj._meta.get_field('category').choices).get(obj.category, obj.category)
+
+
+class PackageSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Package model
+    """
+    class Meta:
+        model = Package
+        fields = [
+            'id', 'name', 'description', 'price', 'duration_days', 
+            'consultation_limit', 'features', 'is_active',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class PatientSubscriptionSerializer(serializers.ModelSerializer):
+    """
+    Serializer for PatientSubscription model
+    """
+    patient_name = serializers.SerializerMethodField(read_only=True)
+    package_name = serializers.SerializerMethodField(read_only=True)
+    package_details = PackageSerializer(source='package', read_only=True)
+    is_active = serializers.ReadOnlyField()
+    consultations_remaining = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = PatientSubscription
+        fields = [
+            'id', 'patient', 'package', 'patient_name', 'package_name', 
+            'package_details', 'status', 'start_date', 'end_date', 
+            'consultations_used', 'is_active', 'consultations_remaining',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_patient_name(self, obj):
+        return obj.patient.user.get_full_name() or obj.patient.user.username
+    
+    def get_package_name(self, obj):
+        return obj.package.name
+
+
+class DoctorAvailabilitySerializer(serializers.ModelSerializer):
+    """
+    Serializer for DoctorAvailability model
+    """
+    doctor_name = serializers.SerializerMethodField(read_only=True)
+    weekday_display = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = DoctorAvailability
+        fields = [
+            'id', 'doctor', 'doctor_name', 'weekday', 'weekday_display',
+            'start_time', 'end_time', 'is_available',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_doctor_name(self, obj):
+        return obj.doctor.user.get_full_name() or obj.doctor.user.username
+    
+    def get_weekday_display(self, obj):
+        return obj.get_weekday_display()
