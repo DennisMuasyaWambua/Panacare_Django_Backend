@@ -21,7 +21,7 @@ import doctors.views
 from healthcare.views import (
     HealthCareViewSet, AppointmentViewSet, ConsultationViewSet, DoctorRatingViewSet,
     ArticleViewSet, ArticleCommentViewSet, PackageViewSet, PatientSubscriptionViewSet, 
-    DoctorAvailabilityViewSet
+    DoctorAvailabilityViewSet, PaymentViewSet
     # AppointmentDocumentViewSet, ResourceViewSet,
 )
 from rest_framework_simplejwt.views import (
@@ -105,6 +105,7 @@ router.register(r'appointments', AppointmentViewSet, basename='appointment')
 router.register(r'consultations', ConsultationViewSet, basename='consultation')
 router.register(r'packages', PackageViewSet, basename='package')
 router.register(r'subscriptions', PatientSubscriptionViewSet, basename='subscription')
+router.register(r'payments', PaymentViewSet, basename='payment')
 # router.register(r'resources', ResourceViewSet, basename='resource')
 router.register(r'doctor-ratings', DoctorRatingViewSet, basename='doctor-rating')
 router.register(r'articles', ArticleViewSet, basename='article')

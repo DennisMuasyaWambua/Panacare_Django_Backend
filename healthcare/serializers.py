@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     HealthCare, Appointment, Consultation, ConsultationChat, DoctorRating,
-    Article, ArticleComment, ArticleCommentLike, Package, PatientSubscription, DoctorAvailability
+    Article, ArticleComment, ArticleCommentLike, Package, PatientSubscription, DoctorAvailability, Payment
     # PatientDoctorAssignment,
     # AppointmentDocument, Resource,
 )
@@ -552,6 +552,20 @@ class PackageSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
+class PaymentSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Payment model
+    """
+    class Meta:
+        model = Payment
+        fields = [
+            'id', 'reference', 'amount', 'currency', 'payment_method', 
+            'status', 'gateway_transaction_id', 'gateway_response',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'gateway_response']
+
+
 class PatientSubscriptionSerializer(serializers.ModelSerializer):
     """
     Serializer for PatientSubscription model
@@ -559,14 +573,15 @@ class PatientSubscriptionSerializer(serializers.ModelSerializer):
     patient_name = serializers.SerializerMethodField(read_only=True)
     package_name = serializers.SerializerMethodField(read_only=True)
     package_details = PackageSerializer(source='package', read_only=True)
+    payment_details = PaymentSerializer(source='payment', read_only=True)
     is_active = serializers.ReadOnlyField()
     consultations_remaining = serializers.ReadOnlyField()
     
     class Meta:
         model = PatientSubscription
         fields = [
-            'id', 'patient', 'package', 'patient_name', 'package_name', 
-            'package_details', 'status', 'start_date', 'end_date', 
+            'id', 'patient', 'package', 'payment', 'patient_name', 'package_name', 
+            'package_details', 'payment_details', 'status', 'start_date', 'end_date', 
             'consultations_used', 'is_active', 'consultations_remaining',
             'created_at', 'updated_at'
         ]

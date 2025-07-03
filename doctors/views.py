@@ -9,7 +9,9 @@ from django.shortcuts import get_object_or_404
 from django.db import models
 from django.db.models import Avg, Count
 from django.apps import apps
+from datetime import datetime, time
 DoctorRating = apps.get_model('healthcare', 'DoctorRating')
+DoctorAvailability = apps.get_model('healthcare', 'DoctorAvailability')
 from healthcare.serializers import DoctorRatingSerializer
 
 class IsAdminUser(permissions.BasePermission):
@@ -183,7 +185,8 @@ class DoctorViewSet(viewsets.ModelViewSet):
             openapi.Parameter('specialty', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by specialty"),
             openapi.Parameter('available', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description="Filter by availability"),
             openapi.Parameter('name', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by doctor's first or last name"),
-            openapi.Parameter('location', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by doctor's location/address")
+            openapi.Parameter('location', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by doctor's location/address"),
+            openapi.Parameter('available_at', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Filter by availability at specific time (format: HH:MM, e.g., 08:40)")
         ]
     )
     def list(self, request, *args, **kwargs):
@@ -255,6 +258,25 @@ class DoctorViewSet(viewsets.ModelViewSet):
         location = self.request.query_params.get('location')
         if location:
             queryset = queryset.filter(user__address__icontains=location)
+        
+        # Filter by availability at specific time
+        available_at = self.request.query_params.get('available_at')
+        if available_at:
+            try:
+                # Parse the time string (format: HH:MM)
+                available_time = datetime.strptime(available_at, '%H:%M').time()
+                today_weekday = datetime.now().weekday()
+                
+                # Filter doctors who have availability at the specified time
+                queryset = queryset.filter(
+                    availability__weekday=today_weekday,
+                    availability__start_time__lte=available_time,
+                    availability__end_time__gte=available_time,
+                    availability__is_available=True
+                ).distinct()
+            except ValueError:
+                # If time format is invalid, ignore the filter
+                pass
             
         return queryset
         
