@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from .models import (
     HealthCare, Appointment, Consultation, ConsultationChat, DoctorRating,
     Article, ArticleComment, ArticleCommentLike, PatientDoctorAssignment,
-    Package, PatientSubscription, DoctorAvailability
+    Package, PatientSubscription, DoctorAvailability, Payment
     # AppointmentDocument, Resource,
 )
 from .serializers import (
@@ -15,7 +15,7 @@ from .serializers import (
     ConsultationSerializer, ConsultationChatSerializer,
     DoctorRatingSerializer, ArticleSerializer, ArticleCommentSerializer, 
     ArticleCommentLikeSerializer, ArticleCommentReplySerializer,
-    PackageSerializer, PatientSubscriptionSerializer, DoctorAvailabilitySerializer
+    PackageSerializer, PatientSubscriptionSerializer, DoctorAvailabilitySerializer, PaymentSerializer
     # PatientDoctorAssignmentSerializer,
     # AppointmentDocumentSerializer, ResourceSerializer,
 )
@@ -2718,6 +2718,269 @@ class PatientSubscriptionViewSet(viewsets.ModelViewSet):
             return PatientSubscription.objects.none()
         
         return queryset.order_by('-created_at')
+    
+    @action(detail=False, methods=['post'], permission_classes=[IsPatientUser])
+    def subscribe(self, request):
+        """
+        Create a new subscription with payment processing
+        """
+        try:
+            patient = request.user.patient
+            package_id = request.data.get('package_id')
+            payment_method = request.data.get('payment_method', 'pesapal')
+            
+            if not package_id:
+                return Response({
+                    'error': 'Package ID is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                package = Package.objects.get(id=package_id, is_active=True)
+            except Package.DoesNotExist:
+                return Response({
+                    'error': 'Package not found or inactive'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Create payment record
+            import secrets
+            payment_reference = f"PAY_{secrets.token_hex(8).upper()}"
+            
+            payment = Payment.objects.create(
+                reference=payment_reference,
+                amount=package.price,
+                payment_method=payment_method,
+                status='pending'
+            )
+            
+            # Create subscription
+            start_date = timezone.now().date()
+            end_date = start_date + timedelta(days=package.duration_days)
+            
+            subscription = PatientSubscription.objects.create(
+                patient=patient,
+                package=package,
+                payment=payment,
+                start_date=start_date,
+                end_date=end_date,
+                status='pending'
+            )
+            
+            # Return subscription details with payment info
+            serializer = PatientSubscriptionSerializer(subscription)
+            return Response({
+                'subscription': serializer.data,
+                'payment_reference': payment_reference,
+                'payment_url': f'/api/payments/{payment.id}/process/',
+                'message': 'Subscription created. Please complete payment.'
+            }, status=status.HTTP_201_CREATED)
+            
+        except Patient.DoesNotExist:
+            return Response({
+                'error': 'Patient profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsPatientUser])
+    def cancel_subscription(self, request, pk=None):
+        """
+        Cancel an active subscription
+        """
+        try:
+            subscription = self.get_object()
+            patient = request.user.patient
+            
+            if subscription.patient != patient:
+                return Response({
+                    'error': 'You can only cancel your own subscriptions'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            if subscription.status != 'active':
+                return Response({
+                    'error': 'Only active subscriptions can be cancelled'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            subscription.status = 'cancelled'
+            subscription.save()
+            
+            return Response({
+                'message': 'Subscription cancelled successfully'
+            }, status=status.HTTP_200_OK)
+            
+        except Patient.DoesNotExist:
+            return Response({
+                'error': 'Patient profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+
+class PaymentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for handling payment processing
+    """
+    queryset = Payment.objects.all()
+    serializer_class = PaymentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_permissions(self):
+        """
+        Only authenticated users can access payment endpoints
+        """
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            permission_classes = [IsAdminUser]
+        else:
+            permission_classes = [permissions.IsAuthenticated]
+        return [permission() for permission in permission_classes]
+    
+    def get_queryset(self):
+        """
+        Filter payments by user role
+        """
+        queryset = Payment.objects.all()
+        
+        if self.request.user.roles.filter(name='admin').exists():
+            # Admin can see all payments
+            pass
+        elif self.request.user.roles.filter(name='patient').exists():
+            # Patients can only see payments for their subscriptions
+            try:
+                patient = self.request.user.patient
+                queryset = queryset.filter(subscriptions__patient=patient)
+            except Patient.DoesNotExist:
+                return Payment.objects.none()
+        else:
+            return Payment.objects.none()
+        
+        return queryset.order_by('-created_at')
+    
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def process(self, request, pk=None):
+        """
+        Process payment using Pesapal
+        """
+        try:
+            payment = self.get_object()
+            
+            # Check if payment belongs to current user (if not admin)
+            if not request.user.roles.filter(name='admin').exists():
+                try:
+                    patient = request.user.patient
+                    if not payment.subscriptions.filter(patient=patient).exists():
+                        return Response({
+                            'error': 'Payment not found'
+                        }, status=status.HTTP_404_NOT_FOUND)
+                except Patient.DoesNotExist:
+                    return Response({
+                        'error': 'Patient profile not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+            
+            if payment.status != 'pending':
+                return Response({
+                    'error': 'Payment already processed or failed'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update payment status to processing
+            payment.status = 'processing'
+            payment.save()
+            
+            # For now, we'll simulate Pesapal integration
+            # In a real implementation, you would integrate with Pesapal API
+            pesapal_url = f"https://pesapal.com/api/process-payment"
+            
+            return Response({
+                'payment_id': payment.id,
+                'payment_reference': payment.reference,
+                'amount': payment.amount,
+                'currency': payment.currency,
+                'payment_method': payment.payment_method,
+                'redirect_url': pesapal_url,
+                'callback_url': f'/api/payments/{payment.id}/callback/',
+                'message': 'Payment processing initiated. You will be redirected to Pesapal.'
+            }, status=status.HTTP_200_OK)
+            
+        except Payment.DoesNotExist:
+            return Response({
+                'error': 'Payment not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+    
+    @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny])
+    def callback(self, request, pk=None):
+        """
+        Handle payment callback from Pesapal
+        """
+        try:
+            payment = Payment.objects.get(id=pk)
+            
+            # Get callback data from Pesapal
+            pesapal_transaction_id = request.data.get('pesapal_transaction_tracking_id')
+            payment_status = request.data.get('payment_status')
+            
+            # Update payment record
+            payment.gateway_transaction_id = pesapal_transaction_id
+            payment.gateway_response = request.data
+            
+            if payment_status == 'COMPLETED':
+                payment.status = 'completed'
+                
+                # Activate associated subscriptions
+                subscriptions = payment.subscriptions.all()
+                for subscription in subscriptions:
+                    subscription.status = 'active'
+                    subscription.save()
+                
+                return Response({
+                    'message': 'Payment completed successfully',
+                    'payment_status': 'completed'
+                }, status=status.HTTP_200_OK)
+            
+            elif payment_status == 'FAILED':
+                payment.status = 'failed'
+                payment.save()
+                
+                return Response({
+                    'message': 'Payment failed',
+                    'payment_status': 'failed'
+                }, status=status.HTTP_200_OK)
+            
+            else:
+                payment.status = 'pending'
+                payment.save()
+                
+                return Response({
+                    'message': 'Payment status unknown',
+                    'payment_status': 'pending'
+                }, status=status.HTTP_200_OK)
+                
+        except Payment.DoesNotExist:
+            return Response({
+                'error': 'Payment not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+    
+    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def status(self, request, pk=None):
+        """
+        Check payment status
+        """
+        try:
+            payment = self.get_object()
+            
+            # Check if payment belongs to current user (if not admin)
+            if not request.user.roles.filter(name='admin').exists():
+                try:
+                    patient = request.user.patient
+                    if not payment.subscriptions.filter(patient=patient).exists():
+                        return Response({
+                            'error': 'Payment not found'
+                        }, status=status.HTTP_404_NOT_FOUND)
+                except Patient.DoesNotExist:
+                    return Response({
+                        'error': 'Patient profile not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+            
+            serializer = PaymentSerializer(payment)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Payment.DoesNotExist:
+            return Response({
+                'error': 'Payment not found'
+            }, status=status.HTTP_404_NOT_FOUND)
 
 
 class DoctorAvailabilityViewSet(viewsets.ModelViewSet):

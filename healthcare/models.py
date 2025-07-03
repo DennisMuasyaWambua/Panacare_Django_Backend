@@ -721,6 +721,46 @@ class Package(models.Model):
         return f"{self.name} - ${self.price}"
 
 
+class Payment(models.Model):
+    """
+    Payment model for tracking subscription payments
+    """
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
+        ('refunded', 'Refunded'),
+    ]
+    
+    PAYMENT_METHOD_CHOICES = [
+        ('pesapal', 'Pesapal'),
+        ('mpesa', 'M-Pesa'),
+        ('card', 'Credit/Debit Card'),
+        ('bank', 'Bank Transfer'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reference = models.CharField(max_length=100, unique=True, help_text="Payment reference from payment gateway")
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=3, default='KES')
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, default='pesapal')
+    status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
+    gateway_transaction_id = models.CharField(max_length=200, blank=True, null=True)
+    gateway_response = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Payment"
+        verbose_name_plural = "Payments"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Payment {self.reference} - {self.amount} {self.currency}"
+
+
 class PatientSubscription(models.Model):
     """
     Patient subscription model
@@ -735,6 +775,7 @@ class PatientSubscription(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     patient = models.ForeignKey('users.Patient', on_delete=models.CASCADE, related_name='subscriptions')
     package = models.ForeignKey(Package, on_delete=models.CASCADE, related_name='subscriptions')
+    payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, null=True, blank=True, related_name='subscriptions')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     start_date = models.DateField()
     end_date = models.DateField()
