@@ -75,7 +75,9 @@ def generate_twilio_token(identity, room_name):
         # Validate JWT credentials are set
         if not settings.TWILIO_ACCOUNT_SID or not settings.TWILIO_API_KEY_SID or not settings.TWILIO_API_KEY_SECRET:
             raise ValueError("JWT does not have a signing key configured. Please set TWILIO_ACCOUNT_SID, TWILIO_API_KEY_SID, and TWILIO_API_KEY_SECRET")
-            
+
+        logger.info(f"TWILIO_API_KEY_SID: { settings.TWILIO_API_KEY_SID}")  
+        logger.info(f"TWILIO_API_KEY_SECRET: { settings.TWILIO_API_KEY_SECRET}")
         # Create access token with the user identity
         token = AccessToken(
             settings.TWILIO_ACCOUNT_SID,
@@ -83,7 +85,9 @@ def generate_twilio_token(identity, room_name):
             settings.TWILIO_API_KEY_SECRET,
             identity=identity
         )
-        
+
+        logger.info(f"Token generated: {token}")
+
         # Create a Video grant and add to the token
         video_grant = VideoGrant(room=room_name)
         token.add_grant(video_grant)
