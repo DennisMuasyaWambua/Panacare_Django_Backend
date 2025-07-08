@@ -33,7 +33,7 @@ DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 # For development
 APPEND_SLASH = False
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,panacaredjangobackend-production.up.railway.app').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,panacaredjangobackend-production.up.railway.app,panacare-django-backend.onrender.com').split(',')
 
 
 # Application definition
