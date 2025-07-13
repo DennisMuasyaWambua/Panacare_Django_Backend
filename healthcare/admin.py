@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import HealthCare
+from .models import Appointment, Consultation, HealthCare, Package, Payment
 
 @admin.register(HealthCare)
 class HealthCareAdmin(admin.ModelAdmin):
@@ -8,3 +8,8 @@ class HealthCareAdmin(admin.ModelAdmin):
     search_fields = ('name', 'description', 'address', 'email')
     # filter_horizontal = ('doctors',)  # Commented out as doctors field is not active
 
+
+admin.site.register(Consultation)
+admin.site.register(Appointment)
+admin.site.register(Package)
+admin.site.register(Payment)

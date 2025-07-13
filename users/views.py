@@ -342,9 +342,13 @@ class UserLoginAPIView(APIView):
         }
     )
     def post(self, request):
-        email = request.data.get('email')
+        email = request.data.get('email') or request.data.get('username')
         password = request.data.get('password')
-        
+
+        print("Request data:", request.data)
+
+        print(email)
+        print(password)
         if not email or not password:
             return Response({
                 'error': 'Please provide both email and password'

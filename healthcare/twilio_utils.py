@@ -8,20 +8,26 @@ logger = logging.getLogger(__name__)
 
 def get_twilio_client():
     """
-    Returns a Twilio client instance
+    Returns a Twilio client instance.
     """
-    try:
+    # try:
         # Validate credentials are set
-        if not settings.TWILIO_ACCOUNT_SID or not settings.TWILIO_AUTH_TOKEN:
-            raise ValueError("TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be set")
-            
-        return Client(
-            settings.TWILIO_ACCOUNT_SID,
-            settings.TWILIO_AUTH_TOKEN
-        )
-    except Exception as e:
-        logger.error(f"Error creating Twilio client: {str(e)}")
-        raise
+    account_sid = getattr(settings, 'TWILIO_ACCOUNT_SID', None)
+    auth_token = getattr(settings, 'TWILIO_AUTH_TOKEN', None)
+
+
+    print("This is the account SID: ", account_sid)
+    print("This is the account auth_token: ", auth_token)
+
+    if not account_sid or not auth_token:
+        raise ValueError("TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be set in settings.py")
+
+    return Client(account_sid, auth_token)
+
+    # except Exception as e:
+    #     logger.error(f"Error creating Twilio client: {e}")
+    #     raise
+
 
 def create_twilio_room(room_name):
     """
@@ -35,12 +41,13 @@ def create_twilio_room(room_name):
     """
     try:
         client = get_twilio_client()
+        print("we are here......")
         room = client.video.v1.rooms.create(
             unique_name=room_name,
-            type='group',
             record_participants_on_connect=False
         )
         return room
+    
     except Exception as e:
         logger.error(f"Error creating Twilio room: {str(e)}")
         raise

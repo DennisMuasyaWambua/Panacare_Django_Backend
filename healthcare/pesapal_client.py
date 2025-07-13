@@ -45,11 +45,14 @@ class PesapalClient:
         """Make HTTP request to Pesapal API with error handling."""
         url = f"{self.base_url}{endpoint}"
         headers = self._get_headers(include_auth)
+
+        print("This is pesapal auth url:", url)
         
         try:
             if method.upper() == "GET":
                 response = requests.get(url, headers=headers, params=data)
             else:
+                print("THis is the data: ", data)
                 response = requests.post(url, headers=headers, json=data)
             
             response.raise_for_status()
@@ -71,26 +74,30 @@ class PesapalClient:
         Tokens are cached for 4 minutes to avoid frequent re-authentication.
         """
         # Check cached token first
-        cached_token = cache.get('pesapal_access_token')
-        if cached_token:
-            self.access_token = cached_token
-            return True
+        # cached_token = cache.get('pesapal_access_token')
+        # if cached_token:
+        #     self.access_token = cached_token
+        #     return True
         
         auth_data = {
             "consumer_key": self.consumer_key,
             "consumer_secret": self.consumer_secret
         }
+
+        print("This is the Auth data: ", auth_data)
         
         response = self._make_request("POST", "/api/Auth/RequestToken", auth_data, include_auth=False)
+
+        print("THis is the response: ", response)
         
-        if "error" in response:
+        if response.get("error"):
             logger.error(f"Pesapal authentication failed: {response['error']}")
             return False
         
         if "token" in response:
+            print("We have got the response token.....")
             self.access_token = response["token"]
             # Cache token for 4 minutes (tokens expire after 5 minutes)
-            cache.set('pesapal_access_token', self.access_token, 240)
             logger.info("Pesapal authentication successful")
             return True
         
@@ -113,17 +120,25 @@ class PesapalClient:
                 - account_number: Optional account number for subscriptions
                 - subscription_details: Optional subscription configuration
         """
-        if not self.access_token and not self.authenticate():
-            return {"error": {"message": "Authentication failed"}}
+        if not self.access_token:
+            if not self.authenticate():
+                return {"error": {"message": "Authentication failed"}}
         
+        print("🔸 Sending order data to Pesapal:")
+        print(json.dumps(order_data, indent=2))
+
         response = self._make_request("POST", "/api/Transactions/SubmitOrderRequest", order_data)
         
-        # If authentication expired, retry once
-        if "error" in response and "unauthorized" in str(response["error"]).lower():
-            if self.authenticate():
-                response = self._make_request("POST", "/api/Transactions/SubmitOrderRequest", order_data)
+        print("🔹 Pesapal response:")
+        print(json.dumps(response, indent=2))
+        
+        # # If authentication expired, retry once
+        # if "error" in response and "unauthorized" in str(response["error"]).lower():
+        #     if self.authenticate():
+        #         response = self._make_request("POST", "/api/Transactions/SubmitOrderRequest", order_data)
         
         return response
+
     
     def get_transaction_status(self, order_tracking_id: str) -> Dict[str, Any]:
         """

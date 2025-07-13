@@ -972,12 +972,16 @@ class ConsultationViewSet(viewsets.ModelViewSet):
             try:
                 # Try to create Twilio room and tokens
                 room = create_twilio_room(room_name)
+                
                 consultation.twilio_room_sid = room.sid
                 consultation.session_id = room.sid
                 
                 # Generate tokens for doctor and patient
                 doctor_identity = f"doctor-{consultation.appointment.doctor.id}"
                 patient_identity = f"patient-{consultation.appointment.patient.id}"
+
+                print("This is the doctor identity: ", doctor_identity)
+                print("This is the patient identity: ", patient_identity)
                 
                 consultation.doctor_token = generate_twilio_token(doctor_identity, room_name)
                 consultation.patient_token = generate_twilio_token(patient_identity, room_name)
@@ -1000,7 +1004,7 @@ class ConsultationViewSet(viewsets.ModelViewSet):
                 response_data['token'] = None
                 
                 return Response(response_data)
-            
+                
         except Exception as e:
             # Check if it's a Twilio credentials error
             error_msg = str(e)
@@ -3102,7 +3106,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
                     return Response({
                         'error': 'Patient profile not found'
                     }, status=status.HTTP_404_NOT_FOUND)
-            
+                            
             if payment.status != 'pending':
                 return Response({
                     'error': 'Payment already processed or failed'
@@ -3115,6 +3119,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
                     'error': 'No subscription associated with this payment'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
+
+            
             # Update payment status to processing
             payment.status = 'processing'
             payment.save()
@@ -3125,35 +3131,35 @@ class PaymentViewSet(viewsets.ModelViewSet):
             
             # Create order data for Pesapal
             order_data = {
-                "id": f"SUB_{subscription.id}_{payment.id}",
+                "id": f"SUB_{payment.id}",
                 "currency": payment.currency,
                 "amount": float(payment.amount),
                 "description": f"Healthcare subscription - {subscription.package.name}",
                 "callback_url": f"{settings.FRONTEND_URL}/payment/callback?payment_id={payment.id}",
                 "notification_id": getattr(settings, 'PESAPAL_IPN_ID', ''),
-                "account_number": f"PAT_{patient.id}",
+                # "account_number": f"PAT_{patient.id}",
                 "billing_address": {
                     "email_address": user.email,
-                    "phone_number": getattr(patient, 'phone_number', ''),
+                    "phone_number": '254795941990',
                     "country_code": "KE",
                     "first_name": user.first_name,
                     "last_name": user.last_name,
-                    "line_1": getattr(patient, 'address', ''),
-                    "line_2": "",
-                    "city": getattr(patient, 'city', ''),
-                    "state": "",
-                    "postal_code": "",
-                    "zip_code": ""
+                    "line_1": "Moi Avenue",      
+                    "line_2": "Suite 12",          
+                    "city": "Nairobi",           
+                    "state": "Nairobi County",    
+                    "postal_code": "00100",
+                    "zip_code": "00100" 
                 }
-            }
-            
-            # Submit order to Pesapal
+            }            
+
             pesapal_response = self.pesapal_client.submit_order_request(order_data)
             
-            if "error" in pesapal_response:
+            if pesapal_response.get("error"):
                 payment.status = 'failed'
                 payment.gateway_response = pesapal_response
                 payment.save()
+
                 
                 return Response({
                     'error': 'Payment processing failed',

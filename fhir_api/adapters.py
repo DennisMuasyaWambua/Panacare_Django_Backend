@@ -16,7 +16,7 @@ from fhir.resources.codeableconcept import CodeableConcept
 
 from users.models import User, Patient
 from doctors.models import Doctor, Education
-from healthcare.models import HealthCare  # , PatientDoctorAssignment
+from healthcare.models import HealthCare 
 import datetime
 import uuid
 
