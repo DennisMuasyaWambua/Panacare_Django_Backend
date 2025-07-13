@@ -730,11 +730,3 @@ LOGGING = {
         },
     },
 }
-# DB_ENGINE=django.db.backends.postgresql
-# DB_NAME=railway
-# DB_USER=postgres
-# DB_PASSWORD=KMPucmLSGpNSVtlymRjOITFDLWApufRl
-# DB_HOST=panacare_database.railway.internal
-# DB_PORT=5432
-
-# Database settings
