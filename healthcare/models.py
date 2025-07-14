@@ -1,6 +1,8 @@
 from django.db import models
 import uuid
 from django.conf import settings
+from datetime import timedelta
+from django.utils import timezone
 
 class HealthCareCategory(models.TextChoices):
     """

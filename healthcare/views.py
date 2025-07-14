@@ -940,7 +940,12 @@ class ConsultationViewSet(viewsets.ModelViewSet):
         """
         Endpoint for doctors to start a consultation and create a Twilio room
         """
+
+        print(request.data)
+
         consultation = self.get_object()
+        print(consultation)
+
         
         # Check if doctor owns this consultation
         if not consultation.appointment.doctor.user == request.user:
@@ -1083,41 +1088,51 @@ class ConsultationViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            # Return the appropriate token
             token = None
-            
+            now = timezone.now()
+            expired = now >= consultation.created_at + timedelta(hours=1)
+
+            # Doctor logic
             if is_doctor:
                 token = consultation.doctor_token
-            elif is_patient:
-                token = consultation.patient_token
-            
-            # If token doesn't exist or is expired, generate a new one
-            if not token:
-                room_name = consultation.twilio_room_name
-                
-                try:
-                    if is_doctor:
-                        identity = f"doctor-{consultation.appointment.doctor.id}"
+                if not token or expired:
+                    identity = f"doctor-{consultation.appointment.doctor.id}"
+                    room_name = consultation.twilio_room_name
+                    try:
                         token = generate_twilio_token(identity, room_name)
                         consultation.doctor_token = token
-                    elif is_patient:
-                        identity = f"patient-{consultation.appointment.patient.id}"
+                        consultation.created_at = now  # Reset timestamp
+                        consultation.save(update_fields=['doctor_token', 'created_at'])
+                    except Exception as twilio_error:
+                        return Response({
+                            'error': f'Video calling unavailable: {str(twilio_error)}',
+                            'consultation_active': True,
+                            'room_name': consultation.twilio_room_name
+                        }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+            # Patient logic
+            elif is_patient:
+                token = consultation.patient_token
+                if not token or expired:
+                    identity = f"patient-{consultation.appointment.patient.id}"
+                    room_name = consultation.twilio_room_name
+                    try:
                         token = generate_twilio_token(identity, room_name)
                         consultation.patient_token = token
-                    
-                    consultation.save()
-                except Exception as twilio_error:
-                    return Response({
-                        'error': f'Video calling unavailable: {str(twilio_error)}',
-                        'consultation_active': True,
-                        'room_name': consultation.twilio_room_name
-                    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-            
+                        consultation.created_at = now
+                        consultation.save(update_fields=['patient_token', 'created_at'])
+                    except Exception as twilio_error:
+                        return Response({
+                            'error': f'Video calling unavailable: {str(twilio_error)}',
+                            'consultation_active': True,
+                            'room_name': consultation.twilio_room_name
+                        }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
             return Response({
                 'token': token,
                 'room_name': consultation.twilio_room_name
             })
-            
+
         except Exception as e:
             return Response({
                 'error': f'Failed to get token: {str(e)}'
