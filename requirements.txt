@@ -1,0 +1,17 @@
+django>=5.2,<5.3
+djangorestframework>=3.16.0,<3.17.0
+djangorestframework-simplejwt>=5.3.1,<5.4.0
+python-dotenv>=1.0.0,<1.1.0
+django-cors-headers>=4.2.0,<4.3.0
+drf-yasg>=1.21.7,<1.22.0
+coreapi>=2.3.3,<2.4.0
+pyyaml>=6.0,<7.0
+uritemplate>=4.1.1
+whitenoise>=6.6.0
+django-filter>=23.0,<24.0
+pillow>=10.0.0,<10.1.0
+dj-database-url
+psycopg2-binary>=2.9.9,<2.10.0  # For PostgreSQL
+gunicorn>=21.0.0,<21.1.0  # For production deployment
+fhir.resources>=8.0.0  # FHIR Resources library
+twilio>=9.0.0  # For video consultations
