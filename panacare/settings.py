@@ -112,9 +112,9 @@ SPECTACULAR_SETTINGS = {
 }
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',  # CORS must come before CommonMiddleware
+    'django.contrib.sessions.middleware.SessionMiddleware',  # CORS must come before CommonMiddleware
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -188,17 +188,18 @@ AUTH_PASSWORD_VALIDATORS = [
 # CORS settings - Maximum permissive for development
 CORS_ORIGIN_ALLOW_ALL = True
 CORS_ALLOW_ALL_ORIGINS = True  # New in django-cors-headers 3.0.0
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_METHODS = ['*']  # Allow all methods
-CORS_ALLOW_HEADERS = ['*']  # Allow all headers
-CORS_EXPOSE_HEADERS = ['*']  # Expose all headers
-CORS_URLS_REGEX = r'.*'  # Apply to all URLs
+# CORS_ALLOW_CREDENTIALS = True
+# CORS_ALLOW_METHODS = ['*']  # Allow all methods
+# CORS_ALLOW_HEADERS = ['*']  # Allow all headers
+# CORS_EXPOSE_HEADERS = ['*']  # Expose all headers
+# CORS_URLS_REGEX = r'.*'  # Apply to all URLs
 
-# For older versions compatibility
-CORS_ORIGIN_WHITELIST = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-]
+# # For older versions compatibility
+# CORS_ORIGIN_WHITELIST = [
+#     'http://localhost:3000',
+#     'http://127.0.0.1:3000',
+    
+# ]
 
 
 # Internationalization
