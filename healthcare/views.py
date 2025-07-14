@@ -3137,7 +3137,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 "description": f"Healthcare subscription - {subscription.package.name}",
                 "callback_url": f"{settings.FRONTEND_URL}/payment/callback?payment_id={payment.id}",
                 "notification_id": getattr(settings, 'PESAPAL_IPN_ID', ''),
-                # "account_number": f"PAT_{patient.id}",
+                "account_number": f"PAT_{patient.id}",
                 "billing_address": {
                     "email_address": user.email,
                     "phone_number": '254795941990',
@@ -3209,6 +3209,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
                     'error': 'Order tracking ID is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
+
             # Verify payment status with Pesapal
             status_response = self.pesapal_client.get_transaction_status(order_tracking_id)
             
