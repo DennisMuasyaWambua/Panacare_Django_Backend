@@ -3209,7 +3209,6 @@ class PaymentViewSet(viewsets.ModelViewSet):
                     'error': 'Order tracking ID is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-
             # Verify payment status with Pesapal
             status_response = self.pesapal_client.get_transaction_status(order_tracking_id)
             
