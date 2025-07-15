@@ -1101,7 +1101,7 @@ class ConsultationViewSet(viewsets.ModelViewSet):
                     try:
                         token = generate_twilio_token(identity, room_name)
                         consultation.doctor_token = token
-                        consultation.created_at = now  # Reset timestamp
+                        consultation.created_at = now
                         consultation.save(update_fields=['doctor_token', 'created_at'])
                     except Exception as twilio_error:
                         return Response({
@@ -3476,19 +3476,11 @@ class DoctorAvailabilityViewSet(viewsets.ModelViewSet):
         queryset = DoctorAvailability.objects.all()
         
         # Filter by doctor_id if provided
-        doctor_id = self.request.query_params.get('doctor_id')
+        doctor_id = self.kwargs.get('doctor_id')
+
+        print("This is the doctor id:", doctor_id)
         if doctor_id:
-            queryset = queryset.filter(doctor_id=doctor_id)
-        
-        # Filter by weekday if provided
-        weekday = self.request.query_params.get('weekday')
-        if weekday:
-            queryset = queryset.filter(weekday=weekday)
-        
-        # Filter by availability status
-        is_available = self.request.query_params.get('is_available')
-        if is_available is not None:
-            queryset = queryset.filter(is_available=is_available.lower() == 'true')
+            queryset = queryset.filter(id=doctor_id, is_available=True)
         
         return queryset.order_by('weekday', 'start_time')
     

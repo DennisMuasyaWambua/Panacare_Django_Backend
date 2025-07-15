@@ -1,4 +1,6 @@
 from django.contrib import admin
+
+from doctors.views import DoctorAvailability
 from .models import Appointment, Consultation, HealthCare, Package, Payment
 
 @admin.register(HealthCare)
@@ -13,3 +15,4 @@ admin.site.register(Consultation)
 admin.site.register(Appointment)
 admin.site.register(Package)
 admin.site.register(Payment)
+admin.site.register(DoctorAvailability)

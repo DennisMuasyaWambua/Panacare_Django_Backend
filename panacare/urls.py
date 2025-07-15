@@ -99,7 +99,7 @@ from rest_framework.routers import DefaultRouter
 router = DefaultRouter()
 router.register(r'doctors', DoctorViewSet, basename='doctor')
 router.register(r'healthcare', HealthCareViewSet, basename='healthcare')
-router.register(r'doctor-availability', DoctorAvailabilityViewSet, basename='doctor-availability')
+# router.register(r'doctor-availability/<uuid:doctor_id>/', DoctorAvailabilityViewSet, basename='doctor-availability')
 router.register(r'appointments', AppointmentViewSet, basename='appointment')
 # router.register(r'appointment-documents', AppointmentDocumentViewSet, basename='appointment-document')
 router.register(r'consultations', ConsultationViewSet, basename='consultation')
@@ -119,6 +119,11 @@ admin_urls = [
     path('api/doctors/admin_add_doctor/', DoctorViewSet.as_view({'post': 'admin_add_doctor'}), name='admin-add-doctor'),
     path('api/doctors/admin_list_doctors/', DoctorViewSet.as_view({'get': 'admin_list_doctors'}), name='admin-list-doctors'),
     path('api/doctors/admin_view_doctor/<uuid:pk>/', DoctorViewSet.as_view({'get': 'admin_view_doctor'}), name='admin-view-doctor'),
+    path(
+        'api/doctor-availability/<uuid:doctor_id>/',
+        DoctorAvailabilityViewSet.as_view({'get': 'list'}),
+        name='doctor-availability-by-doctor'
+    ),
     path('api/doctors/admin_list_patients/', DoctorViewSet.as_view({'get': 'admin_list_patients'}), name='admin-list-patients'),
     path('api/doctors/admin_view_patient/<uuid:pk>/', DoctorViewSet.as_view({'get': 'admin_view_patient'}), name='admin-view-patient'),
     path('api/doctors/<uuid:pk>/verify/', DoctorViewSet.as_view({'patch': 'verify_doctor'}), name='verify-doctor'),
