@@ -3480,7 +3480,7 @@ class DoctorAvailabilityViewSet(viewsets.ModelViewSet):
 
         print("This is the doctor id:", doctor_id)
         if doctor_id:
-            queryset = queryset.filter(id=doctor_id, is_available=True)
+            queryset = queryset.filter(doctor=doctor_id, is_available=True)
         
         return queryset.order_by('weekday', 'start_time')
     
