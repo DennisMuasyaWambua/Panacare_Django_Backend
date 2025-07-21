@@ -18,8 +18,8 @@ from .serializers import (
     ConsultationSerializer, ConsultationChatSerializer,
     DoctorRatingSerializer, ArticleSerializer, ArticleCommentSerializer, 
     ArticleCommentLikeSerializer, ArticleCommentReplySerializer,
-    PackageSerializer, PatientSubscriptionSerializer, DoctorAvailabilitySerializer, PaymentSerializer
-    # PatientDoctorAssignmentSerializer,
+    PackageSerializer, PatientSubscriptionSerializer, DoctorAvailabilitySerializer, PaymentSerializer,
+    PatientDoctorAssignmentSerializer
     # AppointmentDocumentSerializer, ResourceSerializer,
 )
 from doctors.views import IsAdminUser, IsVerifiedUser, IsPatientUser, IsDoctorUser
