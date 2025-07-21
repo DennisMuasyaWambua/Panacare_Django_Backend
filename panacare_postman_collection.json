@@ -220,6 +220,156 @@
             },
             "description": "Update a user's profile information. Admin can update any user; users can only update their own profile."
           }
+        },
+        {
+          "name": "List All Users (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", ""]
+            },
+            "description": "List all users. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Get User Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/profile/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "profile", ""]
+            },
+            "description": "Get user's profile information. Requires authentication."
+          }
+        },
+        {
+          "name": "User Account Activation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/activate/{{uidb64}}/{{token}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "activate", "{{uidb64}}", "{{token}}", ""]
+            },
+            "description": "Activate user account using activation link. No authentication required."
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"new_password\": \"new_secure_password\",\n    \"confirm_password\": \"new_secure_password\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/reset-password/{{uidb64}}/{{token}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "reset-password", "{{uidb64}}", "{{token}}", ""]
+            },
+            "description": "Reset password using reset link. No authentication required."
+          }
+        },
+        {
+          "name": "JWT Token Refresh",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"refresh\": \"your_refresh_token_here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/token/refresh/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "token", "refresh", ""]
+            },
+            "description": "Refresh JWT access token using refresh token."
+          }
+        },
+        {
+          "name": "JWT Token Verify",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\": \"your_access_token_here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/token/verify/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "token", "verify", ""]
+            },
+            "description": "Verify JWT access token validity."
+          }
+        },
+        {
+          "name": "Verify Token (Custom)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\": \"your_access_token_here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/verify-token/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "verify-token", ""]
+            },
+            "description": "Custom token verification endpoint."
+          }
+        },
+        {
+          "name": "Test CORS",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/test-cors/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "test-cors", ""]
+            },
+            "description": "Test CORS configuration. No authentication required."
+          }
         }
       ]
     },
@@ -488,6 +638,112 @@
             },
             "description": "Admin: Verify a doctor's profile. Requires admin authentication. Set is_verified to true to approve or false to reject a doctor."
           }
+        },
+        {
+          "name": "Update Doctor",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"specialty\": \"Updated Specialty\",\n    \"experience_years\": 12,\n    \"bio\": \"Updated bio\",\n    \"is_available\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/doctors/{{doctor_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "{{doctor_id}}", ""]
+            },
+            "description": "Update doctor profile. Doctor can update their own profile; admin can update any doctor."
+          }
+        },
+        {
+          "name": "Admin View Doctor",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctors/admin_view_doctor/{{doctor_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "admin_view_doctor", "{{doctor_id}}", ""]
+            },
+            "description": "Admin: View doctor details. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Admin View Patient",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctors/admin_view_patient/{{patient_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "admin_view_patient", "{{patient_id}}", ""]
+            },
+            "description": "Admin: View patient details. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Admin List Patients",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctors/admin_list_patients/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "admin_list_patients", ""]
+            },
+            "description": "Admin: List all patients. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Submit Doctor Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"rating\": 5,\n    \"review\": \"Excellent doctor, very professional and caring.\",\n    \"is_anonymous\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/doctors/{{doctor_id}}/review/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "{{doctor_id}}", "review", ""]
+            },
+            "description": "Submit a review for a doctor. Requires patient authentication."
+          }
         }
       ]
     },
@@ -571,6 +827,86 @@
               "path": ["api", "healthcare", ""]
             },
             "description": "Create a new healthcare facility. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Update Healthcare Facility",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Updated Hospital Name\",\n    \"description\": \"Updated description\",\n    \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/{{facility_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", "{{facility_id}}", ""]
+            },
+            "description": "Update healthcare facility. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Delete Healthcare Facility",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/{{facility_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", "{{facility_id}}", ""]
+            },
+            "description": "Delete healthcare facility. Requires admin authentication."
+          }
+        },
+        {
+          "name": "List Patient-Doctor Assignments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/list_patient_doctor_assignments/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", "list_patient_doctor_assignments", ""]
+            },
+            "description": "List patient-doctor assignments. Requires admin authentication."
+          }
+        },
+        {
+          "name": "View Assignment Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/view_assignment/{{assignment_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", "view_assignment", "{{assignment_id}}", ""]
+            },
+            "description": "View assignment details. Requires admin authentication."
           }
         },
         {
@@ -950,6 +1286,68 @@
             },
             "description": "Get the current doctor's availability. Requires doctor authentication."
           }
+        },
+        {
+          "name": "Get Doctor Availability by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctor-availability/{{doctor_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctor-availability", "{{doctor_id}}", ""]
+            },
+            "description": "Get doctor availability by doctor ID. Requires authentication."
+          }
+        },
+        {
+          "name": "Update Doctor Availability",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"day_of_week\": 2,\n    \"start_time\": \"10:00:00\",\n    \"end_time\": \"18:00:00\",\n    \"is_available\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/doctor-availability/{{availability_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctor-availability", "{{availability_id}}", ""]
+            },
+            "description": "Update doctor availability. Doctor can update their own; admin can update any."
+          }
+        },
+        {
+          "name": "Delete Doctor Availability",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctor-availability/{{availability_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctor-availability", "{{availability_id}}", ""]
+            },
+            "description": "Delete doctor availability. Doctor can delete their own; admin can delete any."
+          }
         }
       ]
     },
@@ -1046,6 +1444,148 @@
               "path": ["api", "consultations", "{{consultation_id}}", "end_consultation", ""]
             },
             "description": "End a consultation. Requires doctor authentication."
+          }
+        },
+        {
+          "name": "Update Consultation",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"completed\",\n    \"notes\": \"Consultation completed successfully\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", ""]
+            },
+            "description": "Update consultation details. Requires doctor authentication."
+          }
+        },
+        {
+          "name": "Delete Consultation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", ""]
+            },
+            "description": "Delete consultation. Requires doctor or admin authentication."
+          }
+        },
+        {
+          "name": "Get Twilio Token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/get_token/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", "get_token", ""]
+            },
+            "description": "Get Twilio token for video consultation. Requires authentication."
+          }
+        },
+        {
+          "name": "Join Consultation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/join_consultation/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", "join_consultation", ""]
+            },
+            "description": "Join a consultation. Requires doctor or patient authentication."
+          }
+        },
+        {
+          "name": "Get Chat Messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/chat_messages/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", "chat_messages", ""]
+            },
+            "description": "Get chat messages for a consultation. Requires authentication."
+          }
+        },
+        {
+          "name": "Send Chat Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"message\": \"Hello, how are you feeling today?\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/send_message/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", "send_message", ""]
+            },
+            "description": "Send a chat message during consultation. Requires authentication."
+          }
+        },
+        {
+          "name": "Mark Messages as Read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/mark_messages_read/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", "mark_messages_read", ""]
+            },
+            "description": "Mark chat messages as read. Requires authentication."
           }
         }
       ]
@@ -1192,6 +1732,182 @@
               "path": ["api", "subscriptions", "{{subscription_id}}", "cancel_subscription", ""]
             },
             "description": "Cancel a subscription. Patients can cancel their own; admins can cancel any."
+          }
+        },
+        {
+          "name": "Subscribe to Package",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"package_id\": \"{{package_id}}\",\n    \"payment_method\": \"credit_card\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/subscribe/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", "subscribe", ""]
+            },
+            "description": "Subscribe to a package. Requires patient authentication."
+          }
+        },
+        {
+          "name": "Get Active Subscriptions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/active/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", "active", ""]
+            },
+            "description": "Get active subscriptions for the current patient. Requires patient authentication."
+          }
+        },
+        {
+          "name": "Upgrade Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"new_package_id\": \"{{package_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/upgrade/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", "upgrade", ""]
+            },
+            "description": "Upgrade subscription to a higher tier. Requires patient authentication."
+          }
+        },
+        {
+          "name": "Downgrade Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"new_package_id\": \"{{package_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/downgrade/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", "downgrade", ""]
+            },
+            "description": "Downgrade subscription to a lower tier. Requires patient authentication."
+          }
+        },
+        {
+          "name": "Renew Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/{{subscription_id}}/renew/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", "{{subscription_id}}", "renew", ""]
+            },
+            "description": "Renew a subscription. Requires patient authentication."
+          }
+        },
+        {
+          "name": "Get Subscription Usage",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/{{subscription_id}}/usage/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", "{{subscription_id}}", "usage", ""]
+            },
+            "description": "Get subscription usage details. Requires patient authentication."
+          }
+        },
+        {
+          "name": "Update Package",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Updated Package Name\",\n    \"price\": 199.99,\n    \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/packages/{{package_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "packages", "{{package_id}}", ""]
+            },
+            "description": "Update a package. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Delete Package",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/packages/{{package_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "packages", "{{package_id}}", ""]
+            },
+            "description": "Delete a package. Requires admin authentication."
           }
         }
       ]
@@ -1519,6 +2235,699 @@
           }
         }
       ]
+    },
+    {
+      "name": "Articles",
+      "item": [
+        {
+          "name": "List Articles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", ""]
+            },
+            "description": "List all articles. Requires authentication."
+          }
+        },
+        {
+          "name": "Create Article",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"title\": \"Understanding Diabetes\",\n    \"content\": \"Detailed article about diabetes management...\",\n    \"summary\": \"A comprehensive guide to diabetes management\",\n    \"category\": \"Health Education\",\n    \"tags\": \"diabetes, health, management\",\n    \"is_published\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/articles/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", ""]
+            },
+            "description": "Create a new article. Requires doctor or admin authentication."
+          }
+        },
+        {
+          "name": "Get Article Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/{{article_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "{{article_id}}", ""]
+            },
+            "description": "Get article details. Requires authentication."
+          }
+        },
+        {
+          "name": "Update Article",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"title\": \"Updated Article Title\",\n    \"content\": \"Updated article content...\",\n    \"is_published\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/articles/{{article_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "{{article_id}}", ""]
+            },
+            "description": "Update article. Author or admin can update."
+          }
+        },
+        {
+          "name": "Delete Article",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/{{article_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "{{article_id}}", ""]
+            },
+            "description": "Delete article. Author or admin can delete."
+          }
+        },
+        {
+          "name": "Approve Article (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/{{article_id}}/approve/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "{{article_id}}", "approve", ""]
+            },
+            "description": "Approve article for publication. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Publish Article",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/{{article_id}}/publish/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "{{article_id}}", "publish", ""]
+            },
+            "description": "Publish article. Requires doctor or admin authentication."
+          }
+        },
+        {
+          "name": "Unpublish Article",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/{{article_id}}/unpublish/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "{{article_id}}", "unpublish", ""]
+            },
+            "description": "Unpublish article. Requires doctor or admin authentication."
+          }
+        },
+        {
+          "name": "Track Article View",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/{{article_id}}/view/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "{{article_id}}", "view", ""]
+            },
+            "description": "Track article view. Requires authentication."
+          }
+        },
+        {
+          "name": "My Articles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/my_articles/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "my_articles", ""]
+            },
+            "description": "Get user's articles. Requires authentication."
+          }
+        },
+        {
+          "name": "Featured Articles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/featured/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "featured", ""]
+            },
+            "description": "Get featured articles. Requires authentication."
+          }
+        },
+        {
+          "name": "Popular Articles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/popular/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "popular", ""]
+            },
+            "description": "Get popular articles. Requires authentication."
+          }
+        },
+        {
+          "name": "Recent Articles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/recent/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "recent", ""]
+            },
+            "description": "Get recent articles. Requires authentication."
+          }
+        },
+        {
+          "name": "Articles by Condition",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/by_condition/?condition=diabetes",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "by_condition", ""],
+              "query": [
+                {
+                  "key": "condition",
+                  "value": "diabetes"
+                }
+              ]
+            },
+            "description": "Get articles by medical condition. Requires authentication."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Article Comments",
+      "item": [
+        {
+          "name": "List Article Comments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/article-comments/?article_id={{article_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "article-comments", ""],
+              "query": [
+                {
+                  "key": "article_id",
+                  "value": "{{article_id}}"
+                }
+              ]
+            },
+            "description": "List comments for an article. Requires authentication."
+          }
+        },
+        {
+          "name": "Create Article Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"article\": \"{{article_id}}\",\n    \"content\": \"This is a very informative article. Thank you for sharing!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/article-comments/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "article-comments", ""]
+            },
+            "description": "Create a comment on an article. Requires authentication."
+          }
+        },
+        {
+          "name": "Update Article Comment",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"content\": \"Updated comment content\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/article-comments/{{comment_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "article-comments", "{{comment_id}}", ""]
+            },
+            "description": "Update comment. Author can update their own comment."
+          }
+        },
+        {
+          "name": "Delete Article Comment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/article-comments/{{comment_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "article-comments", "{{comment_id}}", ""]
+            },
+            "description": "Delete comment. Author or admin can delete."
+          }
+        },
+        {
+          "name": "Like Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/article-comments/{{comment_id}}/like/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "article-comments", "{{comment_id}}", "like", ""]
+            },
+            "description": "Like a comment. Requires authentication."
+          }
+        },
+        {
+          "name": "Unlike Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/article-comments/{{comment_id}}/unlike/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "article-comments", "{{comment_id}}", "unlike", ""]
+            },
+            "description": "Unlike a comment. Requires authentication."
+          }
+        },
+        {
+          "name": "Reply to Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"content\": \"Thank you for your feedback!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/article-comments/{{comment_id}}/reply/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "article-comments", "{{comment_id}}", "reply", ""]
+            },
+            "description": "Reply to a comment. Requires authentication."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "List Payments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/payments/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", ""]
+            },
+            "description": "List payments. Admin can see all; users see their own."
+          }
+        },
+        {
+          "name": "Create Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"amount\": 99.99,\n    \"currency\": \"USD\",\n    \"payment_method\": \"credit_card\",\n    \"description\": \"Monthly subscription payment\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", ""]
+            },
+            "description": "Create a payment. Requires authentication."
+          }
+        },
+        {
+          "name": "Get Payment Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/payments/{{payment_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "{{payment_id}}", ""]
+            },
+            "description": "Get payment details. Requires authentication."
+          }
+        },
+        {
+          "name": "Process Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"payment_token\": \"tok_1234567890\",\n    \"confirm_payment\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/{{payment_id}}/process/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "{{payment_id}}", "process", ""]
+            },
+            "description": "Process a payment. Requires authentication."
+          }
+        },
+        {
+          "name": "Payment Callback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"payment_id\": \"{{payment_id}}\",\n    \"status\": \"completed\",\n    \"transaction_id\": \"txn_1234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/{{payment_id}}/callback/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "{{payment_id}}", "callback", ""]
+            },
+            "description": "Payment callback webhook. No authentication required."
+          }
+        },
+        {
+          "name": "Payment IPN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"payment_id\": \"{{payment_id}}\",\n    \"status\": \"completed\",\n    \"amount\": 99.99\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/ipn/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "ipn", ""]
+            },
+            "description": "Instant Payment Notification. No authentication required."
+          }
+        },
+        {
+          "name": "Get Payment Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/payments/{{payment_id}}/status/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "{{payment_id}}", "status", ""]
+            },
+            "description": "Get payment status. Requires authentication."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Roles",
+      "item": [
+        {
+          "name": "List Roles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/roles/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "roles", ""]
+            },
+            "description": "List all roles. Requires authentication."
+          }
+        },
+        {
+          "name": "Get Role Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/roles/{{role_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "roles", "{{role_id}}", ""]
+            },
+            "description": "Get role details. Requires authentication."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documentation",
+      "item": [
+        {
+          "name": "Swagger UI",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/swagger/",
+              "host": ["{{base_url}}"],
+              "path": ["swagger", ""]
+            },
+            "description": "Access Swagger UI documentation. No authentication required."
+          }
+        },
+        {
+          "name": "Swagger JSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/swagger.json",
+              "host": ["{{base_url}}"],
+              "path": ["swagger.json"]
+            },
+            "description": "Get Swagger JSON schema. No authentication required."
+          }
+        },
+        {
+          "name": "Swagger YAML",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/swagger.yaml",
+              "host": ["{{base_url}}"],
+              "path": ["swagger.yaml"]
+            },
+            "description": "Get Swagger YAML schema. No authentication required."
+          }
+        },
+        {
+          "name": "ReDoc",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/redoc/",
+              "host": ["{{base_url}}"],
+              "path": ["redoc", ""]
+            },
+            "description": "Access ReDoc documentation. No authentication required."
+          }
+        }
+      ]
     }
   ],
   "variable": [
@@ -1528,7 +2937,7 @@
       "type": "string"
     },
     {
-      "key": "token",
+      "key": "jwt_token",
       "value": "your_jwt_token_here",
       "type": "string"
     },
@@ -1569,6 +2978,46 @@
     },
     {
       "key": "subscription_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "article_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "comment_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "payment_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "role_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "availability_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "assignment_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "uidb64",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token",
       "value": "",
       "type": "string"
     }
