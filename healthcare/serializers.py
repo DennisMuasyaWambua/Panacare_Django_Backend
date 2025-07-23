@@ -1,8 +1,8 @@
 from rest_framework import serializers
 from .models import (
     HealthCare, Appointment, Consultation, ConsultationChat, DoctorRating,
-    Article, ArticleComment, ArticleCommentLike, Package, PatientSubscription, DoctorAvailability, Payment
-    # PatientDoctorAssignment,
+    Article, ArticleComment, ArticleCommentLike, Package, PatientDoctorAssignment, PatientSubscription, DoctorAvailability, Payment,
+    PatientDoctorAssignment,
     # AppointmentDocument, Resource,
 )
 from doctors.serializers import DoctorSerializer
