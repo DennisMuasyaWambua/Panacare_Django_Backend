@@ -19,8 +19,8 @@ from .serializers import (
     DoctorRatingSerializer, ArticleSerializer, ArticleCommentSerializer, 
     ArticleCommentLikeSerializer, ArticleCommentReplySerializer,
     PackageSerializer, PatientSubscriptionSerializer, DoctorAvailabilitySerializer, PaymentSerializer,
-    PatientDoctorAssignmentSerializer
-    # AppointmentDocumentSerializer, ResourceSerializer,
+    PatientDoctorAssignmentSerializer,
+  #  AppointmentDocumentSerializer, ResourceSerializer,
 )
 from doctors.views import IsAdminUser, IsVerifiedUser, IsPatientUser, IsDoctorUser
 from users.models import User, Role, Patient

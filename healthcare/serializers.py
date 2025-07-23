@@ -88,99 +88,99 @@ class HealthCareSerializer(serializers.ModelSerializer):
         # Return FHIR format
         return instance.to_fhir_json()
 
-# class PatientDoctorAssignmentSerializer(serializers.ModelSerializer):
-#     patient_name = serializers.SerializerMethodField(help_text="Patient's full name")
-#     doctor_name = serializers.SerializerMethodField(help_text="Doctor's full name")
-#     healthcare_facility_name = serializers.SerializerMethodField(read_only=True, help_text="Healthcare facility name")
-#     
-#     # Add explicit field definitions with help_text for Swagger documentation
-#     patient = serializers.PrimaryKeyRelatedField(
-#         queryset=Patient.objects.all(),
-#         help_text="ID of the patient"
-#     )
-#     doctor = serializers.PrimaryKeyRelatedField(
-#         queryset=Doctor.objects.all(),
-#         help_text="ID of the doctor"
-#     )
-#     notes = serializers.CharField(required=False, help_text="Assignment notes")
-#     is_active = serializers.BooleanField(required=False, help_text="Whether the assignment is active")
-#     status = serializers.ChoiceField(
-#         choices=PatientDoctorAssignment._meta.get_field('status').choices,
-#         required=False,
-#         help_text="FHIR Encounter status code"
-#     )
-#     encounter_type = serializers.ChoiceField(
-#         choices=PatientDoctorAssignment._meta.get_field('encounter_type').choices,
-#         required=False,
-#         help_text="FHIR Encounter type code"
-#     )
-#     identifier_system = serializers.CharField(required=False, help_text="FHIR identifier system URI")
-#     reason = serializers.CharField(required=False, help_text="Reason for the encounter")
-#     healthcare_facility = serializers.PrimaryKeyRelatedField(
-#         queryset=HealthCare.objects.all(),
-#         required=False,
-#         allow_null=True,
-#         help_text="ID of the healthcare facility where the encounter takes place"
-#     )
-#     scheduled_start = serializers.DateTimeField(required=False, allow_null=True, help_text="Scheduled start time")
-#     scheduled_end = serializers.DateTimeField(required=False, allow_null=True, help_text="Scheduled end time")
-#     actual_start = serializers.DateTimeField(required=False, allow_null=True, help_text="Actual start time")
-#     actual_end = serializers.DateTimeField(required=False, allow_null=True, help_text="Actual end time")
-#     
-#     class Meta:
-#         model = PatientDoctorAssignment
-#         fields = [
-#             'id', 'patient', 'doctor', 'patient_name', 'doctor_name', 
-#             'notes', 'is_active', 'status', 'encounter_type',
-#             'identifier_system', 'reason', 'healthcare_facility', 
-#             'healthcare_facility_name', 'scheduled_start', 'scheduled_end',
-#             'actual_start', 'actual_end', 'created_at', 'updated_at'
-#         ]
-#         read_only_fields = ['id', 'created_at', 'updated_at']
-#         
-#     # No need for __init__ now that we import Patient at the top
-#     
-#     def get_patient_name(self, obj):
-#         return obj.patient.user.get_full_name() or obj.patient.user.username
-#     
-#     def get_doctor_name(self, obj):
-#         return obj.doctor.user.get_full_name() or obj.doctor.user.username
-#     
-#     def get_healthcare_facility_name(self, obj):
-#         if obj.healthcare_facility:
-#             return obj.healthcare_facility.name
-#         return None
-#     
-#     def to_representation(self, instance):
-#         """
-#         If FHIR format is requested, return FHIR JSON representation.
-#         """
-#         request = self.context.get('request')
-#         
-#         # Default to standard representation
-#         if not request or not request.query_params.get('format') == 'fhir':
-#             return super().to_representation(instance)
-#         
-#         # Return FHIR format
-#         return instance.to_fhir_json()
-# 
-# 
-# class DoctorAvailabilitySerializer(serializers.ModelSerializer):
-#     doctor_name = serializers.SerializerMethodField(read_only=True)
-#     
-#     class Meta:
-#         model = DoctorAvailability
-#         fields = [
-#             'id', 'doctor', 'doctor_name', 'day_of_week', 'start_time', 'end_time',
-#             'is_recurring', 'specific_date', 'is_available', 'notes',
-#             'created_at', 'updated_at'
-#         ]
-#         read_only_fields = ['id', 'created_at', 'updated_at']
-#         
-#     def get_doctor_name(self, obj):
-#         return obj.doctor.user.get_full_name() or obj.doctor.user.username
-# 
-# 
+class PatientDoctorAssignmentSerializer(serializers.ModelSerializer):
+    patient_name = serializers.SerializerMethodField(help_text="Patient's full name")
+    doctor_name = serializers.SerializerMethodField(help_text="Doctor's full name")
+    healthcare_facility_name = serializers.SerializerMethodField(read_only=True, help_text="Healthcare facility name")
+    
+    # Add explicit field definitions with help_text for Swagger documentation
+    patient = serializers.PrimaryKeyRelatedField(
+        queryset=Patient.objects.all(),
+        help_text="ID of the patient"
+    )
+    doctor = serializers.PrimaryKeyRelatedField(
+        queryset=Doctor.objects.all(),
+        help_text="ID of the doctor"
+    )
+    notes = serializers.CharField(required=False, help_text="Assignment notes")
+    is_active = serializers.BooleanField(required=False, help_text="Whether the assignment is active")
+    status = serializers.ChoiceField(
+        choices=PatientDoctorAssignment._meta.get_field('status').choices,
+        required=False,
+        help_text="FHIR Encounter status code"
+    )
+    encounter_type = serializers.ChoiceField(
+        choices=PatientDoctorAssignment._meta.get_field('encounter_type').choices,
+        required=False,
+        help_text="FHIR Encounter type code"
+    )
+    identifier_system = serializers.CharField(required=False, help_text="FHIR identifier system URI")
+    reason = serializers.CharField(required=False, help_text="Reason for the encounter")
+    healthcare_facility = serializers.PrimaryKeyRelatedField(
+        queryset=HealthCare.objects.all(),
+        required=False,
+        allow_null=True,
+        help_text="ID of the healthcare facility where the encounter takes place"
+    )
+    scheduled_start = serializers.DateTimeField(required=False, allow_null=True, help_text="Scheduled start time")
+    scheduled_end = serializers.DateTimeField(required=False, allow_null=True, help_text="Scheduled end time")
+    actual_start = serializers.DateTimeField(required=False, allow_null=True, help_text="Actual start time")
+    actual_end = serializers.DateTimeField(required=False, allow_null=True, help_text="Actual end time")
+    
+    class Meta:
+        model = PatientDoctorAssignment
+        fields = [
+            'id', 'patient', 'doctor', 'patient_name', 'doctor_name', 
+            'notes', 'is_active', 'status', 'encounter_type',
+            'identifier_system', 'reason', 'healthcare_facility', 
+            'healthcare_facility_name', 'scheduled_start', 'scheduled_end',
+            'actual_start', 'actual_end', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        
+    # No need for __init__ now that we import Patient at the top
+    
+    def get_patient_name(self, obj):
+        return obj.patient.user.get_full_name() or obj.patient.user.username
+    
+    def get_doctor_name(self, obj):
+        return obj.doctor.user.get_full_name() or obj.doctor.user.username
+    
+    def get_healthcare_facility_name(self, obj):
+        if obj.healthcare_facility:
+            return obj.healthcare_facility.name
+        return None
+    
+    def to_representation(self, instance):
+        """
+        If FHIR format is requested, return FHIR JSON representation.
+        """
+        request = self.context.get('request')
+        
+        # Default to standard representation
+        if not request or not request.query_params.get('format') == 'fhir':
+            return super().to_representation(instance)
+        
+        # Return FHIR format
+        return instance.to_fhir_json()
+
+
+class DoctorAvailabilitySerializer(serializers.ModelSerializer):
+    doctor_name = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = DoctorAvailability
+        fields = [
+            'id', 'doctor', 'doctor_name', 'day_of_week', 'start_time', 'end_time',
+            'is_recurring', 'specific_date', 'is_available', 'notes',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        
+    def get_doctor_name(self, obj):
+        return obj.doctor.user.get_full_name() or obj.doctor.user.username
+
+
 class AppointmentSerializer(serializers.ModelSerializer):
     patient_name = serializers.SerializerMethodField(read_only=True)
     doctor_name = serializers.SerializerMethodField(read_only=True)
