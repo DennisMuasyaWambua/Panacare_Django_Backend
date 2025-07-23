@@ -182,6 +182,38 @@ class PatientDoctorAssignment(models.Model):
     doctor = models.ForeignKey('doctors.Doctor', on_delete=models.CASCADE, related_name='patient_assignments')
     notes = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    
+    # FHIR Encounter fields
+    status = models.CharField(
+        max_length=20,
+        choices=EncounterStatus.choices,
+        default=EncounterStatus.IN_PROGRESS
+    )
+    encounter_type = models.CharField(
+        max_length=10,
+        choices=EncounterType.choices,
+        default=EncounterType.AMBULATORY
+    )
+    identifier_system = models.CharField(
+        max_length=255, 
+        default="urn:panacare:encounter", 
+        blank=True
+    )
+    reason = models.TextField(blank=True)
+    healthcare_facility = models.ForeignKey(
+        HealthCare, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='patient_assignments'
+    )
+    
+    # Scheduling fields
+    scheduled_start = models.DateTimeField(null=True, blank=True)
+    scheduled_end = models.DateTimeField(null=True, blank=True)
+    actual_start = models.DateTimeField(null=True, blank=True)
+    actual_end = models.DateTimeField(null=True, blank=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -191,74 +223,74 @@ class PatientDoctorAssignment(models.Model):
     def __str__(self):
         return f"Patient: {self.patient.user.get_full_name()} - Doctor: {self.doctor.user.get_full_name()}"
     
-#     def to_fhir_json(self):
-#         from django.utils import timezone
-#         status = self.status
-#         if not status:
-#             status = EncounterStatus.IN_PROGRESS if self.is_active else EncounterStatus.FINISHED
-#         period = {}
-#         if self.actual_start:
-#             period["start"] = self.actual_start.isoformat()
-#         elif self.scheduled_start:
-#             period["start"] = self.scheduled_start.isoformat()
-#         else:
-#             period["start"] = self.created_at.isoformat()
-#         if self.actual_end:
-#             period["end"] = self.actual_end.isoformat()
-#         elif not self.is_active:
-#             period["end"] = self.updated_at.isoformat()
-#         fhir_json = {
-#             "resourceType": "Encounter",
-#             "id": str(self.id),
-#             "identifier": [
-#                 {
-#                     "system": self.identifier_system,
-#                     "value": str(self.id)
-#                 }
-#             ],
-#             "status": status,
-#             "class": {
-#                 "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
-#                 "code": self.encounter_type,
-#                 "display": self.get_encounter_type_display()
-#             },
-#             "subject": {
-#                 "reference": f"Patient/{self.patient.id}",
-#                 "display": self.patient.user.get_full_name() or self.patient.user.username
-#             },
-#             "participant": [
-#                 {
-#                     "individual": {
-#                         "reference": f"Practitioner/{self.doctor.id}",
-#                         "display": self.doctor.user.get_full_name() or self.doctor.user.username
-#                     },
-#                     "type": [
-#                         {
-#                             "coding": [
-#                                 {
-#                                     "system": "http://terminology.hl7.org/CodeSystem/v3-ParticipationType",
-#                                     "code": "PPRF",
-#                                     "display": "Primary performer"
-#                                 }
-#                             ]
-#                         }
-#                     ]
-#                 }
-#             ],
-#             "period": period
-#         }
-#         if self.reason or self.notes:
-#             fhir_json["reasonCode"] = [
-#                 {
-#                     "text": self.reason or self.notes
-#                 }
-#             ]
-#         if self.healthcare_facility:
-#             fhir_json["serviceProvider"] = {
-#                 "reference": f"Organization/{self.healthcare_facility.id}",
-#                 "display": self.healthcare_facility.name
-#             }
-#         return fhir_json
+    def to_fhir_json(self):
+        from django.utils import timezone
+        status = self.status
+        if not status:
+            status = EncounterStatus.IN_PROGRESS if self.is_active else EncounterStatus.FINISHED
+        period = {}
+        if self.actual_start:
+            period["start"] = self.actual_start.isoformat()
+        elif self.scheduled_start:
+            period["start"] = self.scheduled_start.isoformat()
+        else:
+            period["start"] = self.created_at.isoformat()
+        if self.actual_end:
+            period["end"] = self.actual_end.isoformat()
+        elif not self.is_active:
+            period["end"] = self.updated_at.isoformat()
+        fhir_json = {
+            "resourceType": "Encounter",
+            "id": str(self.id),
+            "identifier": [
+                {
+                    "system": self.identifier_system,
+                    "value": str(self.id)
+                }
+            ],
+            "status": status,
+            "class": {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                "code": self.encounter_type,
+                "display": self.get_encounter_type_display()
+            },
+            "subject": {
+                "reference": f"Patient/{self.patient.id}",
+                "display": self.patient.user.get_full_name() or self.patient.user.username
+            },
+            "participant": [
+                {
+                    "individual": {
+                        "reference": f"Practitioner/{self.doctor.id}",
+                        "display": self.doctor.user.get_full_name() or self.doctor.user.username
+                    },
+                    "type": [
+                        {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v3-ParticipationType",
+                                    "code": "PPRF",
+                                    "display": "Primary performer"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "period": period
+        }
+        if self.reason or self.notes:
+            fhir_json["reasonCode"] = [
+                {
+                    "text": self.reason or self.notes
+                }
+            ]
+        if self.healthcare_facility:
+            fhir_json["serviceProvider"] = {
+                "reference": f"Organization/{self.healthcare_facility.id}",
+                "display": self.healthcare_facility.name
+            }
+        return fhir_json
 
 
 # class DoctorAvailability(models.Model):
