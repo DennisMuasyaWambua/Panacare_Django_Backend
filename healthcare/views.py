@@ -3449,6 +3449,19 @@ class PaymentViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_404_NOT_FOUND)
 
 
+class IsDoctorOrAdminUser(permissions.BasePermission):
+    """
+    Permission class to check if the user has doctor role OR admin role
+    """
+    def has_permission(self, request, view):
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return False
+        
+        # Check if user has doctor role OR admin role
+        return (request.user.roles.filter(name='doctor').exists() or 
+                request.user.roles.filter(name='admin').exists())
+
 class DoctorAvailabilityViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing doctor availability
@@ -3464,7 +3477,7 @@ class DoctorAvailabilityViewSet(viewsets.ModelViewSet):
         All authenticated users can view availability
         """
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            permission_classes = [IsDoctorUser | IsAdminUser]
+            permission_classes = [IsDoctorOrAdminUser]
         else:
             permission_classes = [permissions.IsAuthenticated]
         return [permission() for permission in permission_classes]
@@ -3513,6 +3526,22 @@ class DoctorAvailabilityViewSet(viewsets.ModelViewSet):
         else:
             # Admin can update any availability
             serializer.save()
+    
+    def perform_destroy(self, instance):
+        """
+        Ensure doctors can only delete their own availability
+        """
+        if self.request.user.roles.filter(name='doctor').exists():
+            try:
+                doctor = self.request.user.doctor
+                if instance.doctor != doctor:
+                    raise serializers.ValidationError("You can only delete your own availability")
+                instance.delete()
+            except Doctor.DoesNotExist:
+                raise serializers.ValidationError("Doctor profile not found")
+        else:
+            # Admin can delete any availability
+            instance.delete()
     
     @action(detail=False, methods=['get'])
     def my_availability(self, request):
