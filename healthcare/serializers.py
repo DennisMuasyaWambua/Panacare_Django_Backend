@@ -209,6 +209,118 @@ class AppointmentSerializer(serializers.ModelSerializer):
             return obj.healthcare_facility.name
         return None
     
+    def validate(self, attrs):
+        """
+        Validate appointment times to prevent overlapping bookings
+        """
+        from django.db.models import Q
+        from datetime import datetime, timedelta
+        
+        doctor = attrs.get('doctor')
+        patient = attrs.get('patient')
+        appointment_date = attrs.get('appointment_date')
+        start_time = attrs.get('start_time')
+        end_time = attrs.get('end_time')
+        
+        # Check if this is an update (instance exists)
+        instance_id = getattr(self.instance, 'id', None) if self.instance else None
+        
+        if all([doctor, appointment_date, start_time, end_time]):
+            # Convert times to datetime for comparison
+            appointment_datetime = datetime.combine(appointment_date, start_time)
+            appointment_end_datetime = datetime.combine(appointment_date, end_time)
+            
+            # Check for overlapping appointments for the same doctor
+            doctor_conflicts = Appointment.objects.filter(
+                doctor=doctor,
+                appointment_date=appointment_date,
+                status__in=['scheduled', 'confirmed', 'in_progress']  # Active statuses
+            )
+            
+            # Exclude current instance if updating
+            if instance_id:
+                doctor_conflicts = doctor_conflicts.exclude(id=instance_id)
+            
+            for existing_appointment in doctor_conflicts:
+                existing_start = datetime.combine(
+                    existing_appointment.appointment_date,
+                    existing_appointment.start_time
+                )
+                existing_end = datetime.combine(
+                    existing_appointment.appointment_date,
+                    existing_appointment.end_time
+                )
+                
+                # Check for time overlap
+                if (appointment_datetime < existing_end and 
+                    appointment_end_datetime > existing_start):
+                    raise serializers.ValidationError(
+                        f"Doctor is not available at this time. Conflicting appointment exists from "
+                        f"{existing_appointment.start_time} to {existing_appointment.end_time}"
+                    )
+            
+            # Check for overlapping appointments for the same patient
+            patient_conflicts = Appointment.objects.filter(
+                patient=patient,
+                appointment_date=appointment_date,
+                status__in=['scheduled', 'confirmed', 'in_progress']
+            )
+            
+            # Exclude current instance if updating
+            if instance_id:
+                patient_conflicts = patient_conflicts.exclude(id=instance_id)
+            
+            for existing_appointment in patient_conflicts:
+                existing_start = datetime.combine(
+                    existing_appointment.appointment_date,
+                    existing_appointment.start_time
+                )
+                existing_end = datetime.combine(
+                    existing_appointment.appointment_date,
+                    existing_appointment.end_time
+                )
+                
+                # Check for time overlap
+                if (appointment_datetime < existing_end and 
+                    appointment_end_datetime > existing_start):
+                    raise serializers.ValidationError(
+                        f"Patient already has an appointment at this time from "
+                        f"{existing_appointment.start_time} to {existing_appointment.end_time}"
+                    )
+            
+            # Validate against doctor availability
+            from healthcare.models import DoctorAvailability
+            weekday = appointment_date.weekday()
+            
+            available_slots = DoctorAvailability.objects.filter(
+                doctor=doctor,
+                weekday=weekday,
+                is_available=True
+            )
+            
+            if not available_slots.exists():
+                raise serializers.ValidationError(
+                    f"Doctor is not available on {appointment_date.strftime('%A')}"
+                )
+            
+            # Check if appointment time falls within available hours
+            time_available = False
+            for slot in available_slots:
+                if slot.start_time <= start_time and slot.end_time >= end_time:
+                    time_available = True
+                    break
+            
+            if not time_available:
+                available_times = ", ".join([
+                    f"{slot.start_time} - {slot.end_time}" 
+                    for slot in available_slots
+                ])
+                raise serializers.ValidationError(
+                    f"Doctor is not available at this time. Available hours: {available_times}"
+                )
+        
+        return attrs
+    
     def to_representation(self, instance):
         """
         If FHIR format is requested, return FHIR JSON representation.
