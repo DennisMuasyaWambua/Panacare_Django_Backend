@@ -673,6 +673,15 @@ class Article(models.Model):
     )
     approval_date = models.DateTimeField(null=True, blank=True)
     approval_notes = models.TextField(blank=True)
+    is_rejected = models.BooleanField(default=False)
+    rejected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, blank=True, 
+        related_name='rejected_articles'
+    )
+    rejection_date = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True)
     is_published = models.BooleanField(default=False)
     publish_date = models.DateTimeField(null=True, blank=True)
     view_count = models.PositiveIntegerField(default=0)

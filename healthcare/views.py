@@ -26,6 +26,10 @@ from doctors.views import IsAdminUser, IsVerifiedUser, IsPatientUser, IsDoctorUs
 from users.models import User, Role, Patient
 from doctors.models import Doctor
 from django.shortcuts import get_object_or_404
+from django.http import HttpResponse
+from docx import Document
+from docx.shared import Inches
+import io
 
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
@@ -2101,6 +2105,44 @@ class ArticleViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(article)
         return Response(serializer.data)
     
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
+    def reject(self, request, pk=None):
+        """
+        Endpoint for admins to reject an article
+        """
+        article = self.get_object()
+        
+        # Check if article is already approved
+        if article.is_approved:
+            return Response({
+                'error': 'Cannot reject an already approved article'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Check if article is already rejected
+        if article.is_rejected:
+            return Response({
+                'error': 'Article is already rejected'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Reject the article
+        article.is_rejected = True
+        article.rejected_by = request.user
+        article.rejection_date = timezone.now()
+        
+        # Add rejection reason if provided
+        rejection_reason = request.data.get('rejection_reason')
+        if rejection_reason:
+            article.rejection_reason = rejection_reason
+        else:
+            return Response({
+                'error': 'Rejection reason is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        article.save()
+        
+        serializer = self.get_serializer(article)
+        return Response(serializer.data)
+    
     @swagger_auto_schema(
         method='post',
         operation_description="Publish an approved article. Can only be done by the article author or an admin.",
@@ -2474,6 +2516,82 @@ class ArticleViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def export_word(self, request, pk=None):
+        """
+        Export article to a Word document
+        """
+        article = self.get_object()
+        
+        # Check if user can view this article (same logic as get_queryset)
+        if not article.is_published and not request.user.is_staff:
+            # If not published, only author and admin can export
+            if hasattr(request.user, 'doctor') and article.author.user != request.user:
+                return Response({
+                    'error': 'You do not have permission to export this article'
+                }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Create Word document
+        doc = Document()
+        
+        # Add title
+        title_paragraph = doc.add_heading(article.title, level=1)
+        
+        # Add metadata
+        doc.add_paragraph(f"Author: {article.author.user.get_full_name()}")
+        doc.add_paragraph(f"Category: {article.get_category_display()}")
+        doc.add_paragraph(f"Published: {article.publish_date.strftime('%B %d, %Y') if article.publish_date else 'Not published'}")
+        doc.add_paragraph(f"Reading Time: {article.reading_time} minutes")
+        
+        if article.tags:
+            doc.add_paragraph(f"Tags: {article.tags}")
+        
+        if article.related_conditions:
+            doc.add_paragraph(f"Related Conditions: {article.related_conditions}")
+        
+        # Add separator
+        doc.add_paragraph("─" * 50)
+        
+        # Add summary if exists
+        if article.summary:
+            doc.add_heading("Summary", level=2)
+            doc.add_paragraph(article.summary)
+        
+        # Add main content
+        doc.add_heading("Content", level=2)
+        
+        # Split content into paragraphs and add them
+        content_paragraphs = article.content.split('\n')
+        for paragraph_text in content_paragraphs:
+            if paragraph_text.strip():
+                doc.add_paragraph(paragraph_text.strip())
+        
+        # Add footer with export info
+        doc.add_paragraph("")
+        doc.add_paragraph("─" * 50)
+        doc.add_paragraph(f"Exported on: {timezone.now().strftime('%B %d, %Y at %I:%M %p')}")
+        doc.add_paragraph(f"Exported by: {request.user.get_full_name()}")
+        
+        # Save document to memory
+        doc_io = io.BytesIO()
+        doc.save(doc_io)
+        doc_io.seek(0)
+        
+        # Create response
+        response = HttpResponse(
+            doc_io.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+        
+        # Set filename - sanitize title for filename
+        safe_title = "".join(c for c in article.title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        safe_title = safe_title.replace(' ', '_')[:50]  # Limit length
+        filename = f"article_{safe_title}.docx"
+        
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        return response
  
  
 class ArticleCommentViewSet(viewsets.ModelViewSet):
