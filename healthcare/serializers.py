@@ -615,6 +615,7 @@ class ArticleCommentLikeSerializer(serializers.ModelSerializer):
 class ArticleSerializer(serializers.ModelSerializer):
      author_name = serializers.SerializerMethodField(read_only=True)
      approved_by_name = serializers.SerializerMethodField(read_only=True)
+     rejected_by_name = serializers.SerializerMethodField(read_only=True)
      comments_count = serializers.SerializerMethodField(read_only=True)
      category_display = serializers.SerializerMethodField(read_only=True)
      
@@ -625,11 +626,13 @@ class ArticleSerializer(serializers.ModelSerializer):
              'category', 'category_display', 'tags', 'featured_image', 'visibility',
              'is_featured', 'related_conditions', 'reading_time',
              'is_approved', 'approved_by', 'approved_by_name', 'approval_date', 'approval_notes',
+             'is_rejected', 'rejected_by', 'rejected_by_name', 'rejection_date', 'rejection_reason',
              'is_published', 'publish_date', 'view_count', 'comments_count',
              'created_at', 'updated_at'
          ]
          read_only_fields = [
              'id', 'is_approved', 'approved_by', 'approval_date', 'approval_notes',
+             'is_rejected', 'rejected_by', 'rejection_date', 'rejection_reason',
              'view_count', 'comments_count', 'created_at', 'updated_at'
          ]
          
@@ -641,6 +644,11 @@ class ArticleSerializer(serializers.ModelSerializer):
      def get_approved_by_name(self, obj):
          if obj.approved_by:
              return obj.approved_by.get_full_name() or obj.approved_by.username
+         return None
+     
+     def get_rejected_by_name(self, obj):
+         if obj.rejected_by:
+             return obj.rejected_by.get_full_name() or obj.rejected_by.username
          return None
      
      def get_comments_count(self, obj):
