@@ -51,6 +51,140 @@ This is a Django REST Framework implementation of the Panacare Healthcare Backen
 - `GET /api/healthcare/{id}/` - Get healthcare facility details
 - `PUT /api/healthcare/{id}/` - Update healthcare facility details
 - `DELETE /api/healthcare/{id}/` - Delete healthcare facility
+- `POST /api/healthcare/assign_patient_to_doctor/` - Admin assign patient to doctor
+- `GET /api/healthcare/list_patient_doctor_assignments/` - Admin list assignments
+- `GET /api/healthcare/view_assignment/{id}/` - Admin view specific assignment
+- `GET /api/healthcare/doctor/patients/` - Doctor view assigned patients
+- `GET /api/healthcare/doctor/patient/{id}/` - Doctor view specific patient
+
+### Appointments
+- `GET /api/appointments/` - List appointments
+- `POST /api/appointments/` - Create appointment
+- `GET /api/appointments/{id}/` - Get specific appointment
+- `PUT /api/appointments/{id}/` - Update appointment
+- `DELETE /api/appointments/{id}/` - Delete appointment
+- `GET /api/appointments/my_appointments/` - Patient view own appointments
+- `GET /api/appointments/doctor_appointments/` - Doctor view own appointments
+- `POST /api/appointments/{id}/cancel_appointment/` - Patient cancel appointment
+- `POST /api/appointments/{id}/patient_reschedule/` - Patient reschedule appointment
+- `POST /api/appointments/{id}/doctor_reschedule/` - Doctor reschedule appointment
+- `POST /api/appointments/{id}/update_consultation_details/` - Doctor update consultation
+
+### Consultations
+- `GET /api/consultations/` - List consultations
+- `POST /api/consultations/` - Create consultation
+- `GET /api/consultations/{id}/` - Get specific consultation
+- `PUT /api/consultations/{id}/` - Update consultation
+- `DELETE /api/consultations/{id}/` - Delete consultation
+- `POST /api/consultations/{id}/start_consultation/` - Doctor start consultation
+- `POST /api/consultations/{id}/end_consultation/` - Doctor end consultation
+- `GET /api/consultations/{id}/get_token/` - Get Twilio token for video call
+- `POST /api/consultations/{id}/join_consultation/` - Join/rejoin consultation
+- `GET /api/consultations/{id}/chat_messages/` - Get chat messages
+- `POST /api/consultations/{id}/send_message/` - Send chat message
+- `POST /api/consultations/{id}/mark_messages_read/` - Mark messages as read
+
+### Packages & Subscriptions
+- `GET /api/packages/` - List all available subscription packages
+- `POST /api/packages/` - Create new package (admin only)
+- `GET /api/packages/{id}/` - Get specific package details
+- `PUT /api/packages/{id}/` - Update package (admin only)
+- `DELETE /api/packages/{id}/` - Delete package (admin only)
+- `GET /api/subscriptions/` - List subscriptions
+- `POST /api/subscriptions/subscribe/` - Create subscription with payment
+- `GET /api/subscriptions/active/` - Get patient's active subscription
+- `POST /api/subscriptions/{id}/cancel/` - Cancel subscription
+- `POST /api/subscriptions/upgrade/` - Upgrade subscription
+- `POST /api/subscriptions/downgrade/` - Downgrade subscription
+- `POST /api/subscriptions/{id}/renew/` - Renew subscription
+- `GET /api/subscriptions/{id}/usage/` - Get subscription usage statistics
+
+### Payments
+- `GET /api/payments/` - List payments
+- `POST /api/payments/` - Create payment
+- `GET /api/payments/{id}/` - Get specific payment
+- `PUT /api/payments/{id}/` - Update payment
+- `DELETE /api/payments/{id}/` - Delete payment
+- `POST /api/payments/{id}/process/` - Process payment via Pesapal
+- `POST /api/payments/{id}/callback/` - Payment callback from Pesapal
+- `POST /api/payments/ipn/` - Instant Payment Notification from Pesapal
+- `GET /api/payments/{id}/status/` - Check payment status
+
+### Doctor Availability
+- `GET /api/doctor-availability/` - List doctor availability
+- `POST /api/doctor-availability/` - Create availability slot
+- `GET /api/doctor-availability/{id}/` - Get specific availability
+- `PUT /api/doctor-availability/{id}/` - Update availability
+- `DELETE /api/doctor-availability/{id}/` - Delete availability
+- `GET /api/doctor-availability/{doctor_id}/` - Get availability by doctor ID
+- `GET /api/doctor-availability/my_availability/` - Doctor view own availability
+
+### Doctor Ratings & Reviews
+- `GET /api/doctor-ratings/` - List doctor ratings
+- `POST /api/doctor-ratings/` - Create doctor rating
+- `GET /api/doctor-ratings/{id}/` - Get specific rating
+- `PUT /api/doctor-ratings/{id}/` - Update rating
+- `DELETE /api/doctor-ratings/{id}/` - Delete rating
+- `GET /api/doctor-ratings/doctor_average_rating/` - Get doctor's average rating
+- `GET /api/doctors/{id}/ratings/` - Get doctor ratings
+- `GET /api/doctors/{id}/rating_summary/` - Get doctor rating summary
+- `POST /api/doctors/{id}/review/` - Patient review doctor
+
+### Articles & Content Management
+- `GET /api/articles/` - List articles
+- `POST /api/articles/` - Create article
+- `GET /api/articles/{id}/` - Get specific article
+- `PUT /api/articles/{id}/` - Update article
+- `DELETE /api/articles/{id}/` - Delete article
+- `POST /api/articles/{id}/approve/` - Admin approve article
+- `POST /api/articles/{id}/reject/` - Admin reject article
+- `POST /api/articles/{id}/publish/` - Publish approved article
+- `POST /api/articles/{id}/unpublish/` - Unpublish article
+- `POST /api/articles/{id}/view/` - Increment article view count
+- `GET /api/articles/my_articles/` - Doctor view own articles
+- `GET /api/articles/featured/` - Get featured articles
+- `GET /api/articles/popular/` - Get popular articles
+- `GET /api/articles/recent/` - Get recent articles
+- `GET /api/articles/by_condition/` - Get articles by health condition
+- `GET /api/articles/{id}/export_word/` - Export article to Word document
+
+### Article Comments
+- `GET /api/article-comments/` - List article comments
+- `POST /api/article-comments/` - Create comment
+- `GET /api/article-comments/{id}/` - Get specific comment
+- `PUT /api/article-comments/{id}/` - Update comment
+- `DELETE /api/article-comments/{id}/` - Delete comment
+- `POST /api/article-comments/{id}/like/` - Like comment
+- `POST /api/article-comments/{id}/unlike/` - Unlike comment
+- `POST /api/article-comments/{id}/reply/` - Reply to comment
+
+### Clinical Decision Support
+- `POST /api/clinical-decision/` - Process clinical data and get recommendations
+- `GET /api/clinical-history/` - Get patient's clinical decision history
+
+### Authentication & Password Management
+- `POST /api/forgot-password/` - Request password reset
+- `POST /api/reset-password/{uidb64}/{token}/` - Reset password
+- `POST /api/users/resend-verification/` - Resend verification email
+- `POST /api/users/change-password/` - Change password
+- `POST /api/users/change-email/` - Change email
+- `POST /api/users/change-phone/` - Change phone number
+- `POST /api/token/refresh/` - JWT token refresh
+- `POST /api/token/verify/` - JWT token verification
+
+### Doctor Management (Enhanced)
+- `POST /api/doctors/add_profile/` - Add doctor profile for verified users
+- `GET /api/doctors/profile/` - Get doctor's own profile
+- `POST /api/doctors/admin_add_doctor/` - Admin add doctor (creates user + doctor)
+- `GET /api/doctors/admin_list_doctors/` - Admin list all doctors
+- `GET /api/doctors/admin_view_doctor/{id}/` - Admin view specific doctor
+- `PATCH /api/doctors/{id}/verify/` - Admin verify doctor
+- `GET /api/doctors/admin_list_patients/` - Admin list all patients
+- `GET /api/doctors/admin_view_patient/{id}/` - Admin view specific patient
+
+### Support & Communication
+- `POST /api/contact-us/` - Contact us form submission
+- `POST /api/support-request/` - Support request submission
 
 ### FHIR API Access
 You can access all endpoints in FHIR format by adding the `format=fhir` query parameter:
