@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-from .models import User, Role, Patient
+from .models import User, Role, Patient, AuditLog
 
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
@@ -240,3 +240,84 @@ class SupportRequestSerializer(serializers.Serializer):
 
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True, help_text="Email address associated with your account")
+
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    """
+    Serializer for AuditLog model with read-only fields for security
+    """
+    activity_display = serializers.CharField(source='get_activity_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    formatted_time_spent = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = AuditLog
+        fields = [
+            'id', 'username', 'activity', 'activity_display', 'email_address', 
+            'role', 'time_spent', 'formatted_time_spent', 'date_joined', 
+            'last_active', 'status', 'status_display', 'ip_address', 
+            'user_agent', 'session_id', 'details', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'username', 'activity', 'activity_display', 'email_address',
+            'role', 'time_spent', 'formatted_time_spent', 'date_joined',
+            'last_active', 'status', 'status_display', 'ip_address',
+            'user_agent', 'session_id', 'details', 'created_at', 'updated_at'
+        ]
+        
+    def to_representation(self, instance):
+        """
+        Customize the representation to include additional computed fields
+        """
+        ret = super().to_representation(instance)
+        
+        # Add user full name if available
+        if hasattr(instance.user, 'first_name') and hasattr(instance.user, 'last_name'):
+            ret['full_name'] = f"{instance.user.first_name} {instance.user.last_name}".strip()
+            if not ret['full_name']:
+                ret['full_name'] = instance.username
+        else:
+            ret['full_name'] = instance.username
+            
+        # Format dates for better readability
+        if instance.created_at:
+            ret['formatted_created_at'] = instance.created_at.strftime('%d %B %Y')
+        if instance.last_active:
+            ret['formatted_last_active'] = instance.last_active.strftime('%d %B %Y')
+        if instance.date_joined:
+            ret['formatted_date_joined'] = instance.date_joined.strftime('%d %B %Y')
+            
+        return ret
+
+
+class AuditLogFilterSerializer(serializers.Serializer):
+    """
+    Serializer for audit log filtering parameters
+    """
+    search = serializers.CharField(required=False, help_text="Search by username or email")
+    role = serializers.CharField(required=False, help_text="Filter by user role")
+    status = serializers.ChoiceField(
+        choices=AuditLog.STATUS_CHOICES,
+        required=False,
+        help_text="Filter by status"
+    )
+    activity = serializers.ChoiceField(
+        choices=AuditLog.ACTIVITY_CHOICES,
+        required=False,
+        help_text="Filter by activity type"
+    )
+    date_from = serializers.DateField(required=False, help_text="Filter from date (YYYY-MM-DD)")
+    date_to = serializers.DateField(required=False, help_text="Filter to date (YYYY-MM-DD)")
+    ordering = serializers.ChoiceField(
+        choices=[
+            ('-created_at', 'Newest first'),
+            ('created_at', 'Oldest first'),
+            ('-last_active', 'Most recently active first'),
+            ('last_active', 'Least recently active first'),
+            ('username', 'Username A-Z'),
+            ('-username', 'Username Z-A'),
+        ],
+        default='-created_at',
+        required=False,
+        help_text="Order results"
+    )

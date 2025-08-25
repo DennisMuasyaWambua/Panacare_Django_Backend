@@ -19,7 +19,8 @@ from .serializers import (
     DoctorRatingSerializer, ArticleSerializer, ArticleCommentSerializer, 
     ArticleCommentLikeSerializer, ArticleCommentReplySerializer,
     PackageSerializer, PatientSubscriptionSerializer, DoctorAvailabilitySerializer, PaymentSerializer,
-    PatientDoctorAssignmentSerializer,
+    PatientDoctorAssignmentSerializer, RiskSegmentationSummarySerializer, 
+    RiskSegmentationSerializer, PatientRiskListSerializer,
   #  AppointmentDocumentSerializer, ResourceSerializer,
 )
 from doctors.views import IsAdminUser, IsVerifiedUser, IsPatientUser, IsDoctorUser
@@ -3680,3 +3681,804 @@ class DoctorAvailabilityViewSet(viewsets.ModelViewSet):
             return Response({
                 'error': 'Doctor profile not found'
             }, status=status.HTTP_404_NOT_FOUND)
+
+
+class PackagePaymentTrackerViewSet(viewsets.ViewSet):
+    """
+    Package Payment Tracker API endpoints
+    """
+    permission_classes = [IsAdminUser]
+    
+    @swagger_auto_schema(
+        operation_description="Get package payment tracker dashboard metrics",
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'total_active_subscribers': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'expiring_this_week': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'renewed_this_month': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'overdue_not_renewed': openapi.Schema(type=openapi.TYPE_INTEGER),
+                }
+            ))
+        }
+    )
+    @action(detail=False, methods=['get'], url_path='dashboard')
+    def get_dashboard_metrics(self, request):
+        """
+        Get dashboard metrics for package payment tracker
+        """
+        from django.db.models import Count, Q
+        from datetime import date, timedelta
+        
+        today = date.today()
+        week_end = today + timedelta(days=7)
+        month_start = today.replace(day=1)
+        
+        # Total Active Subscribers
+        total_active = PatientSubscription.objects.filter(
+            status='active',
+            start_date__lte=today,
+            end_date__gte=today
+        ).count()
+        
+        # Expiring This Week
+        expiring_week = PatientSubscription.objects.filter(
+            status='active',
+            end_date__range=[today, week_end]
+        ).count()
+        
+        # Renewed This Month (new subscriptions this month)
+        renewed_month = PatientSubscription.objects.filter(
+            status='active',
+            start_date__gte=month_start,
+            start_date__lte=today
+        ).count()
+        
+        # Overdue (expired but not renewed)
+        overdue = PatientSubscription.objects.filter(
+            status='expired',
+            end_date__lt=today
+        ).count()
+        
+        return Response({
+            'total_active_subscribers': total_active,
+            'expiring_this_week': expiring_week,
+            'renewed_this_month': renewed_month,
+            'overdue_not_renewed': overdue,
+        })
+    
+    @swagger_auto_schema(
+        operation_description="Get paginated list of patient subscriptions with filtering",
+        manual_parameters=[
+            openapi.Parameter('package_type', openapi.IN_QUERY, type=openapi.TYPE_STRING, 
+                            description="Filter by package name"),
+            openapi.Parameter('status', openapi.IN_QUERY, type=openapi.TYPE_STRING,
+                            description="Filter by subscription status"),
+            openapi.Parameter('search', openapi.IN_QUERY, type=openapi.TYPE_STRING,
+                            description="Search by patient name or phone"),
+            openapi.Parameter('page', openapi.IN_QUERY, type=openapi.TYPE_INTEGER,
+                            description="Page number for pagination"),
+            openapi.Parameter('page_size', openapi.IN_QUERY, type=openapi.TYPE_INTEGER,
+                            description="Number of items per page"),
+        ]
+    )
+    @action(detail=False, methods=['get'], url_path='subscriptions')
+    def get_subscriptions(self, request):
+        """
+        Get paginated list of patient subscriptions with filtering and search
+        """
+        from django.core.paginator import Paginator
+        from django.db.models import Q
+        
+        # Get query parameters
+        package_type = request.query_params.get('package_type')
+        status_filter = request.query_params.get('status')
+        search_query = request.query_params.get('search')
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 10))
+        
+        # Start with base queryset
+        queryset = PatientSubscription.objects.select_related(
+            'patient__user', 'package', 'payment'
+        ).all()
+        
+        # Apply filters
+        if package_type:
+            queryset = queryset.filter(package__name__icontains=package_type)
+        
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        if search_query:
+            queryset = queryset.filter(
+                Q(patient__user__first_name__icontains=search_query) |
+                Q(patient__user__last_name__icontains=search_query) |
+                Q(patient__user__phone_number__icontains=search_query)
+            )
+        
+        # Order by creation date (newest first)
+        queryset = queryset.order_by('-created_at')
+        
+        # Paginate
+        paginator = Paginator(queryset, page_size)
+        page_obj = paginator.get_page(page)
+        
+        # Serialize data
+        serializer = PatientSubscriptionSerializer(page_obj.object_list, many=True)
+        
+        # Prepare response data
+        response_data = {
+            'count': paginator.count,
+            'total_pages': paginator.num_pages,
+            'current_page': page,
+            'page_size': page_size,
+            'has_next': page_obj.has_next(),
+            'has_previous': page_obj.has_previous(),
+            'results': []
+        }
+        
+        # Format results to match the design
+        for subscription in serializer.data:
+            # Get patient phone from user model
+            patient_phone = None
+            if subscription.get('patient'):
+                try:
+                    patient = Patient.objects.select_related('user').get(id=subscription['patient'])
+                    patient_phone = patient.user.phone_number
+                except Patient.DoesNotExist:
+                    pass
+            
+            # Determine status display
+            status_display = subscription.get('status', '').title()
+            if subscription.get('is_active'):
+                if subscription.get('end_date'):
+                    from datetime import datetime, date
+                    end_date = datetime.strptime(subscription['end_date'], '%Y-%m-%d').date()
+                    days_until_expiry = (end_date - date.today()).days
+                    if days_until_expiry <= 7:
+                        status_display = "Expiring Soon"
+                    else:
+                        status_display = "Active"
+            
+            result_item = {
+                'id': subscription['id'],
+                'patient_name': subscription.get('patient_name', 'N/A'),
+                'phone': patient_phone or 'N/A',
+                'package': subscription.get('package_name', 'N/A'),
+                'start_date': subscription.get('start_date'),
+                'end_date': subscription.get('end_date'),
+                'status': status_display,
+                'consultations_used': subscription.get('consultations_used', 0),
+                'consultations_remaining': subscription.get('consultations_remaining', 0),
+            }
+            response_data['results'].append(result_item)
+        
+        return Response(response_data)
+    
+    @swagger_auto_schema(
+        operation_description="Send reminder notification to patient about subscription",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'message': openapi.Schema(type=openapi.TYPE_STRING, description="Custom reminder message")
+            }
+        )
+    )
+    @action(detail=True, methods=['post'], url_path='remind')
+    def send_reminder(self, request, pk=None):
+        """
+        Send reminder notification to patient about their subscription
+        """
+        try:
+            subscription = PatientSubscription.objects.select_related(
+                'patient__user', 'package'
+            ).get(id=pk)
+        except PatientSubscription.DoesNotExist:
+            return Response({
+                'error': 'Subscription not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Get custom message or use default
+        custom_message = request.data.get('message', '')
+        
+        # Prepare notification data
+        patient_name = subscription.patient.user.get_full_name() or subscription.patient.user.username
+        package_name = subscription.package.name
+        end_date = subscription.end_date.strftime('%B %d, %Y')
+        
+        if custom_message:
+            message = custom_message
+        else:
+            message = f"Hi {patient_name}, your {package_name} subscription expires on {end_date}. Please renew to continue enjoying our services."
+        
+        # Here you would integrate with your notification service (email, SMS, push notifications)
+        # For now, we'll just return a success response
+        
+        return Response({
+            'success': True,
+            'message': 'Reminder sent successfully',
+            'details': {
+                'patient_name': patient_name,
+                'package_name': package_name,
+                'end_date': end_date,
+                'notification_message': message
+            }
+        })
+    
+    @swagger_auto_schema(
+        operation_description="Export subscription data to CSV",
+        manual_parameters=[
+            openapi.Parameter('package_type', openapi.IN_QUERY, type=openapi.TYPE_STRING),
+            openapi.Parameter('status', openapi.IN_QUERY, type=openapi.TYPE_STRING),
+            openapi.Parameter('search', openapi.IN_QUERY, type=openapi.TYPE_STRING),
+        ]
+    )
+    @action(detail=False, methods=['get'], url_path='export/csv')
+    def export_csv(self, request):
+        """
+        Export subscription data to CSV file
+        """
+        import csv
+        from django.http import HttpResponse
+        from io import StringIO
+        
+        # Get filtered queryset using same logic as subscriptions endpoint
+        package_type = request.query_params.get('package_type')
+        status_filter = request.query_params.get('status')
+        search_query = request.query_params.get('search')
+        
+        queryset = PatientSubscription.objects.select_related(
+            'patient__user', 'package', 'payment'
+        ).all()
+        
+        if package_type:
+            queryset = queryset.filter(package__name__icontains=package_type)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        if search_query:
+            queryset = queryset.filter(
+                Q(patient__user__first_name__icontains=search_query) |
+                Q(patient__user__last_name__icontains=search_query) |
+                Q(patient__user__phone_number__icontains=search_query)
+            )
+        
+        queryset = queryset.order_by('-created_at')
+        
+        # Create CSV response
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="package_subscriptions.csv"'
+        
+        writer = csv.writer(response)
+        
+        # Write headers
+        writer.writerow([
+            'Patient Name', 'Phone', 'Package', 'Start Date', 'End Date',
+            'Status', 'Consultations Used', 'Consultations Remaining', 'Amount Paid'
+        ])
+        
+        # Write data rows
+        for subscription in queryset:
+            patient_name = subscription.patient.user.get_full_name() or subscription.patient.user.username
+            patient_phone = subscription.patient.user.phone_number or 'N/A'
+            amount_paid = str(subscription.payment.amount) if subscription.payment else 'N/A'
+            
+            writer.writerow([
+                patient_name,
+                patient_phone,
+                subscription.package.name,
+                subscription.start_date,
+                subscription.end_date,
+                subscription.status.title(),
+                subscription.consultations_used,
+                subscription.consultations_remaining,
+                amount_paid
+            ])
+        
+        return response
+    
+    @swagger_auto_schema(
+        operation_description="Export subscription data to PDF",
+        manual_parameters=[
+            openapi.Parameter('package_type', openapi.IN_QUERY, type=openapi.TYPE_STRING),
+            openapi.Parameter('status', openapi.IN_QUERY, type=openapi.TYPE_STRING),
+            openapi.Parameter('search', openapi.IN_QUERY, type=openapi.TYPE_STRING),
+        ]
+    )
+    @action(detail=False, methods=['get'], url_path='export/pdf')
+    def export_pdf(self, request):
+        """
+        Export subscription data to PDF file
+        """
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from io import BytesIO
+        from datetime import date
+        
+        # Get filtered queryset
+        package_type = request.query_params.get('package_type')
+        status_filter = request.query_params.get('status')
+        search_query = request.query_params.get('search')
+        
+        queryset = PatientSubscription.objects.select_related(
+            'patient__user', 'package', 'payment'
+        ).all()
+        
+        if package_type:
+            queryset = queryset.filter(package__name__icontains=package_type)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        if search_query:
+            queryset = queryset.filter(
+                Q(patient__user__first_name__icontains=search_query) |
+                Q(patient__user__last_name__icontains=search_query) |
+                Q(patient__user__phone_number__icontains=search_query)
+            )
+        
+        queryset = queryset.order_by('-created_at')
+        
+        # Create PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        elements = []
+        
+        # Styles
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=30,
+            alignment=1,  # Center alignment
+        )
+        
+        # Title
+        title = Paragraph("Package Payment Tracker Report", title_style)
+        elements.append(title)
+        elements.append(Spacer(1, 12))
+        
+        # Report date
+        date_para = Paragraph(f"Generated on: {date.today().strftime('%B %d, %Y')}", styles['Normal'])
+        elements.append(date_para)
+        elements.append(Spacer(1, 12))
+        
+        # Table data
+        data = [['Patient Name', 'Package', 'Status', 'Start Date', 'End Date', 'Consultations']]
+        
+        for subscription in queryset:
+            patient_name = subscription.patient.user.get_full_name() or subscription.patient.user.username
+            data.append([
+                patient_name,
+                subscription.package.name,
+                subscription.status.title(),
+                subscription.start_date.strftime('%Y-%m-%d'),
+                subscription.end_date.strftime('%Y-%m-%d'),
+                f"{subscription.consultations_used}/{subscription.package.consultation_limit}"
+            ])
+        
+        # Create table
+        table = Table(data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 14),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        elements.append(table)
+        
+        doc.build(elements)
+        buffer.seek(0)
+        
+        response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="package_subscriptions.pdf"'
+        
+        return response
+
+
+class RiskSegmentationViewSet(viewsets.ViewSet):
+    """
+    ViewSet for risk segmentation analytics and reporting
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Get risk segmentation summary with distribution statistics",
+        manual_parameters=[
+            openapi.Parameter(
+                'county', openapi.IN_QUERY, description="Filter by county/city", 
+                type=openapi.TYPE_STRING, required=False
+            ),
+            openapi.Parameter(
+                'date_from', openapi.IN_QUERY, description="Filter from date (YYYY-MM-DD)", 
+                type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE, required=False
+            ),
+            openapi.Parameter(
+                'date_to', openapi.IN_QUERY, description="Filter to date (YYYY-MM-DD)", 
+                type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE, required=False
+            )
+        ],
+        responses={200: RiskSegmentationSummarySerializer}
+    )
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        """
+        Get risk segmentation summary statistics
+        """
+        from django.db.models import Count, Case, When, F, Max
+        from django.db import models
+        from datetime import datetime
+        
+        # Base queryset - get latest appointments per patient
+        appointments = Appointment.objects.filter(
+            risk_level__isnull=False
+        ).exclude(risk_level='').select_related(
+            'patient__user', 'healthcare_facility'
+        )
+        
+        # Apply filters
+        county = request.query_params.get('county')
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        
+        date_range = {}
+        
+        if county:
+            appointments = appointments.filter(
+                Q(healthcare_facility__city__icontains=county) |
+                Q(patient__user__address__icontains=county)
+            )
+        
+        if date_from:
+            try:
+                date_from_parsed = datetime.strptime(date_from, '%Y-%m-%d').date()
+                appointments = appointments.filter(appointment_date__gte=date_from_parsed)
+                date_range['from'] = date_from
+            except ValueError:
+                pass
+        
+        if date_to:
+            try:
+                date_to_parsed = datetime.strptime(date_to, '%Y-%m-%d').date()
+                appointments = appointments.filter(appointment_date__lte=date_to_parsed)
+                date_range['to'] = date_to
+            except ValueError:
+                pass
+        
+        # Get latest appointment per patient to avoid duplicates
+        latest_appointments = appointments.values('patient_id').annotate(
+            latest_date=models.Max('appointment_date')
+        )
+        
+        # Filter appointments to only include the latest per patient
+        filtered_appointments = appointments.filter(
+            models.Q(patient_id__in=[item['patient_id'] for item in latest_appointments])
+        )
+        
+        # For each patient, get their most recent appointment
+        patient_risk_data = {}
+        for appointment in filtered_appointments.order_by('patient_id', '-appointment_date'):
+            if appointment.patient_id not in patient_risk_data:
+                patient_risk_data[appointment.patient_id] = appointment.risk_level
+        
+        # Count risk levels
+        risk_counts = {}
+        total_patients = len(patient_risk_data)
+        
+        for risk_level in patient_risk_data.values():
+            # Normalize risk levels to match design (severe, high, moderate)
+            normalized_risk = self._normalize_risk_level(risk_level)
+            risk_counts[normalized_risk] = risk_counts.get(normalized_risk, 0) + 1
+        
+        # Calculate percentages and create distribution
+        distribution = []
+        for risk_level in ['severe', 'high', 'moderate']:
+            count = risk_counts.get(risk_level, 0)
+            percentage = round((count / total_patients * 100), 1) if total_patients > 0 else 0
+            
+            distribution.append({
+                'risk_level': risk_level,
+                'patient_count': count,
+                'percentage': percentage
+            })
+        
+        # Prepare response data
+        response_data = {
+            'total_patients': total_patients,
+            'distribution': distribution
+        }
+        
+        if date_range:
+            response_data['date_range'] = date_range
+        if county:
+            response_data['county_filter'] = county
+        
+        serializer = RiskSegmentationSummarySerializer(data=response_data)
+        serializer.is_valid()
+        return Response(serializer.data)
+    
+    def _normalize_risk_level(self, risk_level):
+        """
+        Normalize risk levels to match the design requirements
+        """
+        if not risk_level:
+            return 'moderate'
+        
+        risk_level = risk_level.lower()
+        if risk_level in ['critical', 'severe']:
+            return 'severe'
+        elif risk_level in ['high']:
+            return 'high' 
+        elif risk_level in ['medium', 'moderate', 'low']:
+            return 'moderate'
+        else:
+            return 'moderate'
+    
+    @swagger_auto_schema(
+        operation_description="Get list of patients by risk level",
+        manual_parameters=[
+            openapi.Parameter(
+                'risk_level', openapi.IN_QUERY, 
+                description="Filter by risk level (severe, high, moderate)", 
+                type=openapi.TYPE_STRING, required=True,
+                enum=['severe', 'high', 'moderate']
+            ),
+            openapi.Parameter(
+                'county', openapi.IN_QUERY, description="Filter by county/city", 
+                type=openapi.TYPE_STRING, required=False
+            ),
+            openapi.Parameter(
+                'date_from', openapi.IN_QUERY, description="Filter from date (YYYY-MM-DD)", 
+                type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE, required=False
+            ),
+            openapi.Parameter(
+                'date_to', openapi.IN_QUERY, description="Filter to date (YYYY-MM-DD)", 
+                type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE, required=False
+            )
+        ],
+        responses={200: PatientRiskListSerializer(many=True)}
+    )
+    @action(detail=False, methods=['get'])
+    def patients(self, request):
+        """
+        Get list of patients filtered by risk level
+        """
+        from datetime import datetime
+        
+        risk_level = request.query_params.get('risk_level')
+        if not risk_level:
+            return Response({
+                'error': 'risk_level parameter is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Base queryset
+        appointments = Appointment.objects.filter(
+            risk_level__isnull=False
+        ).exclude(risk_level='').select_related(
+            'patient__user', 'doctor__user', 'healthcare_facility'
+        )
+        
+        # Apply filters
+        county = request.query_params.get('county')
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        
+        if county:
+            appointments = appointments.filter(
+                Q(healthcare_facility__city__icontains=county) |
+                Q(patient__user__address__icontains=county)
+            )
+        
+        if date_from:
+            try:
+                date_from_parsed = datetime.strptime(date_from, '%Y-%m-%d').date()
+                appointments = appointments.filter(appointment_date__gte=date_from_parsed)
+            except ValueError:
+                pass
+        
+        if date_to:
+            try:
+                date_to_parsed = datetime.strptime(date_to, '%Y-%m-%d').date()
+                appointments = appointments.filter(appointment_date__lte=date_to_parsed)
+            except ValueError:
+                pass
+        
+        # Filter by risk level - handle both original and normalized values
+        risk_level_filters = self._get_risk_level_filters(risk_level)
+        appointments = appointments.filter(risk_level__in=risk_level_filters)
+        
+        # Get latest appointment per patient
+        patient_latest_appointments = {}
+        for appointment in appointments.order_by('patient_id', '-appointment_date'):
+            if appointment.patient_id not in patient_latest_appointments:
+                patient_latest_appointments[appointment.patient_id] = appointment
+        
+        # Convert to list and apply pagination
+        latest_appointments = list(patient_latest_appointments.values())
+        
+        # Serialize and return
+        serializer = PatientRiskListSerializer(latest_appointments, many=True)
+        return Response(serializer.data)
+    
+    def _get_risk_level_filters(self, normalized_risk_level):
+        """
+        Get list of original risk levels that map to the normalized level
+        """
+        mapping = {
+            'severe': ['critical', 'severe'],
+            'high': ['high'],
+            'moderate': ['medium', 'moderate', 'low']
+        }
+        return mapping.get(normalized_risk_level.lower(), [])
+    
+    @swagger_auto_schema(
+        operation_description="Export risk segmentation data to PDF",
+        manual_parameters=[
+            openapi.Parameter(
+                'county', openapi.IN_QUERY, description="Filter by county/city", 
+                type=openapi.TYPE_STRING, required=False
+            ),
+            openapi.Parameter(
+                'date_from', openapi.IN_QUERY, description="Filter from date (YYYY-MM-DD)", 
+                type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE, required=False
+            ),
+            openapi.Parameter(
+                'date_to', openapi.IN_QUERY, description="Filter to date (YYYY-MM-DD)", 
+                type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE, required=False
+            )
+        ]
+    )
+    @action(detail=False, methods=['get'])
+    def export_pdf(self, request):
+        """
+        Export risk segmentation report to PDF
+        """
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import letter
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet
+        from datetime import datetime
+        import io
+        
+        # Get the summary data
+        summary_response = self.summary(request)
+        summary_data = summary_response.data
+        
+        # Create PDF buffer
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Title
+        title = Paragraph("Risk Segmentation Report", styles['Title'])
+        elements.append(title)
+        elements.append(Spacer(1, 12))
+        
+        # Filters applied
+        filters_text = "Filters Applied: "
+        if summary_data.get('county_filter'):
+            filters_text += f"County: {summary_data['county_filter']}, "
+        if summary_data.get('date_range'):
+            date_range = summary_data['date_range']
+            if date_range.get('from'):
+                filters_text += f"From: {date_range['from']}, "
+            if date_range.get('to'):
+                filters_text += f"To: {date_range['to']}, "
+        if filters_text.endswith(", "):
+            filters_text = filters_text[:-2]
+        
+        elements.append(Paragraph(filters_text, styles['Normal']))
+        elements.append(Spacer(1, 12))
+        
+        # Summary statistics
+        summary_text = f"Total Patients: {summary_data['total_patients']}"
+        elements.append(Paragraph(summary_text, styles['Heading2']))
+        elements.append(Spacer(1, 12))
+        
+        # Distribution table
+        data = [["Risk Level", "Patient Count", "Percentage"]]
+        for item in summary_data['distribution']:
+            data.append([
+                item['risk_level'].title(),
+                str(item['patient_count']),
+                f"{item['percentage']}%"
+            ])
+        
+        table = Table(data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 14),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        elements.append(table)
+        
+        doc.build(elements)
+        buffer.seek(0)
+        
+        response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="risk_segmentation_report.pdf"'
+        
+        return response
+    
+    @swagger_auto_schema(
+        operation_description="Export risk segmentation data to CSV",
+        manual_parameters=[
+            openapi.Parameter(
+                'county', openapi.IN_QUERY, description="Filter by county/city", 
+                type=openapi.TYPE_STRING, required=False
+            ),
+            openapi.Parameter(
+                'date_from', openapi.IN_QUERY, description="Filter from date (YYYY-MM-DD)", 
+                type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE, required=False
+            ),
+            openapi.Parameter(
+                'date_to', openapi.IN_QUERY, description="Filter to date (YYYY-MM-DD)", 
+                type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE, required=False
+            )
+        ]
+    )
+    @action(detail=False, methods=['get'])
+    def export_csv(self, request):
+        """
+        Export risk segmentation detailed data to CSV
+        """
+        import csv
+        from django.http import HttpResponse
+        from datetime import datetime
+        
+        # Get all patients data for each risk level
+        all_patients = []
+        for risk_level in ['severe', 'high', 'moderate']:
+            # Create a new request with the risk_level parameter
+            modified_params = request.query_params.copy()
+            modified_params['risk_level'] = risk_level
+            
+            # Temporarily modify the request to get patients for each risk level
+            request.query_params = modified_params
+            patients_response = self.patients(request)
+            
+            if patients_response.status_code == 200:
+                for patient_data in patients_response.data:
+                    all_patients.append(patient_data)
+        
+        # Create CSV response
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="risk_segmentation_patients.csv"'
+        
+        writer = csv.writer(response)
+        
+        # Write header
+        writer.writerow([
+            'Patient Name', 'Email', 'Age', 'County', 'Risk Level', 
+            'Latest Appointment Date', 'Doctor', 'Diagnosis', 'Treatment'
+        ])
+        
+        # Write data rows
+        for patient in all_patients:
+            writer.writerow([
+                patient.get('patient_name', ''),
+                patient.get('patient_email', ''),
+                patient.get('age', ''),
+                patient.get('county', ''),
+                patient.get('risk_level', '').title(),
+                patient.get('latest_appointment_date', ''),
+                patient.get('doctor_name', ''),
+                patient.get('diagnosis', ''),
+                patient.get('treatment', '')
+            ])
+        
+        return response

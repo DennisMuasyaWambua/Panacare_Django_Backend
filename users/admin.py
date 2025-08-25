@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, Role, Patient
+from .models import User, Role, Patient, AuditLog
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
@@ -53,4 +53,42 @@ class PatientAdmin(admin.ModelAdmin):
             'fields': ('identifier_system',)
         }),
     )
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = ('username', 'activity', 'email_address', 'role', 'status', 'created_at')
+    list_filter = ('activity', 'status', 'role', 'created_at')
+    search_fields = ('username', 'email_address', 'activity', 'role')
+    readonly_fields = ('id', 'created_at', 'updated_at', 'formatted_time_spent')
+    date_hierarchy = 'created_at'
+    ordering = ('-created_at',)
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('user', 'username', 'activity', 'email_address', 'role', 'status')
+        }),
+        ('Timing Information', {
+            'fields': ('time_spent', 'formatted_time_spent', 'date_joined', 'last_active')
+        }),
+        ('Technical Details', {
+            'fields': ('ip_address', 'user_agent', 'session_id', 'details'),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('id', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def has_add_permission(self, request):
+        # Audit logs should not be manually created through admin
+        return False
+    
+    def has_change_permission(self, request, obj=None):
+        # Audit logs should not be modified
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        # Only superusers can delete audit logs
+        return request.user.is_superuser
 
