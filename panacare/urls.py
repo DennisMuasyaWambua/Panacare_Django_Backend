@@ -14,14 +14,14 @@ from users.views import (
     UserListAPIView, UserDetailAPIView, UserRegisterAPIView, UserLoginAPIView, UserActivateAPIView,
     PatientListAPIView, PatientDetailAPIView, PatientProfileAPIView, UserProfileAPIView, register_admin_user,
     ResendVerificationAPIView, PasswordChangeAPIView, EmailChangeAPIView, PhoneChangeAPIView,
-    ContactUsAPIView, SupportRequestAPIView, ForgotPasswordAPIView, ResetPasswordAPIView
+    ContactUsAPIView, SupportRequestAPIView, ForgotPasswordAPIView, ResetPasswordAPIView, AuditLogViewSet
 )
 from doctors.views import DoctorViewSet
 import doctors.views
 from healthcare.views import (
     HealthCareViewSet, AppointmentViewSet, ConsultationViewSet, DoctorRatingViewSet,
     ArticleViewSet, ArticleCommentViewSet, PackageViewSet, PatientSubscriptionViewSet, 
-    DoctorAvailabilityViewSet, PaymentViewSet
+    DoctorAvailabilityViewSet, PaymentViewSet, PackagePaymentTrackerViewSet, RiskSegmentationViewSet
     # AppointmentDocumentViewSet, ResourceViewSet,
 )
 from rest_framework_simplejwt.views import (
@@ -110,6 +110,9 @@ router.register(r'payments', PaymentViewSet, basename='payment')
 router.register(r'doctor-ratings', DoctorRatingViewSet, basename='doctor-rating')
 router.register(r'articles', ArticleViewSet, basename='article')
 router.register(r'article-comments', ArticleCommentViewSet, basename='article-comment')
+router.register(r'audit-logs', AuditLogViewSet, basename='audit-log')
+router.register(r'package-payment-tracker', PackagePaymentTrackerViewSet, basename='package-payment-tracker')
+router.register(r'risk-segmentation', RiskSegmentationViewSet, basename='risk-segmentation')
 
 # doctor_availability_create = DoctorAvailabilityViewSet.as_view({
 #     'post': 'create'

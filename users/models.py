@@ -354,3 +354,92 @@ def create_patient_profile(sender, instance, action, pk_set, **kwargs):
         if patient_role_exists:
             # Create a Patient profile if it doesn't exist
             Patient.objects.get_or_create(user=instance)
+
+class AuditLog(models.Model):
+    """
+    Model to track user activities and audit trail for security and compliance
+    """
+    ACTIVITY_CHOICES = [
+        ('login', 'Logged In'),
+        ('logout', 'Logged Out'),
+        ('register', 'User Registration'),
+        ('profile_update', 'Profile Updated'),
+        ('password_change', 'Password Changed'),
+        ('appointment_create', 'Appointment Created'),
+        ('appointment_update', 'Appointment Updated'),
+        ('appointment_cancel', 'Appointment Cancelled'),
+        ('consultation_start', 'Consultation Started'),
+        ('consultation_end', 'Consultation Ended'),
+        ('article_create', 'Article Created'),
+        ('article_update', 'Article Updated'),
+        ('article_approve', 'Article Approved'),
+        ('article_reject', 'Article Rejected'),
+        ('user_create', 'User Created'),
+        ('user_update', 'User Updated'),
+        ('user_delete', 'User Deleted'),
+        ('role_assign', 'Role Assigned'),
+        ('subscription_create', 'Subscription Created'),
+        ('payment_process', 'Payment Processed'),
+        ('data_export', 'Data Exported'),
+        ('system_access', 'System Access'),
+        ('api_access', 'API Access'),
+        ('other', 'Other Activity'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('inactive', 'Inactive'),
+        ('suspended', 'Suspended'),
+        ('pending', 'Pending'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='audit_logs')
+    username = models.CharField(max_length=150, help_text="Username at time of activity")
+    activity = models.CharField(max_length=50, choices=ACTIVITY_CHOICES, help_text="Type of activity performed")
+    email_address = models.EmailField(help_text="Email address at time of activity")
+    role = models.CharField(max_length=100, help_text="User roles at time of activity")
+    time_spent = models.DurationField(null=True, blank=True, help_text="Time spent on activity")
+    date_joined = models.DateTimeField(help_text="When the user joined the system")
+    last_active = models.DateTimeField(auto_now=True, help_text="Last activity timestamp")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    
+    # Additional fields for context
+    ip_address = models.GenericIPAddressField(null=True, blank=True, help_text="IP address of the user")
+    user_agent = models.TextField(blank=True, help_text="User agent string")
+    session_id = models.CharField(max_length=255, blank=True, help_text="Session identifier")
+    details = models.JSONField(default=dict, blank=True, help_text="Additional activity details")
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Audit Log"
+        verbose_name_plural = "Audit Logs"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['activity', '-created_at']),
+            models.Index(fields=['status', '-created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.username} - {self.get_activity_display()} at {self.created_at}"
+    
+    @property
+    def formatted_time_spent(self):
+        """Return formatted time spent as human readable string"""
+        if not self.time_spent:
+            return "N/A"
+        
+        total_seconds = int(self.time_spent.total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        elif minutes > 0:
+            return f"{minutes}m"
+        else:
+            return f"{total_seconds}s"

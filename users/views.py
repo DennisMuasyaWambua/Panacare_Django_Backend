@@ -3,27 +3,33 @@ import logging
 import datetime
 import secrets
 import hashlib
-from rest_framework import status, permissions
+import csv
+from io import StringIO
+from rest_framework import status, permissions, viewsets, filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.renderers import BrowsableAPIRenderer, JSONRenderer
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from django.contrib.auth import authenticate, update_session_auth_hash
 from django.shortcuts import get_object_or_404
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.utils.encoding import force_str, force_bytes
 from django.contrib.auth.tokens import default_token_generator
 from django.db import models
+from django.db.models import Q
+from django.http import HttpResponse
 from rest_framework_simplejwt.tokens import RefreshToken
 from panacare.settings import SIMPLE_JWT
 from django.core.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
+from django_filters.rest_framework import DjangoFilterBackend
 
-from .models import User, Role, Patient
+from .models import User, Role, Patient, AuditLog
 from .serializers import (
     UserSerializer, RoleSerializer, PatientSerializer, 
     PasswordChangeSerializer, EmailChangeSerializer, PhoneChangeSerializer,
-    ContactUsSerializer, SupportRequestSerializer, ForgotPasswordSerializer
+    ContactUsSerializer, SupportRequestSerializer, ForgotPasswordSerializer,
+    AuditLogSerializer, AuditLogFilterSerializer
 )
 from doctors.models import Doctor
 from doctors.serializers import DoctorSerializer
@@ -984,3 +990,184 @@ class ResetPasswordAPIView(APIView):
             return Response({
                 'error': 'Reset link is invalid'
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for viewing audit logs. Admin users only.
+    Provides list, retrieve, filtering, search, and export functionality.
+    """
+    queryset = AuditLog.objects.all()
+    serializer_class = AuditLogSerializer
+    permission_classes = [IsAdminUser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['username', 'email_address', 'activity', 'role']
+    filterset_fields = ['activity', 'status', 'role']
+    ordering_fields = ['created_at', 'last_active', 'username']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        """
+        Apply custom filtering based on query parameters
+        """
+        queryset = super().get_queryset()
+        
+        # Apply date filtering
+        date_from = self.request.query_params.get('date_from')
+        date_to = self.request.query_params.get('date_to')
+        
+        if date_from:
+            try:
+                from datetime import datetime
+                date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+                queryset = queryset.filter(created_at__date__gte=date_from)
+            except ValueError:
+                pass
+                
+        if date_to:
+            try:
+                from datetime import datetime
+                date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+                queryset = queryset.filter(created_at__date__lte=date_to)
+            except ValueError:
+                pass
+        
+        return queryset
+    
+    @action(detail=False, methods=['get'], url_path='export-csv')
+    def export_csv(self, request):
+        """
+        Export audit logs to CSV format
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # Create CSV response
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="audit_logs_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+        
+        writer = csv.writer(response)
+        
+        # Write header
+        writer.writerow([
+            'Username', 'Activity', 'Email Address', 'Role', 'Time Spent', 
+            'Date Joined', 'Last Active', 'Status', 'IP Address', 'Created At'
+        ])
+        
+        # Write data
+        for log in queryset:
+            writer.writerow([
+                log.username,
+                log.get_activity_display(),
+                log.email_address,
+                log.role,
+                log.formatted_time_spent,
+                log.date_joined.strftime('%Y-%m-%d %H:%M:%S') if log.date_joined else '',
+                log.last_active.strftime('%Y-%m-%d %H:%M:%S') if log.last_active else '',
+                log.get_status_display(),
+                log.ip_address or '',
+                log.created_at.strftime('%Y-%m-%d %H:%M:%S')
+            ])
+        
+        return response
+    
+    @action(detail=False, methods=['get'], url_path='export-pdf')
+    def export_pdf(self, request):
+        """
+        Export audit logs to PDF format (simplified implementation)
+        For a full PDF implementation, consider using libraries like ReportLab
+        """
+        from django.template.loader import render_to_string
+        from django.http import HttpResponse
+        
+        queryset = self.filter_queryset(self.get_queryset())[:100]  # Limit for PDF
+        
+        # For now, return a simple HTML that can be printed as PDF
+        # In production, you'd use a proper PDF library
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Audit Logs Export</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; font-size: 12px; }}
+                table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+                th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+                th {{ background-color: #f2f2f2; font-weight: bold; }}
+                .header {{ text-align: center; margin-bottom: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Panacare - Audit Logs Report</h1>
+                <p>Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Activity</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Created At</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """
+        
+        for log in queryset:
+            html_content += f"""
+                    <tr>
+                        <td>{log.username}</td>
+                        <td>{log.get_activity_display()}</td>
+                        <td>{log.email_address}</td>
+                        <td>{log.role}</td>
+                        <td>{log.get_status_display()}</td>
+                        <td>{log.created_at.strftime('%Y-%m-%d %H:%M:%S')}</td>
+                    </tr>
+            """
+        
+        html_content += """
+                </tbody>
+            </table>
+        </body>
+        </html>
+        """
+        
+        response = HttpResponse(html_content, content_type='text/html')
+        response['Content-Disposition'] = f'attachment; filename="audit_logs_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.html"'
+        
+        return response
+    
+    @action(detail=False, methods=['get'], url_path='statistics')
+    def statistics(self, request):
+        """
+        Get audit log statistics
+        """
+        queryset = self.get_queryset()
+        
+        # Calculate statistics
+        from django.db.models import Count
+        from datetime import datetime, timedelta
+        
+        total_logs = queryset.count()
+        today_logs = queryset.filter(created_at__date=datetime.now().date()).count()
+        week_logs = queryset.filter(created_at__gte=datetime.now() - timedelta(days=7)).count()
+        
+        # Activity breakdown
+        activity_stats = queryset.values('activity').annotate(count=Count('activity')).order_by('-count')[:10]
+        
+        # Status breakdown
+        status_stats = queryset.values('status').annotate(count=Count('status'))
+        
+        # Role breakdown
+        role_stats = queryset.values('role').annotate(count=Count('role')).order_by('-count')[:10]
+        
+        return Response({
+            'total_logs': total_logs,
+            'today_logs': today_logs,
+            'week_logs': week_logs,
+            'activity_breakdown': list(activity_stats),
+            'status_breakdown': list(status_stats),
+            'role_breakdown': list(role_stats)
+        })

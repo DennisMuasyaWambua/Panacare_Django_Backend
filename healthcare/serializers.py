@@ -735,3 +735,74 @@ class DoctorAvailabilitySerializer(serializers.ModelSerializer):
     
     def get_weekday_display(self, obj):
         return obj.get_weekday_display()
+
+
+class RiskSegmentationSerializer(serializers.Serializer):
+    """
+    Serializer for risk segmentation dashboard data
+    """
+    risk_level = serializers.CharField(help_text="Risk level category (severe, high, moderate, low)")
+    patient_count = serializers.IntegerField(help_text="Number of patients in this risk category")
+    percentage = serializers.FloatField(help_text="Percentage of total patients")
+    
+    def to_representation(self, instance):
+        return instance
+
+
+class RiskSegmentationSummarySerializer(serializers.Serializer):
+    """
+    Serializer for risk segmentation summary statistics
+    """
+    total_patients = serializers.IntegerField(help_text="Total number of patients")
+    distribution = RiskSegmentationSerializer(many=True, help_text="Risk level distribution")
+    date_range = serializers.DictField(help_text="Applied date filter range", required=False)
+    county_filter = serializers.CharField(help_text="Applied county filter", required=False, allow_blank=True)
+    
+    def to_representation(self, instance):
+        return instance
+
+
+class PatientRiskListSerializer(serializers.ModelSerializer):
+    """
+    Serializer for listing patients by risk level
+    """
+    patient_name = serializers.SerializerMethodField(read_only=True)
+    patient_email = serializers.SerializerMethodField(read_only=True)
+    age = serializers.SerializerMethodField(read_only=True)
+    county = serializers.SerializerMethodField(read_only=True)
+    latest_appointment_date = serializers.SerializerMethodField(read_only=True)
+    doctor_name = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = Appointment
+        fields = [
+            'id', 'patient_name', 'patient_email', 'age', 'county', 
+            'risk_level', 'appointment_date', 'latest_appointment_date',
+            'doctor_name', 'diagnosis', 'treatment', 'notes'
+        ]
+    
+    def get_patient_name(self, obj):
+        return obj.patient.user.get_full_name() or obj.patient.user.username
+    
+    def get_patient_email(self, obj):
+        return obj.patient.user.email
+    
+    def get_age(self, obj):
+        if obj.patient.date_of_birth:
+            from datetime import date
+            today = date.today()
+            return today.year - obj.patient.date_of_birth.year - ((today.month, today.day) < (obj.patient.date_of_birth.month, obj.patient.date_of_birth.day))
+        return None
+    
+    def get_county(self, obj):
+        # Extract county from patient's address or healthcare facility
+        if obj.healthcare_facility and hasattr(obj.healthcare_facility, 'city'):
+            return obj.healthcare_facility.city
+        # Could also extract from patient.user.address if available
+        return obj.patient.user.address.split(',')[0].strip() if obj.patient.user.address else None
+    
+    def get_latest_appointment_date(self, obj):
+        return obj.appointment_date
+    
+    def get_doctor_name(self, obj):
+        return obj.doctor.user.get_full_name() or obj.doctor.user.username
