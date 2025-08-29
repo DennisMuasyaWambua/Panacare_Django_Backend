@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from .pesapal_client import PesapalClient
 from .subscription_utils import SubscriptionManager
+from panacare.pagination import CustomPageNumberPagination
 from .models import (
     HealthCare, Appointment, Consultation, ConsultationChat, DoctorRating,
     Article, ArticleComment, ArticleCommentLike, PatientDoctorAssignment,
@@ -5413,6 +5414,7 @@ class EnhancedAppointmentListViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Appointment.objects.all()
     serializer_class = AppointmentSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = CustomPageNumberPagination
     
     def get_queryset(self):
         queryset = Appointment.objects.select_related(
