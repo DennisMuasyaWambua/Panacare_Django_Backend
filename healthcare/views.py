@@ -795,6 +795,431 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(appointment)
         return Response(serializer.data)
+    
+    @swagger_auto_schema(
+        operation_description="Export single appointment as PDF",
+        responses={
+            200: openapi.Response(
+                description="PDF file",
+                schema=openapi.Schema(type=openapi.TYPE_FILE)
+            ),
+            403: openapi.Response("Forbidden", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, description="Permission error message")
+                }
+            )),
+            404: openapi.Response("Not Found", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, description="Appointment not found")
+                }
+            ))
+        }
+    )
+    @action(detail=True, methods=['get'])
+    def export_pdf(self, request, pk=None):
+        """
+        Export a single appointment as PDF
+        """
+        from reportlab.lib.pagesizes import A4, letter
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.lib.units import inch
+        import io
+        
+        appointment = self.get_object()
+        
+        # Check permissions - users can only export their own appointments or admin can export any
+        if not self.request.user.roles.filter(name='admin').exists():
+            if hasattr(self.request.user, 'patient') and appointment.patient.user != self.request.user:
+                return Response({
+                    'error': 'You can only export your own appointments'
+                }, status=status.HTTP_403_FORBIDDEN)
+            elif hasattr(self.request.user, 'doctor') and appointment.doctor.user != self.request.user:
+                return Response({
+                    'error': 'You can only export your own appointments'
+                }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Create PDF buffer
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+        story = []
+        
+        # Styles
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=30,
+            alignment=TA_CENTER,
+            textColor=colors.darkblue
+        )
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=14,
+            spaceAfter=12,
+            textColor=colors.darkblue
+        )
+        normal_style = styles['Normal']
+        
+        # Title
+        story.append(Paragraph("Appointment Report", title_style))
+        story.append(Spacer(1, 20))
+        
+        # Basic Information Table
+        basic_data = [
+            ['Appointment ID:', str(appointment.id)],
+            ['Date:', appointment.appointment_date.strftime('%B %d, %Y')],
+            ['Time:', f"{appointment.start_time.strftime('%I:%M %p')} - {appointment.end_time.strftime('%I:%M %p')}"],
+            ['Status:', appointment.get_status_display()],
+            ['Type:', appointment.get_appointment_type_display()],
+            ['Risk Level:', appointment.get_risk_level_display() if appointment.risk_level else 'Not specified'],
+        ]
+        
+        basic_table = Table(basic_data, colWidths=[2*inch, 4*inch])
+        basic_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ]))
+        
+        story.append(basic_table)
+        story.append(Spacer(1, 20))
+        
+        # Patient Information
+        story.append(Paragraph("Patient Information", heading_style))
+        patient_data = [
+            ['Name:', f"{appointment.patient.user.first_name} {appointment.patient.user.last_name}"],
+            ['Email:', appointment.patient.user.email],
+            ['Phone:', appointment.patient.phone_number or 'Not provided'],
+            ['Date of Birth:', appointment.patient.date_of_birth.strftime('%B %d, %Y') if appointment.patient.date_of_birth else 'Not provided'],
+        ]
+        
+        patient_table = Table(patient_data, colWidths=[2*inch, 4*inch])
+        patient_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ]))
+        
+        story.append(patient_table)
+        story.append(Spacer(1, 20))
+        
+        # Doctor Information
+        story.append(Paragraph("Doctor Information", heading_style))
+        doctor_data = [
+            ['Name:', f"Dr. {appointment.doctor.user.first_name} {appointment.doctor.user.last_name}"],
+            ['Email:', appointment.doctor.user.email],
+            ['Specialization:', appointment.doctor.specialization or 'Not specified'],
+            ['License Number:', appointment.doctor.license_number or 'Not specified'],
+        ]
+        
+        doctor_table = Table(doctor_data, colWidths=[2*inch, 4*inch])
+        doctor_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ]))
+        
+        story.append(doctor_table)
+        story.append(Spacer(1, 20))
+        
+        # Healthcare Facility
+        if appointment.healthcare_facility:
+            story.append(Paragraph("Healthcare Facility", heading_style))
+            facility_data = [
+                ['Name:', appointment.healthcare_facility.name],
+                ['Address:', appointment.healthcare_facility.address or 'Not specified'],
+                ['Phone:', appointment.healthcare_facility.phone_number or 'Not specified'],
+            ]
+            
+            facility_table = Table(facility_data, colWidths=[2*inch, 4*inch])
+            facility_table.setStyle(TableStyle([
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+                ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+            ]))
+            
+            story.append(facility_table)
+            story.append(Spacer(1, 20))
+        
+        # Appointment Details
+        if appointment.reason or appointment.diagnosis or appointment.treatment or appointment.notes:
+            story.append(Paragraph("Appointment Details", heading_style))
+            
+            if appointment.reason:
+                story.append(Paragraph("<b>Reason for Visit:</b>", normal_style))
+                story.append(Paragraph(appointment.reason, normal_style))
+                story.append(Spacer(1, 12))
+            
+            if appointment.diagnosis:
+                story.append(Paragraph("<b>Diagnosis:</b>", normal_style))
+                story.append(Paragraph(appointment.diagnosis, normal_style))
+                story.append(Spacer(1, 12))
+            
+            if appointment.treatment:
+                story.append(Paragraph("<b>Treatment:</b>", normal_style))
+                story.append(Paragraph(appointment.treatment, normal_style))
+                story.append(Spacer(1, 12))
+            
+            if appointment.notes:
+                story.append(Paragraph("<b>Notes:</b>", normal_style))
+                story.append(Paragraph(appointment.notes, normal_style))
+                story.append(Spacer(1, 12))
+        
+        # Footer
+        story.append(Spacer(1, 30))
+        footer_style = ParagraphStyle(
+            'Footer',
+            parent=styles['Normal'],
+            fontSize=8,
+            alignment=TA_CENTER,
+            textColor=colors.grey
+        )
+        story.append(Paragraph(f"Generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", footer_style))
+        story.append(Paragraph("Panacare Healthcare System", footer_style))
+        
+        # Build PDF
+        doc.build(story)
+        buffer.seek(0)
+        
+        # Create response
+        response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+        filename = f"appointment_{appointment.id}_{appointment.appointment_date.strftime('%Y%m%d')}.pdf"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        buffer.close()
+        return response
+    
+    @swagger_auto_schema(
+        operation_description="Advanced appointment search with comprehensive filters",
+        manual_parameters=[
+            openapi.Parameter('search', openapi.IN_QUERY, type=openapi.TYPE_STRING, description='Search in patient names, doctor names, healthcare facility names'),
+            openapi.Parameter('patient_name', openapi.IN_QUERY, type=openapi.TYPE_STRING, description='Filter by patient name'),
+            openapi.Parameter('doctor_name', openapi.IN_QUERY, type=openapi.TYPE_STRING, description='Filter by doctor name'),
+            openapi.Parameter('healthcare_facility', openapi.IN_QUERY, type=openapi.TYPE_STRING, description='Filter by healthcare facility name'),
+            openapi.Parameter('status', openapi.IN_QUERY, type=openapi.TYPE_STRING, description='Filter by appointment status'),
+            openapi.Parameter('appointment_type', openapi.IN_QUERY, type=openapi.TYPE_STRING, description='Filter by appointment type'),
+            openapi.Parameter('risk_level', openapi.IN_QUERY, type=openapi.TYPE_STRING, description='Filter by risk level'),
+            openapi.Parameter('date_from', openapi.IN_QUERY, type=openapi.TYPE_STRING, format='date', description='Filter appointments from date (YYYY-MM-DD)'),
+            openapi.Parameter('date_to', openapi.IN_QUERY, type=openapi.TYPE_STRING, format='date', description='Filter appointments to date (YYYY-MM-DD)'),
+            openapi.Parameter('time_from', openapi.IN_QUERY, type=openapi.TYPE_STRING, format='time', description='Filter appointments from time (HH:MM)'),
+            openapi.Parameter('time_to', openapi.IN_QUERY, type=openapi.TYPE_STRING, format='time', description='Filter appointments to time (HH:MM)'),
+            openapi.Parameter('patient_id', openapi.IN_QUERY, type=openapi.TYPE_STRING, description='Filter by patient ID'),
+            openapi.Parameter('doctor_id', openapi.IN_QUERY, type=openapi.TYPE_STRING, description='Filter by doctor ID'),
+            openapi.Parameter('subscription_package', openapi.IN_QUERY, type=openapi.TYPE_STRING, description='Filter by patient subscription package'),
+            openapi.Parameter('has_diagnosis', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description='Filter appointments with diagnosis'),
+            openapi.Parameter('has_treatment', openapi.IN_QUERY, type=openapi.TYPE_BOOLEAN, description='Filter appointments with treatment'),
+            openapi.Parameter('ordering', openapi.IN_QUERY, type=openapi.TYPE_STRING, description='Order by: appointment_date, start_time, patient_name, doctor_name, status (add - for descending)'),
+        ],
+        responses={
+            200: AppointmentSerializer(many=True),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, description="Error message")
+                }
+            ))
+        }
+    )
+    @action(detail=False, methods=['get'])
+    def search_appointments(self, request):
+        """
+        Advanced search endpoint for appointments with comprehensive filtering
+        """
+        queryset = self.get_queryset()
+        
+        # Text search across multiple fields
+        search_query = request.query_params.get('search')
+        if search_query:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(patient__user__first_name__icontains=search_query) |
+                Q(patient__user__last_name__icontains=search_query) |
+                Q(doctor__user__first_name__icontains=search_query) |
+                Q(doctor__user__last_name__icontains=search_query) |
+                Q(healthcare_facility__name__icontains=search_query) |
+                Q(reason__icontains=search_query) |
+                Q(diagnosis__icontains=search_query) |
+                Q(treatment__icontains=search_query) |
+                Q(notes__icontains=search_query)
+            )
+        
+        # Specific field filters
+        patient_name = request.query_params.get('patient_name')
+        if patient_name:
+            queryset = queryset.filter(
+                Q(patient__user__first_name__icontains=patient_name) |
+                Q(patient__user__last_name__icontains=patient_name)
+            )
+        
+        doctor_name = request.query_params.get('doctor_name')
+        if doctor_name:
+            queryset = queryset.filter(
+                Q(doctor__user__first_name__icontains=doctor_name) |
+                Q(doctor__user__last_name__icontains=doctor_name)
+            )
+        
+        healthcare_facility = request.query_params.get('healthcare_facility')
+        if healthcare_facility:
+            queryset = queryset.filter(healthcare_facility__name__icontains=healthcare_facility)
+        
+        # Status filter
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        # Appointment type filter
+        appointment_type = request.query_params.get('appointment_type')
+        if appointment_type:
+            queryset = queryset.filter(appointment_type=appointment_type)
+        
+        # Risk level filter
+        risk_level = request.query_params.get('risk_level')
+        if risk_level:
+            queryset = queryset.filter(risk_level=risk_level)
+        
+        # Date range filters
+        date_from = request.query_params.get('date_from')
+        if date_from:
+            try:
+                date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+                queryset = queryset.filter(appointment_date__gte=date_from)
+            except ValueError:
+                return Response({
+                    'error': 'Invalid date_from format. Use YYYY-MM-DD format.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        date_to = request.query_params.get('date_to')
+        if date_to:
+            try:
+                date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+                queryset = queryset.filter(appointment_date__lte=date_to)
+            except ValueError:
+                return Response({
+                    'error': 'Invalid date_to format. Use YYYY-MM-DD format.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Time range filters
+        time_from = request.query_params.get('time_from')
+        if time_from:
+            try:
+                from datetime import time
+                time_from = datetime.strptime(time_from, '%H:%M').time()
+                queryset = queryset.filter(start_time__gte=time_from)
+            except ValueError:
+                return Response({
+                    'error': 'Invalid time_from format. Use HH:MM format.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        time_to = request.query_params.get('time_to')
+        if time_to:
+            try:
+                from datetime import time
+                time_to = datetime.strptime(time_to, '%H:%M').time()
+                queryset = queryset.filter(end_time__lte=time_to)
+            except ValueError:
+                return Response({
+                    'error': 'Invalid time_to format. Use HH:MM format.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Patient and Doctor ID filters
+        patient_id = request.query_params.get('patient_id')
+        if patient_id:
+            queryset = queryset.filter(patient_id=patient_id)
+        
+        doctor_id = request.query_params.get('doctor_id')
+        if doctor_id:
+            queryset = queryset.filter(doctor_id=doctor_id)
+        
+        # Subscription package filter
+        subscription_package = request.query_params.get('subscription_package')
+        if subscription_package:
+            queryset = queryset.filter(
+                patient__patientsubscription__package__name__icontains=subscription_package,
+                patient__patientsubscription__status='active'
+            )
+        
+        # Boolean filters
+        has_diagnosis = request.query_params.get('has_diagnosis')
+        if has_diagnosis is not None:
+            if has_diagnosis.lower() == 'true':
+                queryset = queryset.exclude(diagnosis__isnull=True).exclude(diagnosis='')
+            elif has_diagnosis.lower() == 'false':
+                queryset = queryset.filter(Q(diagnosis__isnull=True) | Q(diagnosis=''))
+        
+        has_treatment = request.query_params.get('has_treatment')
+        if has_treatment is not None:
+            if has_treatment.lower() == 'true':
+                queryset = queryset.exclude(treatment__isnull=True).exclude(treatment='')
+            elif has_treatment.lower() == 'false':
+                queryset = queryset.filter(Q(treatment__isnull=True) | Q(treatment=''))
+        
+        # Ordering
+        ordering = request.query_params.get('ordering', '-appointment_date')
+        valid_orderings = [
+            'appointment_date', '-appointment_date',
+            'start_time', '-start_time',
+            'status', '-status',
+            'appointment_type', '-appointment_type',
+            'created_at', '-created_at',
+            'updated_at', '-updated_at'
+        ]
+        
+        if ordering in valid_orderings:
+            queryset = queryset.order_by(ordering)
+        elif ordering in ['patient_name', '-patient_name']:
+            order_direction = '' if ordering == 'patient_name' else '-'
+            queryset = queryset.order_by(f'{order_direction}patient__user__first_name', f'{order_direction}patient__user__last_name')
+        elif ordering in ['doctor_name', '-doctor_name']:
+            order_direction = '' if ordering == 'doctor_name' else '-'
+            queryset = queryset.order_by(f'{order_direction}doctor__user__first_name', f'{order_direction}doctor__user__last_name')
+        else:
+            # Default ordering
+            queryset = queryset.order_by('-appointment_date', '-start_time')
+        
+        # Select related to optimize queries
+        queryset = queryset.select_related(
+            'patient__user',
+            'doctor__user', 
+            'healthcare_facility'
+        ).prefetch_related(
+            'patient__patientsubscription_set__package'
+        )
+        
+        # Paginate results
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
 
 # class AppointmentDocumentViewSet(viewsets.ModelViewSet):
