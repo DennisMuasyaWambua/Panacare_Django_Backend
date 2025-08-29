@@ -4482,3 +4482,703 @@ class RiskSegmentationViewSet(viewsets.ViewSet):
             ])
         
         return response
+
+
+class TeleconsultationLogViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for teleconsultation logs with statistics and filtering
+    """
+    queryset = Consultation.objects.all()
+    serializer_class = ConsultationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_permissions(self):
+        if self.action in ['destroy']:
+            permission_classes = [IsAdminUser]
+        else:
+            permission_classes = [permissions.IsAuthenticated]
+        return [permission() for permission in permission_classes]
+    
+    def get_queryset(self):
+        queryset = Consultation.objects.select_related(
+            'appointment__patient__user', 
+            'appointment__doctor__user', 
+            'appointment__healthcare'
+        ).all()
+        
+        # Role-based filtering
+        if self.request.user.roles.filter(name='admin').exists():
+            pass
+        elif self.request.user.roles.filter(name='doctor').exists():
+            try:
+                doctor = self.request.user.doctor
+                queryset = queryset.filter(appointment__doctor=doctor)
+            except Doctor.DoesNotExist:
+                return Consultation.objects.none()
+        elif self.request.user.roles.filter(name='patient').exists():
+            try:
+                patient = self.request.user.patient
+                queryset = queryset.filter(appointment__patient=patient)
+            except Patient.DoesNotExist:
+                return Consultation.objects.none()
+        else:
+            return Consultation.objects.none()
+            
+        # Apply filters
+        patient_name = self.request.query_params.get('patient_name')
+        if patient_name:
+            queryset = queryset.filter(
+                Q(appointment__patient__user__first_name__icontains=patient_name) |
+                Q(appointment__patient__user__last_name__icontains=patient_name)
+            )
+            
+        clinic_name = self.request.query_params.get('clinic')
+        if clinic_name:
+            queryset = queryset.filter(appointment__healthcare__name__icontains=clinic_name)
+            
+        consultation_type = self.request.query_params.get('consultation_type')
+        if consultation_type:
+            if consultation_type.lower() == 'video':
+                queryset = queryset.filter(
+                    appointment__appointment_type__in=['video', 'teleconsultation']
+                )
+            elif consultation_type.lower() == 'missed':
+                queryset = queryset.filter(status='missed')
+                
+        date_from = self.request.query_params.get('date_from')
+        if date_from:
+            try:
+                date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+                queryset = queryset.filter(appointment__appointment_date__gte=date_from)
+            except ValueError:
+                pass
+                
+        date_to = self.request.query_params.get('date_to')
+        if date_to:
+            try:
+                date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+                queryset = queryset.filter(appointment__appointment_date__lte=date_to)
+            except ValueError:
+                pass
+                
+        return queryset.order_by('-appointment__appointment_date', '-start_time')
+    
+    @swagger_auto_schema(
+        operation_description="Get teleconsultation statistics",
+        responses={
+            200: openapi.Response("Statistics", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'total_consultations': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'completed_consultations': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'missed_consultations': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'upcoming_consultations': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'completion_rate': openapi.Schema(type=openapi.TYPE_NUMBER),
+                    'miss_rate': openapi.Schema(type=openapi.TYPE_NUMBER)
+                }
+            ))
+        }
+    )
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        """
+        Get teleconsultation statistics
+        """
+        queryset = self.get_queryset()
+        
+        total = queryset.count()
+        completed = queryset.filter(status='completed').count()
+        missed = queryset.filter(status='missed').count()
+        upcoming = queryset.filter(
+            status__in=['scheduled', 'in-progress'],
+            appointment__appointment_date__gte=timezone.now().date()
+        ).count()
+        
+        completion_rate = (completed / total * 100) if total > 0 else 0
+        miss_rate = (missed / total * 100) if total > 0 else 0
+        
+        return Response({
+            'total_consultations': total,
+            'completed_consultations': completed,
+            'missed_consultations': missed,
+            'upcoming_consultations': upcoming,
+            'completion_rate': round(completion_rate, 1),
+            'miss_rate': round(miss_rate, 1)
+        })
+    
+    @swagger_auto_schema(
+        operation_description="Export teleconsultation logs to PDF",
+        manual_parameters=[
+            openapi.Parameter('patient_name', openapi.IN_QUERY, type=openapi.TYPE_STRING),
+            openapi.Parameter('clinic', openapi.IN_QUERY, type=openapi.TYPE_STRING),
+            openapi.Parameter('consultation_type', openapi.IN_QUERY, type=openapi.TYPE_STRING),
+            openapi.Parameter('date_from', openapi.IN_QUERY, type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE),
+            openapi.Parameter('date_to', openapi.IN_QUERY, type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE)
+        ]
+    )
+    @action(detail=False, methods=['get'])
+    def export_pdf(self, request):
+        """
+        Export teleconsultation logs to PDF
+        """
+        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER
+        import io
+        
+        queryset = self.get_queryset()
+        
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        elements = []
+        
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=30,
+            alignment=TA_CENTER
+        )
+        
+        elements.append(Paragraph("Teleconsultation Log Report", title_style))
+        elements.append(Spacer(1, 20))
+        
+        # Table data
+        data = [['Date', 'Time', 'Patient', 'Doctor', 'Clinic', 'Type', 'Status']]
+        
+        for consultation in queryset:
+            appointment = consultation.appointment
+            data.append([
+                str(appointment.appointment_date),
+                str(appointment.start_time) if appointment.start_time else 'N/A',
+                f"{appointment.patient.user.first_name} {appointment.patient.user.last_name}",
+                f"Dr. {appointment.doctor.user.first_name} {appointment.doctor.user.last_name}",
+                appointment.healthcare.name,
+                appointment.appointment_type.title(),
+                consultation.status.title()
+            ])
+        
+        table = Table(data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        elements.append(table)
+        doc.build(elements)
+        buffer.seek(0)
+        
+        response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="teleconsultation_logs.pdf"'
+        
+        return response
+    
+    @swagger_auto_schema(
+        operation_description="Export teleconsultation logs to CSV"
+    )
+    @action(detail=False, methods=['get'])
+    def export_csv(self, request):
+        """
+        Export teleconsultation logs to CSV
+        """
+        import csv
+        
+        queryset = self.get_queryset()
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="teleconsultation_logs.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow(['Date', 'Time', 'Patient', 'Doctor', 'Clinic', 'Type', 'Status', 'Duration'])
+        
+        for consultation in queryset:
+            appointment = consultation.appointment
+            duration = ""
+            if consultation.start_time and consultation.end_time:
+                duration_delta = consultation.end_time - consultation.start_time
+                duration = str(duration_delta)
+                
+            writer.writerow([
+                appointment.appointment_date,
+                appointment.start_time or 'N/A',
+                f"{appointment.patient.user.first_name} {appointment.patient.user.last_name}",
+                f"Dr. {appointment.doctor.user.first_name} {appointment.doctor.user.last_name}",
+                appointment.healthcare.name,
+                appointment.appointment_type.title(),
+                consultation.status.title(),
+                duration
+            ])
+        
+        return response
+
+
+class FollowUpComplianceViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for follow-up compliance monitoring
+    """
+    queryset = Appointment.objects.all()
+    serializer_class = AppointmentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = Appointment.objects.select_related(
+            'patient__user', 
+            'doctor__user', 
+            'healthcare'
+        ).all()
+        
+        # Role-based filtering
+        if self.request.user.roles.filter(name='admin').exists():
+            pass
+        elif self.request.user.roles.filter(name='doctor').exists():
+            try:
+                doctor = self.request.user.doctor
+                queryset = queryset.filter(doctor=doctor)
+            except Doctor.DoesNotExist:
+                return Appointment.objects.none()
+        elif self.request.user.roles.filter(name='patient').exists():
+            try:
+                patient = self.request.user.patient
+                queryset = queryset.filter(patient=patient)
+            except Patient.DoesNotExist:
+                return Appointment.objects.none()
+        else:
+            return Appointment.objects.none()
+        
+        # Apply filters
+        patient_name = self.request.query_params.get('patient_name')
+        if patient_name:
+            queryset = queryset.filter(
+                Q(patient__user__first_name__icontains=patient_name) |
+                Q(patient__user__last_name__icontains=patient_name)
+            )
+            
+        risk_level = self.request.query_params.get('risk_level')
+        if risk_level:
+            queryset = queryset.filter(risk_level=risk_level)
+            
+        follow_up_type = self.request.query_params.get('follow_up_type')
+        if follow_up_type:
+            if follow_up_type.lower() == 'appointment':
+                queryset = queryset.filter(appointment_type__in=['follow-up', 'routine'])
+            elif follow_up_type.lower() == 'medication':
+                queryset = queryset.filter(notes__icontains='medication')
+                
+        compliance_status = self.request.query_params.get('status')
+        if compliance_status:
+            if compliance_status.lower() == 'missed':
+                queryset = queryset.filter(status='noshow')
+                
+        return queryset.order_by('-appointment_date', '-start_time')
+    
+    @swagger_auto_schema(
+        operation_description="Get follow-up compliance statistics",
+        responses={
+            200: openapi.Response("Statistics", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'total_patients_tracked': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'missed_appointments': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'missed_med_reminders': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'critical_non_compliant': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'compliance_rate': openapi.Schema(type=openapi.TYPE_NUMBER)
+                }
+            ))
+        }
+    )
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        """
+        Get follow-up compliance statistics
+        """
+        queryset = self.get_queryset()
+        
+        total_patients = queryset.values('patient').distinct().count()
+        missed_appointments = queryset.filter(status='noshow').count()
+        
+        # Count medication-related missed follow-ups (based on notes containing medication keywords)
+        missed_med_reminders = queryset.filter(
+            Q(notes__icontains='medication') | Q(notes__icontains='prescription'),
+            status='noshow'
+        ).count()
+        
+        # Critical non-compliant (high/severe risk patients with missed appointments)
+        critical_non_compliant = queryset.filter(
+            risk_level__in=['high', 'severe'],
+            status='noshow'
+        ).values('patient').distinct().count()
+        
+        # Calculate compliance rate
+        total_appointments = queryset.count()
+        fulfilled_appointments = queryset.filter(status='fulfilled').count()
+        compliance_rate = (fulfilled_appointments / total_appointments * 100) if total_appointments > 0 else 0
+        
+        return Response({
+            'total_patients_tracked': total_patients,
+            'missed_appointments': missed_appointments,
+            'missed_med_reminders': missed_med_reminders,
+            'critical_non_compliant': critical_non_compliant,
+            'compliance_rate': round(compliance_rate, 1)
+        })
+    
+    @swagger_auto_schema(
+        operation_description="Get list of patients for compliance monitoring",
+        manual_parameters=[
+            openapi.Parameter('patient_name', openapi.IN_QUERY, type=openapi.TYPE_STRING),
+            openapi.Parameter('risk_level', openapi.IN_QUERY, type=openapi.TYPE_STRING),
+            openapi.Parameter('follow_up_type', openapi.IN_QUERY, type=openapi.TYPE_STRING),
+            openapi.Parameter('status', openapi.IN_QUERY, type=openapi.TYPE_STRING)
+        ]
+    )
+    @action(detail=False, methods=['get'])
+    def patients(self, request):
+        """
+        Get detailed patient compliance data
+        """
+        queryset = self.get_queryset()
+        
+        # Group by patient and calculate compliance metrics
+        patient_data = []
+        patient_appointments = {}
+        
+        for appointment in queryset:
+            patient_id = appointment.patient.id
+            if patient_id not in patient_appointments:
+                patient_appointments[patient_id] = {
+                    'patient': appointment.patient,
+                    'appointments': [],
+                    'missed_count': 0,
+                    'total_count': 0
+                }
+            
+            patient_appointments[patient_id]['appointments'].append(appointment)
+            patient_appointments[patient_id]['total_count'] += 1
+            
+            if appointment.status == 'noshow':
+                patient_appointments[patient_id]['missed_count'] += 1
+        
+        for patient_id, data in patient_appointments.items():
+            patient = data['patient']
+            latest_appointment = max(data['appointments'], key=lambda x: x.appointment_date)
+            
+            patient_data.append({
+                'patient_name': f"{patient.user.first_name} {patient.user.last_name}",
+                'phone': patient.user.email,  # Using email as phone not available
+                'risk_level': latest_appointment.risk_level,
+                'missed_count': data['missed_count'],
+                'follow_up_type': 'Appointment' if latest_appointment.appointment_type in ['follow-up', 'routine'] else 'Medication',
+                'status': 'Missed' if data['missed_count'] > 0 else 'Compliant'
+            })
+        
+        return Response(patient_data)
+    
+    @swagger_auto_schema(
+        operation_description="Export compliance data to PDF"
+    )
+    @action(detail=False, methods=['get'])
+    def export_pdf(self, request):
+        """
+        Export follow-up compliance data to PDF
+        """
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER
+        import io
+        
+        patients_response = self.patients(request)
+        patients_data = patients_response.data
+        
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        elements = []
+        
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=30,
+            alignment=TA_CENTER
+        )
+        
+        elements.append(Paragraph("Follow-Up Compliance Report", title_style))
+        elements.append(Spacer(1, 20))
+        
+        data = [['Patient Name', 'Phone', 'Risk Level', 'Missed Count', 'Follow-Up Type', 'Status']]
+        
+        for patient in patients_data:
+            data.append([
+                patient['patient_name'],
+                patient['phone'],
+                patient['risk_level'].title(),
+                str(patient['missed_count']),
+                patient['follow_up_type'],
+                patient['status']
+            ])
+        
+        table = Table(data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        elements.append(table)
+        doc.build(elements)
+        buffer.seek(0)
+        
+        response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="compliance_report.pdf"'
+        
+        return response
+    
+    @swagger_auto_schema(
+        operation_description="Export compliance data to CSV"
+    )
+    @action(detail=False, methods=['get'])
+    def export_csv(self, request):
+        """
+        Export follow-up compliance data to CSV
+        """
+        import csv
+        
+        patients_response = self.patients(request)
+        patients_data = patients_response.data
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="compliance_data.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow(['Patient Name', 'Phone', 'Risk Level', 'Missed Count', 'Follow-Up Type', 'Status'])
+        
+        for patient in patients_data:
+            writer.writerow([
+                patient['patient_name'],
+                patient['phone'],
+                patient['risk_level'].title(),
+                patient['missed_count'],
+                patient['follow_up_type'],
+                patient['status']
+            ])
+        
+        return response
+
+
+class EnhancedAppointmentListViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Enhanced appointment list with advanced search and filtering
+    """
+    queryset = Appointment.objects.all()
+    serializer_class = AppointmentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = Appointment.objects.select_related(
+            'patient__user', 
+            'doctor__user', 
+            'healthcare'
+        ).all()
+        
+        # Role-based filtering
+        if self.request.user.roles.filter(name='admin').exists():
+            pass
+        elif self.request.user.roles.filter(name='doctor').exists():
+            try:
+                doctor = self.request.user.doctor
+                queryset = queryset.filter(doctor=doctor)
+            except Doctor.DoesNotExist:
+                return Appointment.objects.none()
+        elif self.request.user.roles.filter(name='patient').exists():
+            try:
+                patient = self.request.user.patient
+                queryset = queryset.filter(patient=patient)
+            except Patient.DoesNotExist:
+                return Appointment.objects.none()
+        else:
+            return Appointment.objects.none()
+        
+        # Apply search and filters
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(patient__user__first_name__icontains=search) |
+                Q(patient__user__last_name__icontains=search) |
+                Q(doctor__user__first_name__icontains=search) |
+                Q(doctor__user__last_name__icontains=search) |
+                Q(healthcare__name__icontains=search)
+            )
+            
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+            
+        appointment_type = self.request.query_params.get('type')
+        if appointment_type:
+            queryset = queryset.filter(appointment_type=appointment_type)
+            
+        subscription_type = self.request.query_params.get('subscription')
+        if subscription_type:
+            # Filter by patient's subscription type
+            queryset = queryset.filter(
+                patient__patientsubscription__package__name__icontains=subscription_type,
+                patient__patientsubscription__status='active'
+            )
+        
+        date_from = self.request.query_params.get('date_from')
+        if date_from:
+            try:
+                date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+                queryset = queryset.filter(appointment_date__gte=date_from)
+            except ValueError:
+                pass
+                
+        date_to = self.request.query_params.get('date_to')
+        if date_to:
+            try:
+                date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+                queryset = queryset.filter(appointment_date__lte=date_to)
+            except ValueError:
+                pass
+        
+        return queryset.order_by('-appointment_date', '-start_time')
+    
+    @swagger_auto_schema(
+        operation_description="Export appointment list to PDF",
+        manual_parameters=[
+            openapi.Parameter('search', openapi.IN_QUERY, type=openapi.TYPE_STRING),
+            openapi.Parameter('status', openapi.IN_QUERY, type=openapi.TYPE_STRING),
+            openapi.Parameter('type', openapi.IN_QUERY, type=openapi.TYPE_STRING),
+            openapi.Parameter('subscription', openapi.IN_QUERY, type=openapi.TYPE_STRING)
+        ]
+    )
+    @action(detail=False, methods=['get'])
+    def export_pdf(self, request):
+        """
+        Export appointment list to PDF
+        """
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER
+        import io
+        
+        queryset = self.get_queryset()
+        
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        elements = []
+        
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=30,
+            alignment=TA_CENTER
+        )
+        
+        elements.append(Paragraph("Appointments List Report", title_style))
+        elements.append(Spacer(1, 20))
+        
+        data = [['Name', 'Time', 'Type', 'Subscription', 'Status']]
+        
+        for appointment in queryset:
+            # Get subscription info
+            subscription = "N/A"
+            try:
+                active_subscription = appointment.patient.patientsubscription_set.filter(
+                    status='active'
+                ).first()
+                if active_subscription:
+                    subscription = active_subscription.package.name
+            except:
+                pass
+                
+            data.append([
+                f"{appointment.patient.user.first_name} {appointment.patient.user.last_name}",
+                f"{appointment.appointment_date} {appointment.start_time or 'N/A'}",
+                appointment.appointment_type.title(),
+                subscription,
+                appointment.status.title()
+            ])
+        
+        table = Table(data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        elements.append(table)
+        doc.build(elements)
+        buffer.seek(0)
+        
+        response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="appointments_list.pdf"'
+        
+        return response
+    
+    @swagger_auto_schema(
+        operation_description="Export appointment list to CSV"
+    )
+    @action(detail=False, methods=['get'])
+    def export_csv(self, request):
+        """
+        Export appointment list to CSV
+        """
+        import csv
+        
+        queryset = self.get_queryset()
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="appointments_list.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow(['Name', 'Time', 'Type', 'Subscription', 'Status', 'Doctor', 'Clinic'])
+        
+        for appointment in queryset:
+            # Get subscription info
+            subscription = "N/A"
+            try:
+                active_subscription = appointment.patient.patientsubscription_set.filter(
+                    status='active'
+                ).first()
+                if active_subscription:
+                    subscription = active_subscription.package.name
+            except:
+                pass
+                
+            writer.writerow([
+                f"{appointment.patient.user.first_name} {appointment.patient.user.last_name}",
+                f"{appointment.appointment_date} {appointment.start_time or 'N/A'}",
+                appointment.appointment_type.title(),
+                subscription,
+                appointment.status.title(),
+                f"Dr. {appointment.doctor.user.first_name} {appointment.doctor.user.last_name}",
+                appointment.healthcare.name
+            ])
+        
+        return response
