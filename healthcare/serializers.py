@@ -422,7 +422,9 @@ class ConsultationSerializer(serializers.ModelSerializer):
             'patient': obj.appointment.patient.user.get_full_name(),
             'doctor': obj.appointment.doctor.user.get_full_name(),
             'date': obj.appointment.appointment_date,
-            'time': f"{obj.appointment.start_time} - {obj.appointment.end_time}"
+            'time': f"{obj.appointment.start_time} - {obj.appointment.end_time}",
+            'institution_name': obj.appointment.healthcare_facility.name,
+            'institution_type': obj.appointment.healthcare_facility.get_category_display()
         }
     
     def get_messages(self, obj):
