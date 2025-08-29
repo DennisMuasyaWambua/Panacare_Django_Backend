@@ -5160,7 +5160,7 @@ class FollowUpComplianceViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = Appointment.objects.select_related(
             'patient__user', 
             'doctor__user', 
-            'healthcare'
+            'healthcare_facility'
         ).all()
         
         # Role-based filtering
@@ -5420,7 +5420,7 @@ class EnhancedAppointmentListViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = Appointment.objects.select_related(
             'patient__user', 
             'doctor__user', 
-            'healthcare'
+            'healthcare_facility'
         ).all()
         
         # Role-based filtering
