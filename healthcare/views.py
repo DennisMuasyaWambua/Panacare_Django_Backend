@@ -4930,7 +4930,7 @@ class TeleconsultationLogViewSet(viewsets.ModelViewSet):
         queryset = Consultation.objects.select_related(
             'appointment__patient__user', 
             'appointment__doctor__user', 
-            'appointment__healthcare'
+            'appointment__healthcare_facility'
         ).all()
         
         # Role-based filtering
