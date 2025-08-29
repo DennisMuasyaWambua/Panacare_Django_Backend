@@ -4917,6 +4917,7 @@ class TeleconsultationLogViewSet(viewsets.ModelViewSet):
     queryset = Consultation.objects.all()
     serializer_class = ConsultationSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = CustomPageNumberPagination
     
     def get_permissions(self):
         if self.action in ['destroy']:
