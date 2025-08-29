@@ -21,7 +21,8 @@ import doctors.views
 from healthcare.views import (
     HealthCareViewSet, AppointmentViewSet, ConsultationViewSet, DoctorRatingViewSet,
     ArticleViewSet, ArticleCommentViewSet, PackageViewSet, PatientSubscriptionViewSet, 
-    DoctorAvailabilityViewSet, PaymentViewSet, PackagePaymentTrackerViewSet, RiskSegmentationViewSet
+    DoctorAvailabilityViewSet, PaymentViewSet, PackagePaymentTrackerViewSet, RiskSegmentationViewSet,
+    TeleconsultationLogViewSet, FollowUpComplianceViewSet, EnhancedAppointmentListViewSet
     # AppointmentDocumentViewSet, ResourceViewSet,
 )
 from rest_framework_simplejwt.views import (
@@ -113,6 +114,9 @@ router.register(r'article-comments', ArticleCommentViewSet, basename='article-co
 router.register(r'audit-logs', AuditLogViewSet, basename='audit-log')
 router.register(r'package-payment-tracker', PackagePaymentTrackerViewSet, basename='package-payment-tracker')
 router.register(r'risk-segmentation', RiskSegmentationViewSet, basename='risk-segmentation')
+router.register(r'teleconsultation-logs', TeleconsultationLogViewSet, basename='teleconsultation-log')
+router.register(r'follow-up-compliance', FollowUpComplianceViewSet, basename='follow-up-compliance')
+router.register(r'enhanced-appointments', EnhancedAppointmentListViewSet, basename='enhanced-appointments')
 
 # doctor_availability_create = DoctorAvailabilityViewSet.as_view({
 #     'post': 'create'
