@@ -417,14 +417,15 @@ class ConsultationSerializer(serializers.ModelSerializer):
                            'twilio_room_sid', 'doctor_token', 'patient_token']
         
     def get_appointment_details(self, obj):
+        healthcare_facility = obj.appointment.healthcare_facility
         return {
             'id': str(obj.appointment.id),
             'patient': obj.appointment.patient.user.get_full_name(),
             'doctor': obj.appointment.doctor.user.get_full_name(),
             'date': obj.appointment.appointment_date,
             'time': f"{obj.appointment.start_time} - {obj.appointment.end_time}",
-            'institution_name': obj.appointment.healthcare_facility.name,
-            'institution_type': obj.appointment.healthcare_facility.get_category_display()
+            'institution_name': healthcare_facility.name if healthcare_facility else None,
+            'institution_type': healthcare_facility.get_category_display() if healthcare_facility else None
         }
     
     def get_messages(self, obj):
