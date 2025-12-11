@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CORS Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .input-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <h1>CORS Test for Panacare API</h1>
+    
+    <div class="input-group">
+        <label for="apiUrl">API URL:</label>
+        <input type="text" id="apiUrl" value="http://localhost:8000/api/verify-token/" style="width: 100%;">
+    </div>
+    
+    <div class="input-group">
+        <label for="token">JWT Token:</label>
+        <input type="text" id="token" placeholder="Paste your token here" style="width: 100%;">
+    </div>
+    
+    <div>
+        <button onclick="testGet()">Test GET</button>
+        <button onclick="testPost()">Test POST</button>
+        <button onclick="testOptions()">Test OPTIONS</button>
+        <button onclick="testToken()">Test Token</button>
+    </div>
+    
+    <h3>Response:</h3>
+    <pre id="response" style="min-height: 300px; max-height: 500px; overflow-y: auto;"></pre>
+
+    <script>
+        async function makeRequest(method, url, token = null, body = null) {
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+            
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            
+            const options = {
+                method: method,
+                headers: headers,
+                mode: 'cors',
+                credentials: 'include'
+            };
+            
+            if (body && method !== 'GET' && method !== 'HEAD') {
+                options.body = JSON.stringify(body);
+            }
+            
+            try {
+                const response = await fetch(url, options);
+                const headers = {};
+                for (const pair of response.headers.entries()) {
+                    headers[pair[0]] = pair[1];
+                }
+                
+                let data;
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    data = await response.text();
+                }
+                
+                return {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: headers,
+                    data: data
+                };
+            } catch (error) {
+                return {
+                    error: error.message
+                };
+            }
+        }
+        
+        async function testGet() {
+            const url = document.getElementById('apiUrl').value;
+            const token = document.getElementById('token').value;
+            
+            document.getElementById('response').textContent = 'Loading...';
+            
+            const response = await makeRequest('GET', url, token);
+            document.getElementById('response').textContent = JSON.stringify(response, null, 2);
+        }
+        
+        async function testPost() {
+            const url = document.getElementById('apiUrl').value;
+            const token = document.getElementById('token').value;
+            
+            document.getElementById('response').textContent = 'Loading...';
+            
+            const response = await makeRequest('POST', url, token, { test: 'data' });
+            document.getElementById('response').textContent = JSON.stringify(response, null, 2);
+        }
+        
+        async function testOptions() {
+            const url = document.getElementById('apiUrl').value;
+            
+            document.getElementById('response').textContent = 'Loading...';
+            
+            const response = await makeRequest('OPTIONS', url);
+            document.getElementById('response').textContent = JSON.stringify(response, null, 2);
+        }
+        
+        async function testToken() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                document.getElementById('response').textContent = 'Please enter a token';
+                return;
+            }
+            
+            document.getElementById('response').textContent = 'Testing token...';
+            
+            const url = 'http://localhost:8000/api/verify-token/';
+            const response = await makeRequest('GET', url, token);
+            document.getElementById('response').textContent = JSON.stringify(response, null, 2);
+        }
+    </script>
+</body>
+</html>

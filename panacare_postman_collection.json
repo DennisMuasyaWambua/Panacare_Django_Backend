@@ -1,0 +1,3025 @@
+{
+  "info": {
+    "name": "Panacare Healthcare API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication & User Management",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"user@example.com\",\n    \"password\": \"securepassword\",\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"phone_number\": \"+1234567890\",\n    \"address\": \"123 Main Street\",\n    \"role\": \"patient\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/register/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "register", ""]
+            },
+            "description": "Register a new user. Role is optional and defaults to 'patient' if not provided. For multiple roles, use the role_names field with an array: [\"patient\", \"doctor\"]"
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"user@example.com\",\n    \"password\": \"securepassword\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/login/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "login", ""]
+            },
+            "description": "Login a user and receive a JWT token."
+          }
+        },
+        {
+          "name": "Resend Verification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"user@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/resend-verification/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "resend-verification", ""]
+            },
+            "description": "Resend verification email to a user who hasn't verified their account yet. No authentication required."
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"current_password\": \"old_password\",\n    \"new_password\": \"new_secure_password\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/change-password/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "change-password", ""]
+            },
+            "description": "Change user's password. Requires authentication."
+          }
+        },
+        {
+          "name": "Change Phone Number",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"password\": \"current_password\",\n    \"new_phone_number\": \"+1234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/change-phone/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "change-phone", ""]
+            },
+            "description": "Change user's phone number. Requires authentication."
+          }
+        },
+        {
+          "name": "Change Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"password\": \"current_password\",\n    \"new_email\": \"newemail@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/change-email/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "change-email", ""]
+            },
+            "description": "Change user's email address. Requires authentication."
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"user@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/forgot-password/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "forgot-password", ""]
+            },
+            "description": "Request a password reset. No authentication required."
+          }
+        },
+        {
+          "name": "Register Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"admin_token\": \"panacare_secure_admin_token_2025\",\n    \"email\": \"admin@example.com\",\n    \"password\": \"secureadminpassword\",\n    \"first_name\": \"Admin\",\n    \"last_name\": \"User\",\n    \"phone_number\": \"+1234567890\",\n    \"address\": \"123 Admin Street\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/register-admin/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "register-admin", ""]
+            },
+            "description": "Register an admin user. Requires a valid admin token. This endpoint can only be used once to create the first admin user."
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"updated@example.com\",\n    \"first_name\": \"Updated\",\n    \"last_name\": \"Name\",\n    \"phone_number\": \"+0987654321\",\n    \"address\": \"456 Updated Street\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/{{user_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "{{user_id}}", ""]
+            },
+            "description": "Update a user's profile information. Admin can update any user; users can only update their own profile."
+          }
+        },
+        {
+          "name": "List All Users (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", ""]
+            },
+            "description": "List all users. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Get User Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/profile/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "profile", ""]
+            },
+            "description": "Get user's profile information. Requires authentication."
+          }
+        },
+        {
+          "name": "User Account Activation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/activate/{{uidb64}}/{{token}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "activate", "{{uidb64}}", "{{token}}", ""]
+            },
+            "description": "Activate user account using activation link. No authentication required."
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"new_password\": \"new_secure_password\",\n    \"confirm_password\": \"new_secure_password\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/reset-password/{{uidb64}}/{{token}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "reset-password", "{{uidb64}}", "{{token}}", ""]
+            },
+            "description": "Reset password using reset link. No authentication required."
+          }
+        },
+        {
+          "name": "JWT Token Refresh",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"refresh\": \"your_refresh_token_here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/token/refresh/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "token", "refresh", ""]
+            },
+            "description": "Refresh JWT access token using refresh token."
+          }
+        },
+        {
+          "name": "JWT Token Verify",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\": \"your_access_token_here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/token/verify/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "token", "verify", ""]
+            },
+            "description": "Verify JWT access token validity."
+          }
+        },
+        {
+          "name": "Verify Token (Custom)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\": \"your_access_token_here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/verify-token/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "verify-token", ""]
+            },
+            "description": "Custom token verification endpoint."
+          }
+        },
+        {
+          "name": "Test CORS",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/test-cors/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "test-cors", ""]
+            },
+            "description": "Test CORS configuration. No authentication required."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Patient Management",
+      "item": [
+        {
+          "name": "Get Patient Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/patient/profile/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "patient", "profile", ""]
+            },
+            "description": "Get the current patient's profile. Requires patient authentication."
+          }
+        },
+        {
+          "name": "Update Patient Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"date_of_birth\": \"1990-01-01\",\n    \"gender\": \"male\",\n    \"marital_status\": \"S\",\n    \"language\": \"English\",\n    \"blood_type\": \"O+\",\n    \"height_cm\": 175,\n    \"weight_kg\": 70.5,\n    \"allergies\": \"Peanuts, Penicillin\",\n    \"medical_conditions\": \"Asthma\",\n    \"medications\": \"Albuterol\",\n    \"emergency_contact_name\": \"Jane Doe\",\n    \"emergency_contact_phone\": \"+0987654321\",\n    \"emergency_contact_relationship\": \"Spouse\",\n    \"insurance_provider\": \"Health Insurance Co\",\n    \"insurance_policy_number\": \"POL123456\",\n    \"insurance_group_number\": \"GRP789012\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/patient/profile/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "patient", "profile", ""]
+            },
+            "description": "Update the current patient's profile. Requires patient authentication."
+          }
+        },
+        {
+          "name": "List All Patients (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/patients/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "patients", ""]
+            },
+            "description": "List all patients. Requires admin authentication."
+          }
+        },
+        {
+          "name": "View Patient Details (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/patients/{{patient_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "patients", "{{patient_id}}", ""]
+            },
+            "description": "View a specific patient's details. Requires admin authentication."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Doctor Management",
+      "item": [
+        {
+          "name": "List Doctors",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctors/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", ""],
+              "query": [
+                {
+                  "key": "specialty",
+                  "value": "Cardiology",
+                  "disabled": true
+                },
+                {
+                  "key": "available",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "name",
+                  "value": "Smith",
+                  "disabled": true
+                },
+                {
+                  "key": "location",
+                  "value": "New York",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List all doctors with optional filtering by specialty, availability, name, or location."
+          }
+        },
+        {
+          "name": "Get Doctor Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctors/{{doctor_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "{{doctor_id}}", ""]
+            },
+            "description": "Get details of a specific doctor."
+          }
+        },
+        {
+          "name": "Add Doctor Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"specialty\": \"Cardiology\",\n    \"license_number\": \"MED12345\",\n    \"experience_years\": 10,\n    \"bio\": \"Board-certified cardiologist with 10 years of experience\",\n    \"education\": {\n        \"level_of_education\": \"Doctorate\",\n        \"field\": \"Medicine\",\n        \"institution\": \"Harvard Medical School\",\n        \"start_date\": \"2005-09-01\",\n        \"end_date\": \"2009-06-30\"\n    },\n    \"is_available\": true,\n    \"communication_languages\": \"English, Spanish\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/doctors/add_profile/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "add_profile", ""]
+            },
+            "description": "Add a doctor profile for the current user. Requires user authentication with doctor role. After creating a profile, an admin must verify the doctor."
+          }
+        },
+        {
+          "name": "Get Current Doctor Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctors/profile/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "profile", ""]
+            },
+            "description": "Get the current doctor's profile. Requires authentication with doctor role."
+          }
+        },
+        {
+          "name": "Admin Add Doctor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"drsmith\",\n    \"email\": \"drsmith@example.com\",\n    \"password\": \"securedoctorpassword\",\n    \"first_name\": \"John\",\n    \"last_name\": \"Smith\",\n    \"phone_number\": \"+1234567890\",\n    \"address\": \"123 Doctor Street\",\n    \"specialty\": \"Cardiology\",\n    \"license_number\": \"MED12345\",\n    \"experience_years\": 10,\n    \"bio\": \"Board-certified cardiologist with 10 years of experience\",\n    \"education\": {\n        \"level_of_education\": \"Doctorate\",\n        \"field\": \"Medicine\",\n        \"institution\": \"Harvard Medical School\",\n        \"start_date\": \"2005-09-01\",\n        \"end_date\": \"2009-06-30\"\n    },\n    \"is_available\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/doctors/admin_add_doctor/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "admin_add_doctor", ""]
+            },
+            "description": "Admin: Add a new doctor. Requires admin authentication. Doctors created by admin are automatically verified."
+          }
+        },
+        {
+          "name": "Admin List Doctors (With Verification Filter)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctors/admin_list_doctors/?is_verified=false",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "admin_list_doctors", ""],
+              "query": [
+                {
+                  "key": "is_verified",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Admin: List all doctors with optional filtering by verification status. Use is_verified=false to find doctors needing verification."
+          }
+        },
+        {
+          "name": "Admin Verify Doctor",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"is_verified\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/doctors/{{doctor_id}}/verify_doctor/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "{{doctor_id}}", "verify_doctor", ""]
+            },
+            "description": "Admin: Verify a doctor's profile. Requires admin authentication. Set is_verified to true to approve or false to reject a doctor."
+          }
+        },
+        {
+          "name": "Update Doctor",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"specialty\": \"Updated Specialty\",\n    \"experience_years\": 12,\n    \"bio\": \"Updated bio\",\n    \"is_available\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/doctors/{{doctor_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "{{doctor_id}}", ""]
+            },
+            "description": "Update doctor profile. Doctor can update their own profile; admin can update any doctor."
+          }
+        },
+        {
+          "name": "Admin View Doctor",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctors/admin_view_doctor/{{doctor_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "admin_view_doctor", "{{doctor_id}}", ""]
+            },
+            "description": "Admin: View doctor details. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Admin View Patient",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctors/admin_view_patient/{{patient_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "admin_view_patient", "{{patient_id}}", ""]
+            },
+            "description": "Admin: View patient details. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Admin List Patients",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctors/admin_list_patients/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "admin_list_patients", ""]
+            },
+            "description": "Admin: List all patients. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Submit Doctor Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"rating\": 5,\n    \"review\": \"Excellent doctor, very professional and caring.\",\n    \"is_anonymous\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/doctors/{{doctor_id}}/review/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "{{doctor_id}}", "review", ""]
+            },
+            "description": "Submit a review for a doctor. Requires patient authentication."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Healthcare Facilities",
+      "item": [
+        {
+          "name": "List Healthcare Facilities",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", ""],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "GENERAL",
+                  "disabled": true
+                },
+                {
+                  "key": "name",
+                  "value": "City",
+                  "disabled": true
+                },
+                {
+                  "key": "active",
+                  "value": "true",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List healthcare facilities with optional filtering by category, name, or active status."
+          }
+        },
+        {
+          "name": "Get Healthcare Facility",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/{{facility_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", "{{facility_id}}", ""]
+            },
+            "description": "Get details of a specific healthcare facility."
+          }
+        },
+        {
+          "name": "Create Healthcare Facility",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"City General Hospital\",\n    \"description\": \"A state-of-the-art general hospital\",\n    \"category\": \"GENERAL\",\n    \"address\": \"456 Hospital Road\",\n    \"phone_number\": \"+1234567890\",\n    \"email\": \"info@citygeneral.com\",\n    \"website\": \"https://www.citygeneral.com\",\n    \"is_verified\": true,\n    \"is_active\": true,\n    \"doctor_ids\": [],\n    \"city\": \"New York\",\n    \"state\": \"NY\",\n    \"postal_code\": \"10001\",\n    \"country\": \"USA\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", ""]
+            },
+            "description": "Create a new healthcare facility. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Update Healthcare Facility",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Updated Hospital Name\",\n    \"description\": \"Updated description\",\n    \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/{{facility_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", "{{facility_id}}", ""]
+            },
+            "description": "Update healthcare facility. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Delete Healthcare Facility",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/{{facility_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", "{{facility_id}}", ""]
+            },
+            "description": "Delete healthcare facility. Requires admin authentication."
+          }
+        },
+        {
+          "name": "List Patient-Doctor Assignments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/list_patient_doctor_assignments/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", "list_patient_doctor_assignments", ""]
+            },
+            "description": "List patient-doctor assignments. Requires admin authentication."
+          }
+        },
+        {
+          "name": "View Assignment Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/view_assignment/{{assignment_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", "view_assignment", "{{assignment_id}}", ""]
+            },
+            "description": "View assignment details. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Assign Patient to Doctor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"patient_id\": \"{{patient_id}}\",\n    \"doctor_id\": \"{{doctor_id}}\",\n    \"notes\": \"Regular checkup patient\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/assign_patient_to_doctor/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", "assign_patient_to_doctor", ""]
+            },
+            "description": "Assign a patient to a doctor. Requires admin or doctor authentication."
+          }
+        },
+        {
+          "name": "Doctor - List Assigned Patients",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/doctor/patients/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", "doctor", "patients", ""],
+              "query": [
+                {
+                  "key": "active",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "format",
+                  "value": "fhir",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List all patients assigned to the authenticated doctor. Requires doctor authentication. Can filter by active status of assignments."
+          }
+        },
+        {
+          "name": "Doctor - View Patient Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/healthcare/doctor/patient/{{patient_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "healthcare", "doctor", "patient", "{{patient_id}}", ""],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "fhir",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "View details of a specific patient assigned to the authenticated doctor. Requires doctor authentication. Only returns data if the patient is actively assigned to the doctor."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Appointments",
+      "item": [
+        {
+          "name": "List Appointments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "appointments", ""],
+              "query": [
+                {
+                  "key": "doctor_id",
+                  "value": "{{doctor_id}}",
+                  "disabled": true
+                },
+                {
+                  "key": "patient_id",
+                  "value": "{{patient_id}}",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "scheduled",
+                  "disabled": true
+                },
+                {
+                  "key": "date_from",
+                  "value": "2023-01-01",
+                  "disabled": true
+                },
+                {
+                  "key": "date_to",
+                  "value": "2023-12-31",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List appointments with optional filtering. Admin can see all; doctors see their appointments; patients see their appointments."
+          }
+        },
+        {
+          "name": "Create Appointment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"patient\": \"{{patient_id}}\",\n    \"doctor\": \"{{doctor_id}}\",\n    \"appointment_date\": \"2023-06-15\",\n    \"start_time\": \"14:00:00\",\n    \"end_time\": \"14:30:00\",\n    \"status\": \"scheduled\",\n    \"appointment_type\": \"checkup\",\n    \"reason\": \"Annual physical examination\",\n    \"healthcare_facility\": \"{{facility_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/appointments/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "appointments", ""]
+            },
+            "description": "Create a new appointment. Patients can create for themselves; doctors and admins can create for any patient."
+          }
+        },
+        {
+          "name": "My Appointments (Patient)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments/my_appointments/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "appointments", "my_appointments", ""]
+            },
+            "description": "Get the current patient's appointments. Requires patient authentication."
+          }
+        },
+        {
+          "name": "Doctor Appointments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments/doctor_appointments/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "appointments", "doctor_appointments", ""]
+            },
+            "description": "Get the current doctor's appointments. Requires doctor authentication."
+          }
+        },
+        {
+          "name": "Cancel Appointment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments/{{appointment_id}}/cancel_appointment/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "appointments", "{{appointment_id}}", "cancel_appointment", ""]
+            },
+            "description": "Cancel an appointment. Patients can cancel their own; doctors and admins can cancel any."
+          }
+        },
+        {
+          "name": "Update Consultation Details",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"diagnosis\": \"Hypertension\",\n    \"treatment\": \"Prescribed blood pressure medication\",\n    \"notes\": \"Follow-up in 3 months\",\n    \"risk_level\": \"medium\",\n    \"status\": \"completed\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/appointments/{{appointment_id}}/update_consultation_details/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "appointments", "{{appointment_id}}", "update_consultation_details", ""]
+            },
+            "description": "Update consultation details for an appointment. Requires doctor authentication."
+          }
+        },
+        {
+          "name": "Patient Reschedule Appointment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"appointment_date\": \"2023-07-20\",\n    \"start_time\": \"15:00:00\",\n    \"end_time\": \"15:30:00\",\n    \"reschedule_reason\": \"Personal emergency\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/appointments/{{appointment_id}}/patient_reschedule/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "appointments", "{{appointment_id}}", "patient_reschedule", ""]
+            },
+            "description": "Reschedule an appointment as a patient. Requires patient authentication and appointment ownership."
+          }
+        },
+        {
+          "name": "Doctor Reschedule Appointment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"appointment_date\": \"2023-07-22\",\n    \"start_time\": \"10:00:00\",\n    \"end_time\": \"10:30:00\",\n    \"reschedule_reason\": \"Doctor unavailable due to emergency surgery\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/appointments/{{appointment_id}}/doctor_reschedule/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "appointments", "{{appointment_id}}", "doctor_reschedule", ""]
+            },
+            "description": "Reschedule an appointment as a doctor. Requires doctor authentication and appointment ownership."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Doctor Availability",
+      "item": [
+        {
+          "name": "List Doctor Availabilities",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctor-availability/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctor-availability", ""],
+              "query": [
+                {
+                  "key": "doctor_id",
+                  "value": "{{doctor_id}}",
+                  "disabled": true
+                },
+                {
+                  "key": "available",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "day",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "date",
+                  "value": "2023-06-15",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List doctor availabilities with optional filtering by doctor ID, availability, day of week, or specific date."
+          }
+        },
+        {
+          "name": "Create Doctor Availability",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"doctor\": \"{{doctor_id}}\",\n    \"day_of_week\": 1,\n    \"start_time\": \"09:00:00\",\n    \"end_time\": \"17:00:00\",\n    \"is_recurring\": true,\n    \"specific_date\": null,\n    \"is_available\": true,\n    \"notes\": \"Regular office hours\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/doctor-availability/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctor-availability", ""]
+            },
+            "description": "Create a doctor availability slot. Doctors can create for themselves; admins can create for any doctor."
+          }
+        },
+        {
+          "name": "My Availability (Doctor)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctor-availability/my_availability/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctor-availability", "my_availability", ""]
+            },
+            "description": "Get the current doctor's availability. Requires doctor authentication."
+          }
+        },
+        {
+          "name": "Get Doctor Availability by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctor-availability/{{doctor_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctor-availability", "{{doctor_id}}", ""]
+            },
+            "description": "Get doctor availability by doctor ID. Requires authentication."
+          }
+        },
+        {
+          "name": "Update Doctor Availability",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"day_of_week\": 2,\n    \"start_time\": \"10:00:00\",\n    \"end_time\": \"18:00:00\",\n    \"is_available\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/doctor-availability/{{availability_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctor-availability", "{{availability_id}}", ""]
+            },
+            "description": "Update doctor availability. Doctor can update their own; admin can update any."
+          }
+        },
+        {
+          "name": "Delete Doctor Availability",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctor-availability/{{availability_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctor-availability", "{{availability_id}}", ""]
+            },
+            "description": "Delete doctor availability. Doctor can delete their own; admin can delete any."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Consultations",
+      "item": [
+        {
+          "name": "List Consultations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/consultations/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", ""],
+              "query": [
+                {
+                  "key": "appointment_id",
+                  "value": "{{appointment_id}}",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "completed",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List consultations with optional filtering by appointment ID or status."
+          }
+        },
+        {
+          "name": "Create Consultation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"appointment\": \"{{appointment_id}}\",\n    \"status\": \"scheduled\",\n    \"session_id\": \"\",\n    \"recording_url\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/consultations/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", ""]
+            },
+            "description": "Create a new consultation. Requires doctor or admin authentication."
+          }
+        },
+        {
+          "name": "Start Consultation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/start_consultation/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", "start_consultation", ""]
+            },
+            "description": "Start a consultation. Requires doctor authentication."
+          }
+        },
+        {
+          "name": "End Consultation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/end_consultation/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", "end_consultation", ""]
+            },
+            "description": "End a consultation. Requires doctor authentication."
+          }
+        },
+        {
+          "name": "Update Consultation",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"completed\",\n    \"notes\": \"Consultation completed successfully\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", ""]
+            },
+            "description": "Update consultation details. Requires doctor authentication."
+          }
+        },
+        {
+          "name": "Delete Consultation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", ""]
+            },
+            "description": "Delete consultation. Requires doctor or admin authentication."
+          }
+        },
+        {
+          "name": "Get Twilio Token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/get_token/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", "get_token", ""]
+            },
+            "description": "Get Twilio token for video consultation. Requires authentication."
+          }
+        },
+        {
+          "name": "Join Consultation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/join_consultation/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", "join_consultation", ""]
+            },
+            "description": "Join a consultation. Requires doctor or patient authentication."
+          }
+        },
+        {
+          "name": "Get Chat Messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/chat_messages/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", "chat_messages", ""]
+            },
+            "description": "Get chat messages for a consultation. Requires authentication."
+          }
+        },
+        {
+          "name": "Send Chat Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"message\": \"Hello, how are you feeling today?\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/send_message/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", "send_message", ""]
+            },
+            "description": "Send a chat message during consultation. Requires authentication."
+          }
+        },
+        {
+          "name": "Mark Messages as Read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/consultations/{{consultation_id}}/mark_messages_read/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "consultations", "{{consultation_id}}", "mark_messages_read", ""]
+            },
+            "description": "Mark chat messages as read. Requires authentication."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Packages & Subscriptions",
+      "item": [
+        {
+          "name": "List Packages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/packages/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "packages", ""]
+            },
+            "description": "List all available packages."
+          }
+        },
+        {
+          "name": "Create Package",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Premium Health Plan\",\n    \"description\": \"Comprehensive healthcare package with unlimited consultations\",\n    \"price\": 299.99,\n    \"duration_days\": 365,\n    \"consultation_count\": -1,\n    \"max_doctors\": 5,\n    \"priority_support\": true,\n    \"access_to_resources\": true,\n    \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/packages/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "packages", ""]
+            },
+            "description": "Create a new package. Requires admin authentication."
+          }
+        },
+        {
+          "name": "List Subscriptions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", ""],
+              "query": [
+                {
+                  "key": "patient_id",
+                  "value": "{{patient_id}}",
+                  "disabled": true
+                },
+                {
+                  "key": "package_id",
+                  "value": "{{package_id}}",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List subscriptions with optional filtering. Admin can see all; patients see only their own."
+          }
+        },
+        {
+          "name": "Create Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"patient\": \"{{patient_id}}\",\n    \"package\": \"{{package_id}}\",\n    \"start_date\": \"2023-01-01\",\n    \"end_date\": \"2023-12-31\",\n    \"status\": \"active\",\n    \"payment_reference\": \"PAY123456789\",\n    \"payment_date\": \"2023-01-01\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", ""]
+            },
+            "description": "Create a new subscription. Patients can create for themselves; admins can create for any patient."
+          }
+        },
+        {
+          "name": "My Subscriptions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/my_subscriptions/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", "my_subscriptions", ""]
+            },
+            "description": "Get the current patient's subscriptions. Requires patient authentication."
+          }
+        },
+        {
+          "name": "Cancel Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/{{subscription_id}}/cancel_subscription/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", "{{subscription_id}}", "cancel_subscription", ""]
+            },
+            "description": "Cancel a subscription. Patients can cancel their own; admins can cancel any."
+          }
+        },
+        {
+          "name": "Subscribe to Package",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"package_id\": \"{{package_id}}\",\n    \"payment_method\": \"credit_card\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/subscribe/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", "subscribe", ""]
+            },
+            "description": "Subscribe to a package. Requires patient authentication."
+          }
+        },
+        {
+          "name": "Get Active Subscriptions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/active/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", "active", ""]
+            },
+            "description": "Get active subscriptions for the current patient. Requires patient authentication."
+          }
+        },
+        {
+          "name": "Upgrade Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"new_package_id\": \"{{package_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/upgrade/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", "upgrade", ""]
+            },
+            "description": "Upgrade subscription to a higher tier. Requires patient authentication."
+          }
+        },
+        {
+          "name": "Downgrade Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"new_package_id\": \"{{package_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/downgrade/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", "downgrade", ""]
+            },
+            "description": "Downgrade subscription to a lower tier. Requires patient authentication."
+          }
+        },
+        {
+          "name": "Renew Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/{{subscription_id}}/renew/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", "{{subscription_id}}", "renew", ""]
+            },
+            "description": "Renew a subscription. Requires patient authentication."
+          }
+        },
+        {
+          "name": "Get Subscription Usage",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/subscriptions/{{subscription_id}}/usage/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscriptions", "{{subscription_id}}", "usage", ""]
+            },
+            "description": "Get subscription usage details. Requires patient authentication."
+          }
+        },
+        {
+          "name": "Update Package",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Updated Package Name\",\n    \"price\": 199.99,\n    \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/packages/{{package_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "packages", "{{package_id}}", ""]
+            },
+            "description": "Update a package. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Delete Package",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/packages/{{package_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "packages", "{{package_id}}", ""]
+            },
+            "description": "Delete a package. Requires admin authentication."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Support & Contact",
+      "item": [
+        {
+          "name": "Support Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"subject\": \"Issue with account\",\n    \"message\": \"I'm having trouble accessing my medical records\",\n    \"request_type\": \"technical\",\n    \"priority\": \"medium\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/support-request/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "support-request", ""]
+            },
+            "description": "Submit a support request. Requires authentication. request_type must be one of: 'technical', 'billing', 'account', 'feedback', 'other'. priority can be: 'low', 'medium', 'high', 'urgent' (defaults to 'medium')."
+          }
+        },
+        {
+          "name": "Contact Us",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"John Doe\",\n    \"email\": \"john@example.com\",\n    \"subject\": \"General Inquiry\",\n    \"message\": \"I'd like to know more about your services.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/contact-us/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "contact-us", ""]
+            },
+            "description": "Send a general contact message. No authentication required."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reviews & Ratings",
+      "item": [
+        {
+          "name": "Submit Doctor Rating",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"doctor\": \"{{doctor_id}}\",\n    \"rating\": 5,\n    \"review\": \"Dr. Smith was very professional and knowledgeable.\",\n    \"is_anonymous\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/doctor-ratings/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctor-ratings", ""]
+            },
+            "description": "Submit a rating for a doctor. Requires patient authentication. Rating must be between 1-5."
+          }
+        },
+        {
+          "name": "Get Doctor Average Rating",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctor-ratings/doctor_average_rating/?doctor_id={{doctor_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctor-ratings", "doctor_average_rating", ""],
+              "query": [
+                {
+                  "key": "doctor_id",
+                  "value": "{{doctor_id}}"
+                }
+              ]
+            },
+            "description": "Get the average rating for a specific doctor."
+          }
+        },
+        {
+          "name": "Get Doctor Ratings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctors/{{doctor_id}}/ratings/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "{{doctor_id}}", "ratings", ""]
+            },
+            "description": "Get all ratings for a specific doctor."
+          }
+        },
+        {
+          "name": "Get Doctor Rating Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/doctors/{{doctor_id}}/rating_summary/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "doctors", "{{doctor_id}}", "rating_summary", ""]
+            },
+            "description": "Get a summary of ratings for a specific doctor, including average rating and count by rating value."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Clinical Support",
+      "item": [
+        {
+          "name": "Get Clinical Decision Support",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"age\": 45,\n    \"gender\": \"male\",\n    \"weight\": 85.5,\n    \"height\": 178,\n    \"high_blood_pressure\": true,\n    \"diabetes\": false,\n    \"on_medication\": true,\n    \"headache\": true,\n    \"dizziness\": true,\n    \"blurred_vision\": false,\n    \"palpitations\": true,\n    \"fatigue\": true,\n    \"chest_pain\": false,\n    \"frequent_thirst\": false,\n    \"loss_of_appetite\": false,\n    \"frequent_urination\": false,\n    \"other_symptoms\": \"Occasional shortness of breath\",\n    \"no_symptoms\": false,\n    \"systolic_pressure\": 145,\n    \"diastolic_pressure\": 95,\n    \"blood_sugar\": 5.5,\n    \"heart_rate\": 85,\n    \"sleep_hours\": 6.5,\n    \"exercise_minutes\": 15,\n    \"eats_unhealthy\": true,\n    \"smokes\": false,\n    \"consumes_alcohol\": true,\n    \"skips_medication\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/clinical-decision/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "clinical-decision", ""]
+            },
+            "description": "Get clinical decision support based on symptoms and health metrics. Requires authentication."
+          }
+        },
+        {
+          "name": "Get Clinical History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/clinical-history/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "clinical-history", ""]
+            },
+            "description": "Get patient's clinical history. Patients can access their own; doctors can access for assigned patients."
+          }
+        }
+      ]
+    },
+    {
+      "name": "FHIR API",
+      "item": [
+        {
+          "name": "FHIR Metadata",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fhir/metadata",
+              "host": ["{{base_url}}"],
+              "path": ["fhir", "metadata"]
+            },
+            "description": "Get FHIR server capability statement."
+          }
+        },
+        {
+          "name": "FHIR Patient List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fhir/Patient/",
+              "host": ["{{base_url}}"],
+              "path": ["fhir", "Patient", ""]
+            },
+            "description": "List patients in FHIR format."
+          }
+        },
+        {
+          "name": "FHIR Patient Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fhir/Patient/{{patient_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["fhir", "Patient", "{{patient_id}}", ""]
+            },
+            "description": "Get patient details in FHIR format."
+          }
+        },
+        {
+          "name": "FHIR Practitioner List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fhir/Practitioner/",
+              "host": ["{{base_url}}"],
+              "path": ["fhir", "Practitioner", ""]
+            },
+            "description": "List doctors in FHIR format."
+          }
+        },
+        {
+          "name": "FHIR Practitioner Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fhir/Practitioner/{{doctor_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["fhir", "Practitioner", "{{doctor_id}}", ""]
+            },
+            "description": "Get doctor details in FHIR format."
+          }
+        },
+        {
+          "name": "FHIR Organization List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fhir/Organization/",
+              "host": ["{{base_url}}"],
+              "path": ["fhir", "Organization", ""]
+            },
+            "description": "List healthcare facilities in FHIR format."
+          }
+        },
+        {
+          "name": "FHIR Organization Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fhir/Organization/{{facility_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["fhir", "Organization", "{{facility_id}}", ""]
+            },
+            "description": "Get healthcare facility details in FHIR format."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Articles",
+      "item": [
+        {
+          "name": "List Articles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", ""]
+            },
+            "description": "List all articles. Requires authentication."
+          }
+        },
+        {
+          "name": "Create Article",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"title\": \"Understanding Diabetes\",\n    \"content\": \"Detailed article about diabetes management...\",\n    \"summary\": \"A comprehensive guide to diabetes management\",\n    \"category\": \"Health Education\",\n    \"tags\": \"diabetes, health, management\",\n    \"is_published\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/articles/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", ""]
+            },
+            "description": "Create a new article. Requires doctor or admin authentication."
+          }
+        },
+        {
+          "name": "Get Article Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/{{article_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "{{article_id}}", ""]
+            },
+            "description": "Get article details. Requires authentication."
+          }
+        },
+        {
+          "name": "Update Article",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"title\": \"Updated Article Title\",\n    \"content\": \"Updated article content...\",\n    \"is_published\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/articles/{{article_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "{{article_id}}", ""]
+            },
+            "description": "Update article. Author or admin can update."
+          }
+        },
+        {
+          "name": "Delete Article",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/{{article_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "{{article_id}}", ""]
+            },
+            "description": "Delete article. Author or admin can delete."
+          }
+        },
+        {
+          "name": "Approve Article (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/{{article_id}}/approve/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "{{article_id}}", "approve", ""]
+            },
+            "description": "Approve article for publication. Requires admin authentication."
+          }
+        },
+        {
+          "name": "Publish Article",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/{{article_id}}/publish/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "{{article_id}}", "publish", ""]
+            },
+            "description": "Publish article. Requires doctor or admin authentication."
+          }
+        },
+        {
+          "name": "Unpublish Article",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/{{article_id}}/unpublish/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "{{article_id}}", "unpublish", ""]
+            },
+            "description": "Unpublish article. Requires doctor or admin authentication."
+          }
+        },
+        {
+          "name": "Track Article View",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/{{article_id}}/view/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "{{article_id}}", "view", ""]
+            },
+            "description": "Track article view. Requires authentication."
+          }
+        },
+        {
+          "name": "My Articles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/my_articles/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "my_articles", ""]
+            },
+            "description": "Get user's articles. Requires authentication."
+          }
+        },
+        {
+          "name": "Featured Articles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/featured/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "featured", ""]
+            },
+            "description": "Get featured articles. Requires authentication."
+          }
+        },
+        {
+          "name": "Popular Articles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/popular/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "popular", ""]
+            },
+            "description": "Get popular articles. Requires authentication."
+          }
+        },
+        {
+          "name": "Recent Articles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/recent/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "recent", ""]
+            },
+            "description": "Get recent articles. Requires authentication."
+          }
+        },
+        {
+          "name": "Articles by Condition",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/articles/by_condition/?condition=diabetes",
+              "host": ["{{base_url}}"],
+              "path": ["api", "articles", "by_condition", ""],
+              "query": [
+                {
+                  "key": "condition",
+                  "value": "diabetes"
+                }
+              ]
+            },
+            "description": "Get articles by medical condition. Requires authentication."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Article Comments",
+      "item": [
+        {
+          "name": "List Article Comments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/article-comments/?article_id={{article_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "article-comments", ""],
+              "query": [
+                {
+                  "key": "article_id",
+                  "value": "{{article_id}}"
+                }
+              ]
+            },
+            "description": "List comments for an article. Requires authentication."
+          }
+        },
+        {
+          "name": "Create Article Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"article\": \"{{article_id}}\",\n    \"content\": \"This is a very informative article. Thank you for sharing!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/article-comments/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "article-comments", ""]
+            },
+            "description": "Create a comment on an article. Requires authentication."
+          }
+        },
+        {
+          "name": "Update Article Comment",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"content\": \"Updated comment content\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/article-comments/{{comment_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "article-comments", "{{comment_id}}", ""]
+            },
+            "description": "Update comment. Author can update their own comment."
+          }
+        },
+        {
+          "name": "Delete Article Comment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/article-comments/{{comment_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "article-comments", "{{comment_id}}", ""]
+            },
+            "description": "Delete comment. Author or admin can delete."
+          }
+        },
+        {
+          "name": "Like Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/article-comments/{{comment_id}}/like/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "article-comments", "{{comment_id}}", "like", ""]
+            },
+            "description": "Like a comment. Requires authentication."
+          }
+        },
+        {
+          "name": "Unlike Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/article-comments/{{comment_id}}/unlike/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "article-comments", "{{comment_id}}", "unlike", ""]
+            },
+            "description": "Unlike a comment. Requires authentication."
+          }
+        },
+        {
+          "name": "Reply to Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"content\": \"Thank you for your feedback!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/article-comments/{{comment_id}}/reply/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "article-comments", "{{comment_id}}", "reply", ""]
+            },
+            "description": "Reply to a comment. Requires authentication."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "List Payments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/payments/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", ""]
+            },
+            "description": "List payments. Admin can see all; users see their own."
+          }
+        },
+        {
+          "name": "Create Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"amount\": 99.99,\n    \"currency\": \"USD\",\n    \"payment_method\": \"credit_card\",\n    \"description\": \"Monthly subscription payment\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", ""]
+            },
+            "description": "Create a payment. Requires authentication."
+          }
+        },
+        {
+          "name": "Get Payment Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/payments/{{payment_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "{{payment_id}}", ""]
+            },
+            "description": "Get payment details. Requires authentication."
+          }
+        },
+        {
+          "name": "Process Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"payment_token\": \"tok_1234567890\",\n    \"confirm_payment\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/{{payment_id}}/process/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "{{payment_id}}", "process", ""]
+            },
+            "description": "Process a payment. Requires authentication."
+          }
+        },
+        {
+          "name": "Payment Callback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"payment_id\": \"{{payment_id}}\",\n    \"status\": \"completed\",\n    \"transaction_id\": \"txn_1234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/{{payment_id}}/callback/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "{{payment_id}}", "callback", ""]
+            },
+            "description": "Payment callback webhook. No authentication required."
+          }
+        },
+        {
+          "name": "Payment IPN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"payment_id\": \"{{payment_id}}\",\n    \"status\": \"completed\",\n    \"amount\": 99.99\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/ipn/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "ipn", ""]
+            },
+            "description": "Instant Payment Notification. No authentication required."
+          }
+        },
+        {
+          "name": "Get Payment Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/payments/{{payment_id}}/status/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "{{payment_id}}", "status", ""]
+            },
+            "description": "Get payment status. Requires authentication."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Roles",
+      "item": [
+        {
+          "name": "List Roles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/roles/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "roles", ""]
+            },
+            "description": "List all roles. Requires authentication."
+          }
+        },
+        {
+          "name": "Get Role Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/roles/{{role_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "roles", "{{role_id}}", ""]
+            },
+            "description": "Get role details. Requires authentication."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documentation",
+      "item": [
+        {
+          "name": "Swagger UI",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/swagger/",
+              "host": ["{{base_url}}"],
+              "path": ["swagger", ""]
+            },
+            "description": "Access Swagger UI documentation. No authentication required."
+          }
+        },
+        {
+          "name": "Swagger JSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/swagger.json",
+              "host": ["{{base_url}}"],
+              "path": ["swagger.json"]
+            },
+            "description": "Get Swagger JSON schema. No authentication required."
+          }
+        },
+        {
+          "name": "Swagger YAML",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/swagger.yaml",
+              "host": ["{{base_url}}"],
+              "path": ["swagger.yaml"]
+            },
+            "description": "Get Swagger YAML schema. No authentication required."
+          }
+        },
+        {
+          "name": "ReDoc",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/redoc/",
+              "host": ["{{base_url}}"],
+              "path": ["redoc", ""]
+            },
+            "description": "Access ReDoc documentation. No authentication required."
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "your_jwt_token_here",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "patient_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "doctor_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "facility_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointment_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "consultation_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "package_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "subscription_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "article_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "comment_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "payment_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "role_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "availability_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "assignment_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "uidb64",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
