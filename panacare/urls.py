@@ -227,6 +227,9 @@ urlpatterns = [
     
     # Clinical Decision Support
     path('', include('clinical_support.urls')),
+    
+    # FCM Notifications
+    path('', include('notifications.urls')),
 ]
 
 # Media files serving in development

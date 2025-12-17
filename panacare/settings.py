@@ -58,6 +58,7 @@ INSTALLED_APPS = [
         'healthcare',
     'clinical_support',
     'fhir_api',
+    'notifications',
 ]
 
 # Swagger Settings
@@ -424,6 +425,7 @@ INSTALLED_APPS = [
         'healthcare',
     'clinical_support',
     'fhir_api',
+    'notifications',
 ]
 
 # Swagger Settings
@@ -731,3 +733,7 @@ LOGGING = {
         },
     },
 }
+
+
+# Firebase configuration
+FIREBASE_SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR, 'firebase-service-account.json')
