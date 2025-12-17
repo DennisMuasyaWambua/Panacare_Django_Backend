@@ -485,6 +485,12 @@ class CHPPatientCreateSerializer(serializers.Serializer):
         
         # Create patient profile
         patient_data['user'] = user
+        
+        # Set the CHP who created this patient
+        chp = self.context.get('chp')
+        if chp:
+            patient_data['created_by_chp'] = chp
+        
         patient = Patient.objects.create(**patient_data)
         
         return {

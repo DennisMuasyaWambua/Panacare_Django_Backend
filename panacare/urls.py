@@ -18,7 +18,7 @@ from users.views import (
     CountiesListAPIView, SubCountiesListAPIView, WardsListAPIView, VillagesListAPIView,
     LocationHierarchyAPIView, SyncLocationsAPIView, CHPPatientCreateAPIView, CHPClinicalDecisionSupportAPIView,
     CHPDoctorAvailabilityAPIView, CHPAppointmentBookingAPIView, CHPBatchAppointmentBookingAPIView,
-    CHPPatientAppointmentsAPIView
+    CHPPatientAppointmentsAPIView, CHPPatientsListAPIView
 )
 from doctors.views import DoctorViewSet
 import doctors.views
@@ -196,6 +196,7 @@ urlpatterns = [
     
     # Community Health Provider endpoints
     path('api/chp/create-patient/', CHPPatientCreateAPIView.as_view(), name='chp-create-patient'),
+    path('api/chp/patients/', CHPPatientsListAPIView.as_view(), name='chp-patients-list'),
     path('api/chp/cdss/', CHPClinicalDecisionSupportAPIView.as_view(), name='chp-cdss'),
     path('api/chp/doctors/', CHPDoctorAvailabilityAPIView.as_view(), name='chp-doctors'),
     path('api/chp/book-appointment/', CHPAppointmentBookingAPIView.as_view(), name='chp-book-appointment'),

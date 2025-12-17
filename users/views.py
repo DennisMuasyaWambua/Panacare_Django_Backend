@@ -1536,7 +1536,7 @@ class CHPPatientCreateAPIView(APIView):
             return Response({'error': 'Only Community Health Providers can create patients'}, 
                           status=status.HTTP_403_FORBIDDEN)
         
-        serializer = CHPPatientCreateSerializer(data=request.data)
+        serializer = CHPPatientCreateSerializer(data=request.data, context={'chp': chp})
         if serializer.is_valid():
             result = serializer.save()
             
@@ -2565,5 +2565,254 @@ class CHPPatientAppointmentsAPIView(APIView):
                 'name': chp.user.get_full_name(),
                 'specialization': chp.specialization,
                 'service_area': chp.service_area
+            }
+        }, status=status.HTTP_200_OK)
+
+
+class CHPPatientsListAPIView(APIView):
+    """
+    API view for Community Health Provider to view all patients they have onboarded
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Get all patients that the authenticated Community Health Provider has onboarded/created. Includes comprehensive patient information, medical details, and appointment statistics.",
+        manual_parameters=[
+            openapi.Parameter('search', openapi.IN_QUERY, description="Search by patient name or email", type=openapi.TYPE_STRING, example="Mary"),
+            openapi.Parameter('location_id', openapi.IN_QUERY, description="Filter by patient location UUID", type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440030"),
+            openapi.Parameter('is_active', openapi.IN_QUERY, description="Filter by patient active status", type=openapi.TYPE_BOOLEAN, example=True),
+            openapi.Parameter('date_from', openapi.IN_QUERY, description="Filter by onboarding date from (YYYY-MM-DD)", type=openapi.TYPE_STRING, format="date", example="2025-12-01"),
+            openapi.Parameter('date_to', openapi.IN_QUERY, description="Filter by onboarding date to (YYYY-MM-DD)", type=openapi.TYPE_STRING, format="date", example="2025-12-31"),
+            openapi.Parameter('blood_type', openapi.IN_QUERY, description="Filter by blood type", type=openapi.TYPE_STRING, enum=['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'], example="O+"),
+            openapi.Parameter('gender', openapi.IN_QUERY, description="Filter by gender", type=openapi.TYPE_STRING, enum=['male', 'female', 'other', 'unknown'], example="female")
+        ],
+        responses={
+            200: openapi.Response("List of CHP's onboarded patients", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'count': openapi.Schema(type=openapi.TYPE_INTEGER, example=5),
+                    'patients': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                                'name': openapi.Schema(type=openapi.TYPE_STRING, example="Mary Wanjiku"),
+                                'email': openapi.Schema(type=openapi.TYPE_STRING, example="patient@example.com"),
+                                'phone': openapi.Schema(type=openapi.TYPE_STRING, example="+254722333444"),
+                                'date_of_birth': openapi.Schema(type=openapi.TYPE_STRING, format="date", example="1985-03-15"),
+                                'age': openapi.Schema(type=openapi.TYPE_INTEGER, example=39),
+                                'gender': openapi.Schema(type=openapi.TYPE_STRING, example="female"),
+                                'blood_type': openapi.Schema(type=openapi.TYPE_STRING, example="O+"),
+                                'location': openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                                        'name': openapi.Schema(type=openapi.TYPE_STRING, example="Parklands Estate"),
+                                        'level': openapi.Schema(type=openapi.TYPE_STRING, example="village")
+                                    }
+                                ),
+                                'medical_info': openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        'allergies': openapi.Schema(type=openapi.TYPE_STRING, example="Penicillin"),
+                                        'medical_conditions': openapi.Schema(type=openapi.TYPE_STRING, example="Diabetes Type 2"),
+                                        'current_medications': openapi.Schema(type=openapi.TYPE_STRING, example="Metformin 500mg"),
+                                        'height_cm': openapi.Schema(type=openapi.TYPE_INTEGER, example=165),
+                                        'weight_kg': openapi.Schema(type=openapi.TYPE_STRING, example="65.50")
+                                    }
+                                ),
+                                'emergency_contact': openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        'name': openapi.Schema(type=openapi.TYPE_STRING, example="John Wanjiku"),
+                                        'phone': openapi.Schema(type=openapi.TYPE_STRING, example="+254722555666"),
+                                        'relationship': openapi.Schema(type=openapi.TYPE_STRING, example="Spouse")
+                                    }
+                                ),
+                                'onboarded_at': openapi.Schema(type=openapi.TYPE_STRING, format="date-time"),
+                                'appointment_stats': openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        'total_appointments': openapi.Schema(type=openapi.TYPE_INTEGER, example=3),
+                                        'upcoming_appointments': openapi.Schema(type=openapi.TYPE_INTEGER, example=1),
+                                        'last_appointment_date': openapi.Schema(type=openapi.TYPE_STRING, format="date", example="2025-12-20"),
+                                        'next_appointment_date': openapi.Schema(type=openapi.TYPE_STRING, format="date", example="2025-12-25")
+                                    }
+                                ),
+                                'is_active': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=True)
+                            }
+                        )
+                    ),
+                    'chp_info': openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        properties={
+                            'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                            'name': openapi.Schema(type=openapi.TYPE_STRING, example="Nurse Jane Doe"),
+                            'specialization': openapi.Schema(type=openapi.TYPE_STRING, example="Community Health"),
+                            'service_area': openapi.Schema(type=openapi.TYPE_STRING, example="Westlands District"),
+                            'total_patients_onboarded': openapi.Schema(type=openapi.TYPE_INTEGER, example=5)
+                        }
+                    )
+                }
+            )),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="Invalid date format. Use YYYY-MM-DD")}
+            )),
+            403: openapi.Response("Permission Denied", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="Only Community Health Providers can view their patients")}
+            ))
+        },
+        tags=['Community Health Provider']
+    )
+    def get(self, request):
+        # Check if user is a Community Health Provider
+        try:
+            chp = CommunityHealthProvider.objects.get(user=request.user)
+        except CommunityHealthProvider.DoesNotExist:
+            return Response({'error': 'Only Community Health Providers can view their patients'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        from datetime import datetime, date
+        from django.db.models import Q, Count
+        
+        # Base query for patients created by this CHP
+        patients_query = Patient.objects.filter(created_by_chp=chp).select_related('user', 'user__location')
+        
+        # Apply filters
+        search = request.query_params.get('search')
+        if search:
+            patients_query = patients_query.filter(
+                Q(user__first_name__icontains=search) | 
+                Q(user__last_name__icontains=search) |
+                Q(user__email__icontains=search)
+            )
+        
+        location_id = request.query_params.get('location_id')
+        if location_id:
+            patients_query = patients_query.filter(user__location_id=location_id)
+        
+        is_active = request.query_params.get('is_active')
+        if is_active is not None:
+            is_active_bool = is_active.lower() in ['true', '1', 'yes']
+            patients_query = patients_query.filter(active=is_active_bool)
+        
+        blood_type = request.query_params.get('blood_type')
+        if blood_type:
+            patients_query = patients_query.filter(blood_type=blood_type)
+        
+        gender = request.query_params.get('gender')
+        if gender:
+            patients_query = patients_query.filter(gender=gender)
+        
+        # Date filters
+        date_from = request.query_params.get('date_from')
+        if date_from:
+            try:
+                date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+                patients_query = patients_query.filter(created_at__date__gte=date_from_obj)
+            except ValueError:
+                return Response({'error': 'Invalid date_from format. Use YYYY-MM-DD'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+        
+        date_to = request.query_params.get('date_to')
+        if date_to:
+            try:
+                date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+                patients_query = patients_query.filter(created_at__date__lte=date_to_obj)
+            except ValueError:
+                return Response({'error': 'Invalid date_to format. Use YYYY-MM-DD'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+        
+        patients = patients_query.distinct()
+        
+        # Prepare response data
+        patients_data = []
+        for patient in patients:
+            # Calculate age if date_of_birth is available
+            age = None
+            if patient.date_of_birth:
+                today = date.today()
+                age = today.year - patient.date_of_birth.year - ((today.month, today.day) < (patient.date_of_birth.month, patient.date_of_birth.day))
+            
+            # Get appointment statistics
+            from healthcare.models import Appointment
+            from django.utils import timezone
+            
+            total_appointments = Appointment.objects.filter(patient=patient, created_by_chp=chp).count()
+            upcoming_appointments = Appointment.objects.filter(
+                patient=patient, 
+                created_by_chp=chp,
+                appointment_date__gte=timezone.now().date(),
+                status__in=['BOOKED', 'SCHEDULED', 'ARRIVED']
+            ).count()
+            
+            # Last appointment
+            last_appointment = Appointment.objects.filter(
+                patient=patient,
+                created_by_chp=chp
+            ).order_by('-appointment_date', '-start_time').first()
+            
+            # Next appointment
+            next_appointment = Appointment.objects.filter(
+                patient=patient,
+                created_by_chp=chp,
+                appointment_date__gte=timezone.now().date(),
+                status__in=['BOOKED', 'SCHEDULED', 'ARRIVED']
+            ).order_by('appointment_date', 'start_time').first()
+            
+            patient_data = {
+                'id': str(patient.id),
+                'name': patient.user.get_full_name(),
+                'email': patient.user.email,
+                'phone': patient.user.phone_number,
+                'date_of_birth': patient.date_of_birth.isoformat() if patient.date_of_birth else None,
+                'age': age,
+                'gender': patient.gender,
+                'blood_type': patient.blood_type,
+                'location': None,
+                'medical_info': {
+                    'allergies': patient.allergies,
+                    'medical_conditions': patient.medical_conditions,
+                    'current_medications': patient.medications,
+                    'height_cm': patient.height_cm,
+                    'weight_kg': str(patient.weight_kg) if patient.weight_kg else None
+                },
+                'emergency_contact': {
+                    'name': patient.emergency_contact_name,
+                    'phone': patient.emergency_contact_phone,
+                    'relationship': patient.emergency_contact_relationship
+                },
+                'onboarded_at': patient.created_at.isoformat(),
+                'appointment_stats': {
+                    'total_appointments': total_appointments,
+                    'upcoming_appointments': upcoming_appointments,
+                    'last_appointment_date': last_appointment.appointment_date.isoformat() if last_appointment else None,
+                    'next_appointment_date': next_appointment.appointment_date.isoformat() if next_appointment else None
+                },
+                'is_active': patient.active
+            }
+            
+            # Add location info if available
+            if patient.user.location:
+                patient_data['location'] = {
+                    'id': str(patient.user.location.id),
+                    'name': patient.user.location.name,
+                    'level': patient.user.location.level
+                }
+            
+            patients_data.append(patient_data)
+        
+        return Response({
+            'count': len(patients_data),
+            'patients': patients_data,
+            'chp_info': {
+                'id': str(chp.id),
+                'name': chp.user.get_full_name(),
+                'specialization': chp.specialization,
+                'service_area': chp.service_area,
+                'total_patients_onboarded': len(patients_data)
             }
         }, status=status.HTTP_200_OK)

@@ -155,6 +155,9 @@ class Patient(models.Model):
     insurance_policy_number = models.CharField(max_length=50, blank=True)
     insurance_group_number = models.CharField(max_length=50, blank=True)
     
+    # CHP tracking
+    created_by_chp = models.ForeignKey('CommunityHealthProvider', on_delete=models.SET_NULL, null=True, blank=True, related_name='created_patients')
+    
     # Metadata fields
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
