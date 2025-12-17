@@ -1496,12 +1496,35 @@ class SyncLocationsAPIView(APIView):
 class CHPPatientCreateAPIView(APIView):
     """
     API view for Community Health Provider to create patients
+    Supports both authenticated and offline modes
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     
     @swagger_auto_schema(
-        operation_description="Create a new patient as a Community Health Provider. Automatically generates a temporary password and assigns the patient role.",
-        request_body=CHPPatientCreateSerializer,
+        operation_description="Create a new patient as a Community Health Provider. Supports both authenticated and offline modes. In offline mode, provide 'chp_id' in the request body.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'chp_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", description="CHP ID for offline mode (optional if authenticated)", example="550e8400-e29b-41d4-a716-446655440400"),
+                'first_name': openapi.Schema(type=openapi.TYPE_STRING, example="Mary"),
+                'last_name': openapi.Schema(type=openapi.TYPE_STRING, example="Wanjiku"),
+                'email': openapi.Schema(type=openapi.TYPE_STRING, example="mary.wanjiku@example.com"),
+                'phone_number': openapi.Schema(type=openapi.TYPE_STRING, example="+254722333444"),
+                'location_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440030"),
+                'date_of_birth': openapi.Schema(type=openapi.TYPE_STRING, format="date", example="1985-03-15"),
+                'gender': openapi.Schema(type=openapi.TYPE_STRING, enum=['male', 'female', 'other', 'unknown'], example="female"),
+                'blood_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'], example="O+"),
+                'allergies': openapi.Schema(type=openapi.TYPE_STRING, example="Penicillin"),
+                'medical_conditions': openapi.Schema(type=openapi.TYPE_STRING, example="Diabetes Type 2"),
+                'medications': openapi.Schema(type=openapi.TYPE_STRING, example="Metformin 500mg"),
+                'height_cm': openapi.Schema(type=openapi.TYPE_INTEGER, example=165),
+                'weight_kg': openapi.Schema(type=openapi.TYPE_NUMBER, example=65.5),
+                'emergency_contact_name': openapi.Schema(type=openapi.TYPE_STRING, example="John Wanjiku"),
+                'emergency_contact_phone': openapi.Schema(type=openapi.TYPE_STRING, example="+254722555666"),
+                'emergency_contact_relationship': openapi.Schema(type=openapi.TYPE_STRING, example="Spouse")
+            },
+            required=['first_name', 'last_name', 'email', 'phone_number']
+        ),
         responses={
             201: openapi.Response("Patient created successfully", openapi.Schema(
                 type=openapi.TYPE_OBJECT,
@@ -1516,27 +1539,48 @@ class CHPPatientCreateAPIView(APIView):
             400: openapi.Response("Bad Request", openapi.Schema(
                 type=openapi.TYPE_OBJECT,
                 properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, example="Location with the provided ID does not exist")
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, example="CHP ID is required for offline mode")
                 }
             )),
-            403: openapi.Response("Permission Denied", openapi.Schema(
+            404: openapi.Response("Not Found", openapi.Schema(
                 type=openapi.TYPE_OBJECT,
                 properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, example="Only Community Health Providers can create patients")
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, example="Community Health Provider not found")
                 }
             ))
         },
         tags=['Community Health Provider']
     )
     def post(self, request):
-        # Check if user is a Community Health Provider
-        try:
-            chp = CommunityHealthProvider.objects.get(user=request.user)
-        except CommunityHealthProvider.DoesNotExist:
-            return Response({'error': 'Only Community Health Providers can create patients'}, 
-                          status=status.HTTP_403_FORBIDDEN)
+        # Determine if this is offline mode (CHP ID provided) or authenticated mode
+        chp_id = request.data.get('chp_id')
+        chp = None
         
-        serializer = CHPPatientCreateSerializer(data=request.data, context={'chp': chp})
+        if chp_id:
+            # Offline mode: Use provided CHP ID
+            try:
+                chp = CommunityHealthProvider.objects.get(id=chp_id)
+            except CommunityHealthProvider.DoesNotExist:
+                return Response({'error': 'Community Health Provider not found'}, 
+                              status=status.HTTP_404_NOT_FOUND)
+        elif request.user and request.user.is_authenticated:
+            # Authenticated mode: Use authenticated user's CHP profile
+            try:
+                chp = CommunityHealthProvider.objects.get(user=request.user)
+            except CommunityHealthProvider.DoesNotExist:
+                return Response({'error': 'Only Community Health Providers can create patients'}, 
+                              status=status.HTTP_403_FORBIDDEN)
+        else:
+            # Neither CHP ID provided nor authenticated
+            return Response({'error': 'CHP ID is required for offline mode'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create a copy of request data without chp_id for the serializer
+        patient_data = request.data.copy()
+        if 'chp_id' in patient_data:
+            del patient_data['chp_id']
+        
+        serializer = CHPPatientCreateSerializer(data=patient_data, context={'chp': chp})
         if serializer.is_valid():
             result = serializer.save()
             
@@ -1545,7 +1589,12 @@ class CHPPatientCreateAPIView(APIView):
                 'patient_id': str(result['patient'].id),
                 'user_id': str(result['user'].id),
                 'temporary_password': result['temporary_password'],
-                'note': 'Please provide the temporary password to the patient for first login'
+                'note': 'Please provide the temporary password to the patient for first login',
+                'chp_info': {
+                    'id': str(chp.id),
+                    'name': chp.user.get_full_name(),
+                    'service_area': chp.service_area
+                }
             }, status=status.HTTP_201_CREATED)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
