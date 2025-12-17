@@ -1506,6 +1506,8 @@ class CHPPatientCreateAPIView(APIView):
             type=openapi.TYPE_OBJECT,
             properties={
                 'chp_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", description="CHP ID for offline mode (optional if authenticated)", example="550e8400-e29b-41d4-a716-446655440400"),
+                'patient_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", description="Pre-generated patient UUID for offline mode (optional)", example="550e8400-e29b-41d4-a716-446655440500"),
+                'user_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", description="Pre-generated user UUID for offline mode (optional)", example="550e8400-e29b-41d4-a716-446655440501"),
                 'first_name': openapi.Schema(type=openapi.TYPE_STRING, example="Mary"),
                 'last_name': openapi.Schema(type=openapi.TYPE_STRING, example="Wanjiku"),
                 'email': openapi.Schema(type=openapi.TYPE_STRING, example="mary.wanjiku@example.com"),
@@ -1539,7 +1541,7 @@ class CHPPatientCreateAPIView(APIView):
             400: openapi.Response("Bad Request", openapi.Schema(
                 type=openapi.TYPE_OBJECT,
                 properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, example="CHP ID is required for offline mode")
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, example="User with this ID already exists")
                 }
             )),
             404: openapi.Response("Not Found", openapi.Schema(

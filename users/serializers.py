@@ -405,7 +405,12 @@ class CommunityHealthProviderSerializer(serializers.ModelSerializer):
 class CHPPatientCreateSerializer(serializers.Serializer):
     """
     Serializer for Community Health Provider to create patients
+    Supports pre-generated UUIDs for offline functionality
     """
+    # Pre-generated UUID fields (optional for offline mode)
+    patient_id = serializers.UUIDField(required=False, help_text="Pre-generated patient UUID for offline mode")
+    user_id = serializers.UUIDField(required=False, help_text="Pre-generated user UUID for offline mode")
+    
     # User fields
     username = serializers.CharField(required=False)
     email = serializers.EmailField()
@@ -443,7 +448,23 @@ class CHPPatientCreateSerializer(serializers.Serializer):
                 raise serializers.ValidationError("Location with the provided ID does not exist")
         return value
     
+    def validate_user_id(self, value):
+        if value:
+            if User.objects.filter(id=value).exists():
+                raise serializers.ValidationError("User with this ID already exists")
+        return value
+    
+    def validate_patient_id(self, value):
+        if value:
+            if Patient.objects.filter(id=value).exists():
+                raise serializers.ValidationError("Patient with this ID already exists")
+        return value
+    
     def create(self, validated_data):
+        # Extract UUID fields
+        patient_id = validated_data.pop('patient_id', None)
+        user_id = validated_data.pop('user_id', None)
+        
         # Extract patient-specific data
         patient_data = {}
         user_data = {}
@@ -470,11 +491,19 @@ class CHPPatientCreateSerializer(serializers.Serializer):
         # Generate password for patient
         import secrets
         import string
-        password = ''.join(secrets.choice(string.ascii_letters + string.digits) for i in range(8))
+        password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
         user_data['password'] = password
         
-        # Create user
-        user = User.objects.create_user(**user_data)
+        # Create user with optional pre-generated UUID
+        if user_id:
+            # Use pre-generated UUID - need to create manually
+            user_data['id'] = user_id
+            user = User(**user_data)
+            user.set_password(user_data['password'])
+            user.save()
+        else:
+            # Auto-generate UUID
+            user = User.objects.create_user(**user_data)
         
         # Add patient role
         try:
@@ -483,7 +512,7 @@ class CHPPatientCreateSerializer(serializers.Serializer):
         except Role.DoesNotExist:
             pass
         
-        # Create patient profile
+        # Create patient profile with optional pre-generated UUID
         patient_data['user'] = user
         
         # Set the CHP who created this patient
@@ -491,7 +520,14 @@ class CHPPatientCreateSerializer(serializers.Serializer):
         if chp:
             patient_data['created_by_chp'] = chp
         
-        patient = Patient.objects.create(**patient_data)
+        if patient_id:
+            # Use pre-generated UUID
+            patient_data['id'] = patient_id
+            patient = Patient(**patient_data)
+            patient.save()
+        else:
+            # Auto-generate UUID
+            patient = Patient.objects.create(**patient_data)
         
         return {
             'user': user,
