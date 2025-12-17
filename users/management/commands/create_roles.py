@@ -10,6 +10,7 @@ class Command(BaseCommand):
             {'name': 'admin', 'description': 'Administrator with full access'},
             {'name': 'doctor', 'description': 'Medical professional who can manage patients'},
             {'name': 'patient', 'description': 'Regular user who receives healthcare'},
+            {'name': 'community_health_provider', 'description': 'Community health worker who provides local healthcare services'},
         ]
         
         # Create roles if they don't exist

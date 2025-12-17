@@ -14,7 +14,11 @@ from users.views import (
     UserListAPIView, UserDetailAPIView, UserRegisterAPIView, UserLoginAPIView, UserActivateAPIView,
     PatientListAPIView, PatientDetailAPIView, PatientProfileAPIView, UserProfileAPIView, register_admin_user,
     ResendVerificationAPIView, PasswordChangeAPIView, EmailChangeAPIView, PhoneChangeAPIView,
-    ContactUsAPIView, SupportRequestAPIView, ForgotPasswordAPIView, ResetPasswordAPIView, AuditLogViewSet
+    ContactUsAPIView, SupportRequestAPIView, ForgotPasswordAPIView, ResetPasswordAPIView, AuditLogViewSet,
+    CountiesListAPIView, SubCountiesListAPIView, WardsListAPIView, VillagesListAPIView,
+    LocationHierarchyAPIView, SyncLocationsAPIView, CHPPatientCreateAPIView, CHPClinicalDecisionSupportAPIView,
+    CHPDoctorAvailabilityAPIView, CHPAppointmentBookingAPIView, CHPBatchAppointmentBookingAPIView,
+    CHPPatientAppointmentsAPIView
 )
 from doctors.views import DoctorViewSet
 import doctors.views
@@ -181,6 +185,22 @@ urlpatterns = [
     
     path('api/patients/', PatientListAPIView.as_view(), name='patient-list'),
     path('api/patients/<uuid:pk>/', PatientDetailAPIView.as_view(), name='patient-detail'),
+    
+    # Location endpoints for hierarchical dropdowns
+    path('api/locations/counties/', CountiesListAPIView.as_view(), name='counties-list'),
+    path('api/locations/subcounties/', SubCountiesListAPIView.as_view(), name='subcounties-list'),
+    path('api/locations/wards/', WardsListAPIView.as_view(), name='wards-list'),
+    path('api/locations/villages/', VillagesListAPIView.as_view(), name='villages-list'),
+    path('api/locations/hierarchy/', LocationHierarchyAPIView.as_view(), name='location-hierarchy'),
+    path('api/locations/sync/', SyncLocationsAPIView.as_view(), name='sync-locations'),
+    
+    # Community Health Provider endpoints
+    path('api/chp/create-patient/', CHPPatientCreateAPIView.as_view(), name='chp-create-patient'),
+    path('api/chp/cdss/', CHPClinicalDecisionSupportAPIView.as_view(), name='chp-cdss'),
+    path('api/chp/doctors/', CHPDoctorAvailabilityAPIView.as_view(), name='chp-doctors'),
+    path('api/chp/book-appointment/', CHPAppointmentBookingAPIView.as_view(), name='chp-book-appointment'),
+    path('api/chp/batch-book-appointments/', CHPBatchAppointmentBookingAPIView.as_view(), name='chp-batch-book-appointments'),
+    path('api/chp/appointments/', CHPPatientAppointmentsAPIView.as_view(), name='chp-appointments'),
     
     # Add the admin URLs explicitly
     *admin_urls,

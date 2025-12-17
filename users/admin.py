@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, Role, Patient, AuditLog
+from .models import User, Role, Patient, CommunityHealthProvider, AuditLog
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
@@ -53,6 +53,29 @@ class PatientAdmin(admin.ModelAdmin):
             'fields': ('identifier_system',)
         }),
     )
+
+@admin.register(CommunityHealthProvider)
+class CommunityHealthProviderAdmin(admin.ModelAdmin):
+    list_display = ('user', 'specialization', 'years_of_experience', 'service_area', 'is_active')
+    list_filter = ('is_active', 'specialization', 'years_of_experience')
+    search_fields = ('user__email', 'user__username', 'user__first_name', 'user__last_name', 
+                    'specialization', 'service_area', 'certification_number')
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('user', 'is_active')
+        }),
+        ('Professional Details', {
+            'fields': ('certification_number', 'years_of_experience', 'specialization')
+        }),
+        ('Service Information', {
+            'fields': ('service_area', 'languages_spoken', 'availability_hours')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    readonly_fields = ('created_at', 'updated_at')
 
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):

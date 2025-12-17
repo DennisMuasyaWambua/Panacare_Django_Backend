@@ -370,6 +370,7 @@ class Appointment(models.Model):
     ], blank=True)
     identifier_system = models.CharField(max_length=255, default="urn:panacare:appointment", blank=True)
     healthcare_facility = models.ForeignKey(HealthCare, on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments')
+    created_by_chp = models.ForeignKey('users.CommunityHealthProvider', on_delete=models.SET_NULL, null=True, blank=True, related_name='created_appointments')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

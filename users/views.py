@@ -29,13 +29,15 @@ from django_filters.rest_framework import DjangoFilterBackend
 # from google.fhir.r4.proto.core import codes_pb2, datatypes_pb2
 import json
 
-from .models import User, Role, Patient, AuditLog
+from .models import User, Role, Patient, AuditLog, Location, CommunityHealthProvider
 from .serializers import (
     UserSerializer, RoleSerializer, PatientSerializer, 
     PasswordChangeSerializer, EmailChangeSerializer, PhoneChangeSerializer,
     ContactUsSerializer, SupportRequestSerializer, ForgotPasswordSerializer,
-    AuditLogSerializer, AuditLogFilterSerializer
+    AuditLogSerializer, AuditLogFilterSerializer, CommunityHealthProviderSerializer,
+    CHPPatientCreateSerializer
 )
+from .locations import LocationService
 from doctors.models import Doctor
 from doctors.serializers import DoctorSerializer
 
@@ -1284,3 +1286,1284 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
             'status_breakdown': list(status_stats),
             'role_breakdown': list(role_stats)
         })
+
+
+class CountiesListAPIView(APIView):
+    """
+    API view to list all counties
+    """
+    permission_classes = [permissions.AllowAny]
+    
+    @swagger_auto_schema(
+        operation_description="Get list of all counties for location hierarchy selection. This is the first level in the County → Sub-county → Ward → Village hierarchy.",
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
+                        'name': openapi.Schema(type=openapi.TYPE_STRING, example="Nairobi")
+                    }
+                )
+            ))
+        },
+        tags=['Location Hierarchy']
+    )
+    def get(self, request):
+        LocationService.ensure_locations_exist()
+        counties = LocationService.get_counties()
+        return Response(counties, status=status.HTTP_200_OK)
+
+
+class SubCountiesListAPIView(APIView):
+    """
+    API view to list subcounties, optionally filtered by county
+    """
+    permission_classes = [permissions.AllowAny]
+    
+    @swagger_auto_schema(
+        operation_description="Get list of subcounties, optionally filtered by county_id. This is the second level in the location hierarchy.",
+        manual_parameters=[
+            openapi.Parameter('county_id', openapi.IN_QUERY, description="Filter by county UUID", type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440000")
+        ],
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440010"),
+                        'name': openapi.Schema(type=openapi.TYPE_STRING, example="Westlands"),
+                        'parent_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440000")
+                    }
+                )
+            ))
+        },
+        tags=['Location Hierarchy']
+    )
+    def get(self, request):
+        county_id = request.query_params.get('county_id')
+        LocationService.ensure_locations_exist()
+        subcounties = LocationService.get_subcounties(county_id)
+        return Response(subcounties, status=status.HTTP_200_OK)
+
+
+class WardsListAPIView(APIView):
+    """
+    API view to list wards, optionally filtered by subcounty
+    """
+    permission_classes = [permissions.AllowAny]
+    
+    @swagger_auto_schema(
+        operation_description="Get list of wards, optionally filtered by subcounty_id. This is the third level in the location hierarchy.",
+        manual_parameters=[
+            openapi.Parameter('subcounty_id', openapi.IN_QUERY, description="Filter by subcounty UUID", type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440010")
+        ],
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440020"),
+                        'name': openapi.Schema(type=openapi.TYPE_STRING, example="Parklands"),
+                        'parent_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440010")
+                    }
+                )
+            ))
+        },
+        tags=['Location Hierarchy']
+    )
+    def get(self, request):
+        subcounty_id = request.query_params.get('subcounty_id')
+        LocationService.ensure_locations_exist()
+        wards = LocationService.get_wards(subcounty_id)
+        return Response(wards, status=status.HTTP_200_OK)
+
+
+class VillagesListAPIView(APIView):
+    """
+    API view to list villages, optionally filtered by ward
+    """
+    permission_classes = [permissions.AllowAny]
+    
+    @swagger_auto_schema(
+        operation_description="Get list of villages, optionally filtered by ward_id. This is the fourth and final level in the location hierarchy.",
+        manual_parameters=[
+            openapi.Parameter('ward_id', openapi.IN_QUERY, description="Filter by ward UUID", type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440020")
+        ],
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440030"),
+                        'name': openapi.Schema(type=openapi.TYPE_STRING, example="Highridge"),
+                        'parent_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440020")
+                    }
+                )
+            ))
+        },
+        tags=['Location Hierarchy']
+    )
+    def get(self, request):
+        ward_id = request.query_params.get('ward_id')
+        LocationService.ensure_locations_exist()
+        villages = LocationService.get_villages(ward_id)
+        return Response(villages, status=status.HTTP_200_OK)
+
+
+class LocationHierarchyAPIView(APIView):
+    """
+    API view to get full location hierarchy for a given location
+    """
+    permission_classes = [permissions.AllowAny]
+    
+    @swagger_auto_schema(
+        operation_description="Get full location hierarchy for a location. Returns the complete path from county to village for a given location.",
+        manual_parameters=[
+            openapi.Parameter('location_id', openapi.IN_QUERY, description="Location UUID", type=openapi.TYPE_STRING, format="uuid", required=True, example="550e8400-e29b-41d4-a716-446655440030")
+        ],
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440030"),
+                        'name': openapi.Schema(type=openapi.TYPE_STRING, example="Highridge"),
+                        'level': openapi.Schema(type=openapi.TYPE_STRING, enum=['county', 'sub_county', 'ward', 'village'], example="village")
+                    }
+                )
+            )),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="location_id is required")}
+            ))
+        },
+        tags=['Location Hierarchy']
+    )
+    def get(self, request):
+        location_id = request.query_params.get('location_id')
+        if not location_id:
+            return Response({'error': 'location_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        hierarchy = LocationService.get_location_hierarchy(location_id)
+        return Response(hierarchy, status=status.HTTP_200_OK)
+
+
+class SyncLocationsAPIView(APIView):
+    """
+    API view to sync locations from external API (admin only)
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Sync location data from external Kenya Areas API (admin only). This populates the location hierarchy with current data.",
+        responses={
+            200: openapi.Response("Success", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'message': openapi.Schema(type=openapi.TYPE_STRING, example="Locations synced successfully")}
+            )),
+            403: openapi.Response("Forbidden", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="Admin access required")}
+            )),
+            500: openapi.Response("Internal Server Error", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="Failed to sync locations")}
+            ))
+        },
+        tags=['Location Hierarchy']
+    )
+    def post(self, request):
+        if not request.user.is_staff:
+            return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            success = LocationService.sync_locations_from_api()
+            if success:
+                return Response({'message': 'Locations synced successfully'}, status=status.HTTP_200_OK)
+            else:
+                return Response({'error': 'Failed to sync locations'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            logger.error(f"Error syncing locations: {e}")
+            return Response({'error': 'Internal server error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CHPPatientCreateAPIView(APIView):
+    """
+    API view for Community Health Provider to create patients
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Create a new patient as a Community Health Provider. Automatically generates a temporary password and assigns the patient role.",
+        request_body=CHPPatientCreateSerializer,
+        responses={
+            201: openapi.Response("Patient created successfully", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'message': openapi.Schema(type=openapi.TYPE_STRING, example="Patient created successfully"),
+                    'patient_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440300"),
+                    'user_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440301"),
+                    'temporary_password': openapi.Schema(type=openapi.TYPE_STRING, example="TempPass789"),
+                    'note': openapi.Schema(type=openapi.TYPE_STRING, example="Please provide the temporary password to the patient for first login")
+                }
+            )),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, example="Location with the provided ID does not exist")
+                }
+            )),
+            403: openapi.Response("Permission Denied", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, example="Only Community Health Providers can create patients")
+                }
+            ))
+        },
+        tags=['Community Health Provider']
+    )
+    def post(self, request):
+        # Check if user is a Community Health Provider
+        try:
+            chp = CommunityHealthProvider.objects.get(user=request.user)
+        except CommunityHealthProvider.DoesNotExist:
+            return Response({'error': 'Only Community Health Providers can create patients'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = CHPPatientCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            result = serializer.save()
+            
+            return Response({
+                'message': 'Patient created successfully',
+                'patient_id': str(result['patient'].id),
+                'user_id': str(result['user'].id),
+                'temporary_password': result['temporary_password'],
+                'note': 'Please provide the temporary password to the patient for first login'
+            }, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CHPClinicalDecisionSupportAPIView(APIView):
+    """
+    API view for Community Health Provider to perform CDSS on behalf of patients
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Perform Clinical Decision Support System analysis on behalf of a patient. Analyzes vital signs, symptoms, and medical history to provide risk assessment and recommendations.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['patient_id'],
+            properties={
+                'patient_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", description="UUID of the patient", example="550e8400-e29b-41d4-a716-446655440300"),
+                'age': openapi.Schema(type=openapi.TYPE_INTEGER, minimum=1, maximum=120, example=35),
+                'gender': openapi.Schema(type=openapi.TYPE_STRING, enum=['male', 'female', 'other'], example='female'),
+                'weight': openapi.Schema(type=openapi.TYPE_NUMBER, description="Weight in kg", example=65.5),
+                'height': openapi.Schema(type=openapi.TYPE_NUMBER, description="Height in cm", example=165),
+                'high_blood_pressure': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),
+                'diabetes': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=True),
+                'on_medication': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=True),
+                'headache': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),
+                'dizziness': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=True),
+                'blurred_vision': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),
+                'chest_pain': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),
+                'shortness_of_breath': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),
+                'nausea': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=False),
+                'fatigue': openapi.Schema(type=openapi.TYPE_BOOLEAN, example=True),
+                'systolic_bp': openapi.Schema(type=openapi.TYPE_INTEGER, description="Systolic blood pressure", example=125),
+                'diastolic_bp': openapi.Schema(type=openapi.TYPE_INTEGER, description="Diastolic blood pressure", example=80),
+                'blood_sugar': openapi.Schema(type=openapi.TYPE_NUMBER, description="Blood sugar level (mg/dL)", example=180),
+                'heart_rate': openapi.Schema(type=openapi.TYPE_INTEGER, description="Heart rate (bpm)", example=72)
+            }
+        ),
+        responses={
+            200: openapi.Response("CDSS analysis completed", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                    'analysis': openapi.Schema(type=openapi.TYPE_STRING),
+                    'risk_level': openapi.Schema(type=openapi.TYPE_STRING, enum=['low', 'medium', 'high', 'critical']),
+                    'bmi': openapi.Schema(type=openapi.TYPE_NUMBER),
+                    'bmi_category': openapi.Schema(type=openapi.TYPE_STRING),
+                    'blood_pressure_status': openapi.Schema(type=openapi.TYPE_STRING),
+                    'blood_sugar_status': openapi.Schema(type=openapi.TYPE_STRING),
+                    'heart_rate_status': openapi.Schema(type=openapi.TYPE_STRING),
+                    'recommendations': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_STRING)),
+                    'chp_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                    'chp_name': openapi.Schema(type=openapi.TYPE_STRING),
+                    'patient_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                    'patient_name': openapi.Schema(type=openapi.TYPE_STRING),
+                    'created_at': openapi.Schema(type=openapi.TYPE_STRING, format="date-time")
+                }
+            )),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="patient_id is required")}
+            )),
+            403: openapi.Response("Permission Denied", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="Only Community Health Providers can perform CDSS")}
+            )),
+            404: openapi.Response("Patient not found", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="Patient not found")}
+            ))
+        },
+        tags=['Community Health Provider']
+    )
+    def post(self, request):
+        # Check if user is a Community Health Provider
+        try:
+            chp = CommunityHealthProvider.objects.get(user=request.user)
+        except CommunityHealthProvider.DoesNotExist:
+            return Response({'error': 'Only Community Health Providers can perform CDSS'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        patient_id = request.data.get('patient_id')
+        if not patient_id:
+            return Response({'error': 'patient_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            patient = Patient.objects.get(id=patient_id)
+        except Patient.DoesNotExist:
+            return Response({'error': 'Patient not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Import and use existing CDSS functionality
+        from clinical_support.models import ClinicalDecisionRecord
+        from clinical_support.views import ClinicalDecisionSupportAPIView as BaseCDSS
+        
+        # Create CDSS record with CHP context
+        cdss_data = request.data.copy()
+        cdss_data.pop('patient_id', None)  # Remove patient_id as it's not part of CDSS model
+        
+        # Create the CDSS record
+        try:
+            # Use the existing CDSS logic
+            base_cdss = BaseCDSS()
+            
+            # Temporarily modify request to include patient info
+            original_user = request.user
+            request.user = patient.user  # Set to patient for CDSS processing
+            
+            response = base_cdss.post(request)
+            
+            # Restore original user
+            request.user = original_user
+            
+            if response.status_code == 201:
+                response_data = response.data
+                response_data['chp_id'] = str(chp.id)
+                response_data['chp_name'] = chp.user.get_full_name()
+                response_data['patient_id'] = str(patient.id)
+                response_data['patient_name'] = patient.user.get_full_name()
+                
+                return Response(response_data, status=status.HTTP_200_OK)
+            else:
+                return response
+                
+        except Exception as e:
+            logger.error(f"Error in CHP CDSS: {e}")
+            return Response({'error': 'Failed to perform CDSS analysis'}, 
+                          status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CHPDoctorAvailabilityAPIView(APIView):
+    """
+    API view for Community Health Provider to view available doctors with filtering
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Search for available doctors with comprehensive filtering options. Returns doctors with their availability schedules, contact information, and location details.",
+        manual_parameters=[
+            openapi.Parameter('name', openapi.IN_QUERY, description="Search by doctor's name (partial matches supported)", type=openapi.TYPE_STRING, example="smith"),
+            openapi.Parameter('specialty', openapi.IN_QUERY, description="Filter by medical specialty", type=openapi.TYPE_STRING, example="cardiology"),
+            openapi.Parameter('location_id', openapi.IN_QUERY, description="Filter by location UUID", type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440030"),
+            openapi.Parameter('weekday', openapi.IN_QUERY, description="Filter by weekday (0=Monday, 6=Sunday)", type=openapi.TYPE_INTEGER, enum=[0,1,2,3,4,5,6], example=1),
+            openapi.Parameter('time_slot', openapi.IN_QUERY, description="Filter by specific time slot (HH:MM format)", type=openapi.TYPE_STRING, example="14:00"),
+            openapi.Parameter('date', openapi.IN_QUERY, description="Filter by specific date (YYYY-MM-DD format)", type=openapi.TYPE_STRING, format="date", example="2025-12-20")
+        ],
+        responses={
+            200: openapi.Response("Available doctors list", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'count': openapi.Schema(type=openapi.TYPE_INTEGER, example=2),
+                    'doctors': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                                'name': openapi.Schema(type=openapi.TYPE_STRING, example="Dr. John Smith"),
+                                'specialty': openapi.Schema(type=openapi.TYPE_STRING, example="Cardiology"),
+                                'experience_years': openapi.Schema(type=openapi.TYPE_INTEGER, example=12),
+                                'license_number': openapi.Schema(type=openapi.TYPE_STRING, example="MD001234"),
+                                'consultation_fee': openapi.Schema(type=openapi.TYPE_STRING, example="8000.00"),
+                                'contact': openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        'email': openapi.Schema(type=openapi.TYPE_STRING, example="dr.smith@hospital.co.ke"),
+                                        'phone': openapi.Schema(type=openapi.TYPE_STRING, example="+254722111333")
+                                    }
+                                ),
+                                'location': openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                                        'name': openapi.Schema(type=openapi.TYPE_STRING, example="Parklands"),
+                                        'level': openapi.Schema(type=openapi.TYPE_STRING, example="ward")
+                                    }
+                                ),
+                                'availability': openapi.Schema(
+                                    type=openapi.TYPE_ARRAY,
+                                    items=openapi.Schema(
+                                        type=openapi.TYPE_OBJECT,
+                                        properties={
+                                            'weekday': openapi.Schema(type=openapi.TYPE_INTEGER, example=1),
+                                            'weekday_name': openapi.Schema(type=openapi.TYPE_STRING, example="Tuesday"),
+                                            'start_time': openapi.Schema(type=openapi.TYPE_STRING, example="09:00"),
+                                            'end_time': openapi.Schema(type=openapi.TYPE_STRING, example="17:00")
+                                        }
+                                    )
+                                )
+                            }
+                        )
+                    )
+                }
+            )),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="Invalid date format. Use YYYY-MM-DD")}
+            )),
+            403: openapi.Response("Permission Denied", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="Only Community Health Providers can view doctor availability")}
+            ))
+        },
+        tags=['Community Health Provider']
+    )
+    def get(self, request):
+        # Check if user is a Community Health Provider
+        try:
+            chp = CommunityHealthProvider.objects.get(user=request.user)
+        except CommunityHealthProvider.DoesNotExist:
+            return Response({'error': 'Only Community Health Providers can view doctor availability'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        from doctors.models import Doctor
+        from healthcare.models import DoctorAvailability
+        from django.db.models import Q
+        from datetime import datetime
+        
+        # Base query for active and verified doctors
+        doctors_query = Doctor.objects.filter(is_active=True, is_verified=True)
+        
+        # Apply filters
+        name = request.query_params.get('name')
+        if name:
+            doctors_query = doctors_query.filter(
+                Q(user__first_name__icontains=name) | 
+                Q(user__last_name__icontains=name) |
+                Q(user__username__icontains=name)
+            )
+        
+        specialty = request.query_params.get('specialty')
+        if specialty:
+            doctors_query = doctors_query.filter(specialty__icontains=specialty)
+        
+        location_id = request.query_params.get('location_id')
+        if location_id:
+            doctors_query = doctors_query.filter(user__location_id=location_id)
+        
+        # Get availability filters
+        weekday = request.query_params.get('weekday')
+        time_slot = request.query_params.get('time_slot')
+        date_filter = request.query_params.get('date')
+        
+        # If date is provided, calculate weekday
+        if date_filter:
+            try:
+                date_obj = datetime.strptime(date_filter, '%Y-%m-%d')
+                weekday = str(date_obj.weekday())  # Monday is 0
+            except ValueError:
+                return Response({'error': 'Invalid date format. Use YYYY-MM-DD'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+        
+        doctors = doctors_query.distinct()
+        
+        # Prepare response data
+        doctors_data = []
+        for doctor in doctors:
+            doctor_data = {
+                'id': str(doctor.id),
+                'name': doctor.user.get_full_name(),
+                'specialty': doctor.specialty,
+                'experience_years': doctor.experience_years,
+                'license_number': doctor.license_number,
+                'consultation_fee': doctor.consultation_fee,
+                'contact': {
+                    'email': doctor.user.email,
+                    'phone': doctor.user.phone_number
+                },
+                'location': None,
+                'availability': []
+            }
+            
+            # Add location info if available
+            if doctor.user.location:
+                doctor_data['location'] = {
+                    'id': str(doctor.user.location.id),
+                    'name': doctor.user.location.name,
+                    'level': doctor.user.location.level
+                }
+            
+            # Get availability
+            availability_query = DoctorAvailability.objects.filter(
+                doctor=doctor, is_available=True
+            )
+            
+            if weekday is not None:
+                availability_query = availability_query.filter(weekday=int(weekday))
+            
+            if time_slot:
+                try:
+                    time_obj = datetime.strptime(time_slot, '%H:%M').time()
+                    availability_query = availability_query.filter(
+                        start_time__lte=time_obj,
+                        end_time__gte=time_obj
+                    )
+                except ValueError:
+                    return Response({'error': 'Invalid time format. Use HH:MM'}, 
+                                  status=status.HTTP_400_BAD_REQUEST)
+            
+            for availability in availability_query:
+                doctor_data['availability'].append({
+                    'weekday': availability.weekday,
+                    'weekday_name': availability.get_weekday_display(),
+                    'start_time': availability.start_time.strftime('%H:%M'),
+                    'end_time': availability.end_time.strftime('%H:%M')
+                })
+            
+            # Only include doctors with availability if time filters are applied
+            if weekday is not None or time_slot:
+                if doctor_data['availability']:
+                    doctors_data.append(doctor_data)
+            else:
+                doctors_data.append(doctor_data)
+        
+        return Response({
+            'count': len(doctors_data),
+            'doctors': doctors_data
+        }, status=status.HTTP_200_OK)
+
+
+class CHPAppointmentBookingAPIView(APIView):
+    """
+    API view for Community Health Provider to book appointments on behalf of patients
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Book an appointment on behalf of a patient. Validates doctor availability, checks for conflicts, and creates a 30-minute appointment slot.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['patient_id', 'doctor_id', 'appointment_date', 'appointment_time'],
+            properties={
+                'patient_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", description="UUID of the patient", example="550e8400-e29b-41d4-a716-446655440300"),
+                'doctor_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", description="UUID of the doctor", example="550e8400-e29b-41d4-a716-446655440600"),
+                'appointment_date': openapi.Schema(type=openapi.TYPE_STRING, format="date", description="Date in YYYY-MM-DD format", example="2025-12-20"),
+                'appointment_time': openapi.Schema(type=openapi.TYPE_STRING, description="Time in HH:MM format (24-hour)", example="14:30"),
+                'appointment_type': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    enum=['routine', 'follow-up', 'emergency', 'consultation', 'procedure', 'checkup', 'other'],
+                    default='consultation',
+                    description="Type of appointment",
+                    example='consultation'
+                ),
+                'notes': openapi.Schema(type=openapi.TYPE_STRING, description="Additional notes for the appointment", example="Follow-up for diabetes management"),
+                'symptoms': openapi.Schema(type=openapi.TYPE_STRING, description="Patient's symptoms or reason for visit", example="Dizziness and fatigue after meals"),
+                'urgency_level': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    enum=['low', 'medium', 'high', 'critical'],
+                    default='medium',
+                    description="Priority level of the appointment",
+                    example='medium'
+                )
+            }
+        ),
+        responses={
+            201: openapi.Response("Appointment booked successfully", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'message': openapi.Schema(type=openapi.TYPE_STRING, example="Appointment booked successfully"),
+                    'appointment_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440700"),
+                    'appointment_details': openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        properties={
+                            'patient_name': openapi.Schema(type=openapi.TYPE_STRING, example="Mary Wanjiku"),
+                            'doctor_name': openapi.Schema(type=openapi.TYPE_STRING, example="Dr. John Smith"),
+                            'date': openapi.Schema(type=openapi.TYPE_STRING, example="2025-12-20"),
+                            'time': openapi.Schema(type=openapi.TYPE_STRING, example="14:30"),
+                            'type': openapi.Schema(type=openapi.TYPE_STRING, example="consultation"),
+                            'status': openapi.Schema(type=openapi.TYPE_STRING, example="BOOKED"),
+                            'chp_name': openapi.Schema(type=openapi.TYPE_STRING, example="Nurse Jane Doe")
+                        }
+                    )
+                }
+            )),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="Doctor is not available at the requested time")}
+            )),
+            403: openapi.Response("Permission Denied", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="Only Community Health Providers can book appointments")}
+            )),
+            404: openapi.Response("Patient or Doctor not found", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="Patient not found")}
+            ))
+        },
+        tags=['Community Health Provider']
+    )
+    def post(self, request):
+        # Check if user is a Community Health Provider
+        try:
+            chp = CommunityHealthProvider.objects.get(user=request.user)
+        except CommunityHealthProvider.DoesNotExist:
+            return Response({'error': 'Only Community Health Providers can book appointments'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        from healthcare.models import Appointment, HealthCare
+        from doctors.models import Doctor
+        from datetime import datetime, time
+        
+        # Extract data
+        patient_id = request.data.get('patient_id')
+        doctor_id = request.data.get('doctor_id')
+        appointment_date = request.data.get('appointment_date')
+        appointment_time = request.data.get('appointment_time')
+        appointment_type = request.data.get('appointment_type', 'routine')
+        notes = request.data.get('notes', '')
+        symptoms = request.data.get('symptoms', '')
+        urgency_level = request.data.get('urgency_level', 'medium')
+        
+        # Validation
+        if not all([patient_id, doctor_id, appointment_date, appointment_time]):
+            return Response({'error': 'patient_id, doctor_id, appointment_date, and appointment_time are required'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            patient = Patient.objects.get(id=patient_id)
+        except Patient.DoesNotExist:
+            return Response({'error': 'Patient not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            doctor = Doctor.objects.get(id=doctor_id)
+        except Doctor.DoesNotExist:
+            return Response({'error': 'Doctor not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Parse date and time
+        try:
+            date_obj = datetime.strptime(appointment_date, '%Y-%m-%d').date()
+            time_obj = datetime.strptime(appointment_time, '%H:%M').time()
+            appointment_datetime = datetime.combine(date_obj, time_obj)
+        except ValueError:
+            return Response({'error': 'Invalid date or time format. Use YYYY-MM-DD for date and HH:MM for time'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check doctor availability for the requested time
+        from healthcare.models import DoctorAvailability
+        weekday = date_obj.weekday()
+        
+        availability = DoctorAvailability.objects.filter(
+            doctor=doctor,
+            weekday=weekday,
+            start_time__lte=time_obj,
+            end_time__gte=time_obj,
+            is_available=True
+        ).first()
+        
+        if not availability:
+            return Response({'error': 'Doctor is not available at the requested time'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check for existing appointments at the same time
+        # Assume 30-minute appointment slots
+        from datetime import timedelta
+        end_time_obj = (datetime.combine(date_obj, time_obj) + timedelta(minutes=30)).time()
+        
+        existing_appointment = Appointment.objects.filter(
+            doctor=doctor,
+            appointment_date=date_obj,
+            start_time=time_obj,
+            status__in=['BOOKED', 'SCHEDULED', 'ARRIVED']
+        ).exists()
+        
+        if existing_appointment:
+            return Response({'error': 'Doctor already has an appointment at this time'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get or create default healthcare facility
+        healthcare_facility = HealthCare.objects.first()  # You might want to improve this logic
+        
+        try:
+            # Create appointment
+            appointment = Appointment.objects.create(
+                patient=patient,
+                doctor=doctor,
+                healthcare_facility=healthcare_facility,
+                appointment_date=date_obj,
+                start_time=time_obj,
+                end_time=end_time_obj,
+                appointment_type=appointment_type,
+                status='BOOKED',
+                notes=notes,
+                reason=symptoms,  # Use reason field for symptoms
+                risk_level=urgency_level,
+                created_by_chp=chp
+            )
+            
+            return Response({
+                'message': 'Appointment booked successfully',
+                'appointment_id': str(appointment.id),
+                'appointment_details': {
+                    'patient_name': patient.user.get_full_name(),
+                    'doctor_name': doctor.user.get_full_name(),
+                    'date': appointment_date,
+                    'time': appointment_time,
+                    'type': appointment_type,
+                    'status': appointment.status,
+                    'chp_name': chp.user.get_full_name()
+                }
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(f"Error creating appointment: {e}")
+            return Response({'error': 'Failed to create appointment'}, 
+                          status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CHPBatchAppointmentBookingAPIView(APIView):
+    """
+    API view for Community Health Provider to book multiple appointments in batch
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Book multiple appointments in batch with smart error handling",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['appointments'],
+            properties={
+                'appointments': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        required=['patient_id', 'doctor_id', 'appointment_date', 'appointment_time'],
+                        properties={
+                            'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", description="Pre-generated UUID from frontend (for offline sync)", example="550e8400-e29b-41d4-a716-446655440700"),
+                            'patient_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                            'doctor_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                            'appointment_date': openapi.Schema(type=openapi.TYPE_STRING, format="date"),
+                            'appointment_time': openapi.Schema(type=openapi.TYPE_STRING),
+                            'appointment_type': openapi.Schema(type=openapi.TYPE_STRING, default='routine'),
+                            'notes': openapi.Schema(type=openapi.TYPE_STRING),
+                            'symptoms': openapi.Schema(type=openapi.TYPE_STRING),
+                            'urgency_level': openapi.Schema(type=openapi.TYPE_STRING, default='medium'),
+                            'created_offline_at': openapi.Schema(type=openapi.TYPE_STRING, format="date-time", description="Timestamp when appointment was created offline", example="2025-12-17T10:30:00Z")
+                        }
+                    )
+                )
+            }
+        ),
+        responses={
+            200: openapi.Response("Batch booking completed with results", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'diagnostic': openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        properties={
+                            'status': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'partial_success', 'failed']),
+                            'message': openapi.Schema(type=openapi.TYPE_STRING)
+                        }
+                    ),
+                    'results': openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        properties={
+                            'successful_count': openapi.Schema(type=openapi.TYPE_INTEGER),
+                            'failed_count': openapi.Schema(type=openapi.TYPE_INTEGER),
+                            'successful_ids': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_STRING)),
+                            'failed_items': openapi.Schema(
+                                type=openapi.TYPE_ARRAY,
+                                items=openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        'id': openapi.Schema(type=openapi.TYPE_STRING),
+                                        'reason': openapi.Schema(type=openapi.TYPE_STRING),
+                                        'error_code': openapi.Schema(type=openapi.TYPE_STRING),
+                                        'index': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                        'data': openapi.Schema(type=openapi.TYPE_OBJECT)
+                                    }
+                                )
+                            )
+                        }
+                    ),
+                    'metadata': openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        properties={
+                            'total_attempts': openapi.Schema(type=openapi.TYPE_INTEGER),
+                            'success_rate': openapi.Schema(type=openapi.TYPE_STRING),
+                            'processing_time': openapi.Schema(type=openapi.TYPE_STRING),
+                            'error_breakdown': openapi.Schema(type=openapi.TYPE_OBJECT)
+                        }
+                    )
+                }
+            )),
+            400: openapi.Response("Bad Request"),
+            403: openapi.Response("Permission Denied")
+        }
+    )
+    def post(self, request):
+        # Track processing start time
+        from datetime import datetime
+        start_time = datetime.now().timestamp()
+        
+        # Check if user is a Community Health Provider
+        try:
+            chp = CommunityHealthProvider.objects.get(user=request.user)
+        except CommunityHealthProvider.DoesNotExist:
+            return Response({'error': 'Only Community Health Providers can book batch appointments'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        appointments_data = request.data.get('appointments', [])
+        if not appointments_data:
+            return Response({'error': 'appointments list is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        successful_bookings = []
+        failed_bookings = []
+        
+        from healthcare.models import Appointment, HealthCare, DoctorAvailability
+        from doctors.models import Doctor
+        from datetime import datetime
+        
+        # Get default healthcare facility
+        healthcare_facility = HealthCare.objects.first()
+        
+        for idx, appointment_data in enumerate(appointments_data):
+            try:
+                # Validate required fields
+                required_fields = ['patient_id', 'doctor_id', 'appointment_date', 'appointment_time']
+                missing_fields = [field for field in required_fields if not appointment_data.get(field)]
+                
+                if missing_fields:
+                    failed_bookings.append({
+                        'index': idx,
+                        'data': appointment_data,
+                        'error': f"Missing required fields: {', '.join(missing_fields)}",
+                        'error_type': 'validation'
+                    })
+                    continue
+                
+                # Check if appointment with this ID already exists (for offline sync)
+                appointment_id = appointment_data.get('id')
+                if appointment_id:
+                    try:
+                        existing_appointment = Appointment.objects.get(id=appointment_id)
+                        failed_bookings.append({
+                            'index': idx,
+                            'data': appointment_data,
+                            'error': f'Appointment with ID {appointment_id} already exists',
+                            'error_type': 'duplicate'
+                        })
+                        continue
+                    except Appointment.DoesNotExist:
+                        # Good, appointment doesn't exist yet
+                        pass
+                
+                # Get models
+                try:
+                    patient = Patient.objects.get(id=appointment_data['patient_id'])
+                except Patient.DoesNotExist:
+                    failed_bookings.append({
+                        'index': idx,
+                        'data': appointment_data,
+                        'error': 'Patient not found',
+                        'error_type': 'not_found'
+                    })
+                    continue
+                
+                try:
+                    doctor = Doctor.objects.get(id=appointment_data['doctor_id'])
+                except Doctor.DoesNotExist:
+                    failed_bookings.append({
+                        'index': idx,
+                        'data': appointment_data,
+                        'error': 'Doctor not found',
+                        'error_type': 'not_found'
+                    })
+                    continue
+                
+                # Parse date and time
+                try:
+                    date_obj = datetime.strptime(appointment_data['appointment_date'], '%Y-%m-%d').date()
+                    time_obj = datetime.strptime(appointment_data['appointment_time'], '%H:%M').time()
+                except ValueError:
+                    failed_bookings.append({
+                        'index': idx,
+                        'data': appointment_data,
+                        'error': 'Invalid date or time format',
+                        'error_type': 'validation'
+                    })
+                    continue
+                
+                # Check doctor availability
+                weekday = date_obj.weekday()
+                availability = DoctorAvailability.objects.filter(
+                    doctor=doctor,
+                    weekday=weekday,
+                    start_time__lte=time_obj,
+                    end_time__gte=time_obj,
+                    is_available=True
+                ).first()
+                
+                if not availability:
+                    failed_bookings.append({
+                        'index': idx,
+                        'data': appointment_data,
+                        'error': 'Doctor not available at requested time',
+                        'error_type': 'availability'
+                    })
+                    continue
+                
+                # Check for conflicts
+                from datetime import timedelta
+                end_time_obj = (datetime.combine(date_obj, time_obj) + timedelta(minutes=30)).time()
+                
+                existing_appointment = Appointment.objects.filter(
+                    doctor=doctor,
+                    appointment_date=date_obj,
+                    start_time=time_obj,
+                    status__in=['BOOKED', 'SCHEDULED', 'ARRIVED']
+                ).exists()
+                
+                if existing_appointment:
+                    failed_bookings.append({
+                        'index': idx,
+                        'data': appointment_data,
+                        'error': 'Time slot already booked',
+                        'error_type': 'conflict'
+                    })
+                    continue
+                
+                # Prepare appointment data
+                appointment_create_data = {
+                    'patient': patient,
+                    'doctor': doctor,
+                    'healthcare_facility': healthcare_facility,
+                    'appointment_date': date_obj,
+                    'start_time': time_obj,
+                    'end_time': end_time_obj,
+                    'appointment_type': appointment_data.get('appointment_type', 'routine'),
+                    'status': 'BOOKED',
+                    'notes': appointment_data.get('notes', ''),
+                    'reason': appointment_data.get('symptoms', ''),
+                    'risk_level': appointment_data.get('urgency_level', 'medium'),
+                    'created_by_chp': chp
+                }
+                
+                # Use pre-generated ID if provided (for offline sync)
+                if appointment_id:
+                    appointment_create_data['id'] = appointment_id
+                
+                # Handle offline creation timestamp
+                created_offline_at = appointment_data.get('created_offline_at')
+                if created_offline_at:
+                    try:
+                        from datetime import datetime
+                        import pytz
+                        # Parse the offline timestamp and use it as created_at
+                        if isinstance(created_offline_at, str):
+                            # Remove timezone info if present and parse
+                            if created_offline_at.endswith('Z'):
+                                created_offline_at = created_offline_at[:-1] + '+00:00'
+                            offline_dt = datetime.fromisoformat(created_offline_at.replace('Z', '+00:00'))
+                            if offline_dt.tzinfo is None:
+                                offline_dt = pytz.UTC.localize(offline_dt)
+                            appointment_create_data['created_at'] = offline_dt
+                    except (ValueError, TypeError):
+                        # If parsing fails, use current timestamp
+                        pass
+                
+                # Create appointment
+                appointment = Appointment.objects.create(**appointment_create_data)
+                
+                successful_bookings.append({
+                    'index': idx,
+                    'appointment_id': str(appointment.id),
+                    'patient_name': patient.user.get_full_name(),
+                    'doctor_name': doctor.user.get_full_name(),
+                    'date': appointment_data['appointment_date'],
+                    'time': appointment_data['appointment_time']
+                })
+                
+            except Exception as e:
+                failed_bookings.append({
+                    'index': idx,
+                    'data': appointment_data,
+                    'error': f'Unexpected error: {str(e)}',
+                    'error_type': 'system_error'
+                })
+        
+        # Determine overall status
+        total_attempts = len(appointments_data)
+        successful_count = len(successful_bookings)
+        failed_count = len(failed_bookings)
+        
+        if failed_count == 0:
+            diagnostic_status = "success"
+            diagnostic_message = f"Successfully created all {successful_count} appointments"
+        elif successful_count == 0:
+            diagnostic_status = "failed"
+            diagnostic_message = f"Failed to create all {total_attempts} appointments"
+        else:
+            diagnostic_status = "partial_success"
+            diagnostic_message = f"Created {successful_count} of {total_attempts} appointments"
+        
+        # Extract successful IDs
+        successful_ids = [booking['appointment_id'] for booking in successful_bookings]
+        
+        # Format failed items with proper error codes
+        failed_items = []
+        for failed in failed_bookings:
+            # Map error types to standardized error codes
+            error_code_map = {
+                'validation': 'INVALID_DATA',
+                'not_found': 'RESOURCE_NOT_FOUND',
+                'availability': 'DOCTOR_UNAVAILABLE',
+                'conflict': 'TIME_SLOT_CONFLICT',
+                'duplicate': 'DUPLICATE_APPOINTMENT_ID',
+                'system_error': 'SYSTEM_ERROR'
+            }
+            
+            # Create unique identifier for failed item (use index or patient_id if available)
+            item_id = failed['data'].get('patient_id', f"item_{failed['index']}")
+            error_code = error_code_map.get(failed['error_type'], 'UNKNOWN_ERROR')
+            
+            failed_items.append({
+                'id': item_id,
+                'reason': failed['error'],
+                'error_code': error_code,
+                'index': failed['index'],  # Keep index for reference
+                'data': failed['data']      # Include original data for debugging
+            })
+        
+        response_data = {
+            'diagnostic': {
+                'status': diagnostic_status,
+                'message': diagnostic_message
+            },
+            'results': {
+                'successful_count': successful_count,
+                'failed_count': failed_count,
+                'successful_ids': successful_ids,
+                'failed_items': failed_items
+            }
+        }
+        
+        # Add additional metadata for debugging/analytics
+        response_data['metadata'] = {
+            'total_attempts': total_attempts,
+            'success_rate': f"{(successful_count / total_attempts) * 100:.1f}%" if total_attempts > 0 else "0%",
+            'error_breakdown': {
+                'validation_errors': len([f for f in failed_bookings if f['error_type'] == 'validation']),
+                'not_found_errors': len([f for f in failed_bookings if f['error_type'] == 'not_found']),
+                'availability_errors': len([f for f in failed_bookings if f['error_type'] == 'availability']),
+                'conflict_errors': len([f for f in failed_bookings if f['error_type'] == 'conflict']),
+                'system_errors': len([f for f in failed_bookings if f['error_type'] == 'system_error'])
+            },
+            'processing_time': f"{(datetime.now().timestamp() - start_time):.2f}s" if 'start_time' in locals() else None
+        }
+        
+        return Response(response_data, status=status.HTTP_200_OK)
+
+
+class CHPPatientAppointmentsAPIView(APIView):
+    """
+    API view for Community Health Provider to view appointments they created for patients
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="View all appointments created by the Community Health Provider with comprehensive filtering options. Returns appointment details including patient info, doctor info, and healthcare facility details.",
+        manual_parameters=[
+            openapi.Parameter('patient_id', openapi.IN_QUERY, description="Filter by specific patient UUID", type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440300"),
+            openapi.Parameter('status', openapi.IN_QUERY, description="Filter by appointment status", type=openapi.TYPE_STRING, enum=['BOOKED', 'SCHEDULED', 'ARRIVED', 'FULFILLED', 'CANCELLED', 'NOSHOW'], example="BOOKED"),
+            openapi.Parameter('date_from', openapi.IN_QUERY, description="Start date filter (YYYY-MM-DD)", type=openapi.TYPE_STRING, format="date", example="2025-12-01"),
+            openapi.Parameter('date_to', openapi.IN_QUERY, description="End date filter (YYYY-MM-DD)", type=openapi.TYPE_STRING, format="date", example="2025-12-31"),
+            openapi.Parameter('doctor_id', openapi.IN_QUERY, description="Filter by specific doctor UUID", type=openapi.TYPE_STRING, format="uuid", example="550e8400-e29b-41d4-a716-446655440600")
+        ],
+        responses={
+            200: openapi.Response("List of appointments", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'count': openapi.Schema(type=openapi.TYPE_INTEGER, example=3),
+                    'appointments': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                                'patient': openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                                        'name': openapi.Schema(type=openapi.TYPE_STRING, example="Mary Wanjiku"),
+                                        'email': openapi.Schema(type=openapi.TYPE_STRING, example="patient@example.com")
+                                    }
+                                ),
+                                'doctor': openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                                        'name': openapi.Schema(type=openapi.TYPE_STRING, example="Dr. John Smith"),
+                                        'specialty': openapi.Schema(type=openapi.TYPE_STRING, example="Cardiology")
+                                    }
+                                ),
+                                'appointment_date': openapi.Schema(type=openapi.TYPE_STRING, format="date", example="2025-12-20"),
+                                'start_time': openapi.Schema(type=openapi.TYPE_STRING, example="14:30"),
+                                'end_time': openapi.Schema(type=openapi.TYPE_STRING, example="15:00"),
+                                'appointment_type': openapi.Schema(type=openapi.TYPE_STRING, example="consultation"),
+                                'status': openapi.Schema(type=openapi.TYPE_STRING, example="BOOKED"),
+                                'notes': openapi.Schema(type=openapi.TYPE_STRING, example="Follow-up appointment"),
+                                'reason': openapi.Schema(type=openapi.TYPE_STRING, example="Persistent headache"),
+                                'risk_level': openapi.Schema(type=openapi.TYPE_STRING, example="medium"),
+                                'created_at': openapi.Schema(type=openapi.TYPE_STRING, format="date-time"),
+                                'healthcare_facility': openapi.Schema(
+                                    type=openapi.TYPE_OBJECT,
+                                    properties={
+                                        'name': openapi.Schema(type=openapi.TYPE_STRING, example="Nairobi General Hospital"),
+                                        'location': openapi.Schema(type=openapi.TYPE_STRING, example="123 Hospital Avenue, Nairobi")
+                                    }
+                                )
+                            }
+                        )
+                    ),
+                    'chp_info': openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        properties={
+                            'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                            'name': openapi.Schema(type=openapi.TYPE_STRING, example="Nurse Jane Doe"),
+                            'specialization': openapi.Schema(type=openapi.TYPE_STRING, example="Community Health"),
+                            'service_area': openapi.Schema(type=openapi.TYPE_STRING, example="Westlands District")
+                        }
+                    )
+                }
+            )),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="Invalid date_from format. Use YYYY-MM-DD")}
+            )),
+            403: openapi.Response("Permission Denied", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={'error': openapi.Schema(type=openapi.TYPE_STRING, example="Only Community Health Providers can view their appointments")}
+            ))
+        },
+        tags=['Community Health Provider']
+    )
+    def get(self, request):
+        # Check if user is a Community Health Provider
+        try:
+            chp = CommunityHealthProvider.objects.get(user=request.user)
+        except CommunityHealthProvider.DoesNotExist:
+            return Response({'error': 'Only Community Health Providers can view their appointments'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        from healthcare.models import Appointment
+        from datetime import datetime
+        
+        # Base query for appointments created by this CHP
+        appointments_query = Appointment.objects.filter(created_by_chp=chp)
+        
+        # Apply filters
+        patient_id = request.query_params.get('patient_id')
+        if patient_id:
+            appointments_query = appointments_query.filter(patient_id=patient_id)
+        
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            appointments_query = appointments_query.filter(status__iexact=status_filter)
+        
+        doctor_id = request.query_params.get('doctor_id')
+        if doctor_id:
+            appointments_query = appointments_query.filter(doctor_id=doctor_id)
+        
+        date_from = request.query_params.get('date_from')
+        if date_from:
+            try:
+                date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+                appointments_query = appointments_query.filter(appointment_date__gte=date_from_obj)
+            except ValueError:
+                return Response({'error': 'Invalid date_from format. Use YYYY-MM-DD'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+        
+        date_to = request.query_params.get('date_to')
+        if date_to:
+            try:
+                date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+                appointments_query = appointments_query.filter(appointment_date__lte=date_to_obj)
+            except ValueError:
+                return Response({'error': 'Invalid date_to format. Use YYYY-MM-DD'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+        
+        # Order by most recent first
+        appointments = appointments_query.order_by('-appointment_date', '-appointment_time')
+        
+        # Prepare response data
+        appointments_data = []
+        for appointment in appointments:
+            appointments_data.append({
+                'id': str(appointment.id),
+                'patient': {
+                    'id': str(appointment.patient.id),
+                    'name': appointment.patient.user.get_full_name(),
+                    'email': appointment.patient.user.email
+                },
+                'doctor': {
+                    'id': str(appointment.doctor.id),
+                    'name': appointment.doctor.user.get_full_name(),
+                    'specialty': appointment.doctor.specialty
+                },
+                'appointment_date': appointment.appointment_date.strftime('%Y-%m-%d'),
+                'start_time': appointment.start_time.strftime('%H:%M'),
+                'end_time': appointment.end_time.strftime('%H:%M'),
+                'appointment_type': appointment.appointment_type,
+                'status': appointment.status,
+                'notes': appointment.notes,
+                'reason': appointment.reason,
+                'risk_level': appointment.risk_level,
+                'created_at': appointment.created_at.isoformat(),
+                'healthcare_facility': {
+                    'name': appointment.healthcare_facility.name if appointment.healthcare_facility else 'Not specified',
+                    'location': appointment.healthcare_facility.address if appointment.healthcare_facility else 'Not specified'
+                }
+            })
+        
+        return Response({
+            'count': len(appointments_data),
+            'appointments': appointments_data,
+            'chp_info': {
+                'id': str(chp.id),
+                'name': chp.user.get_full_name(),
+                'specialization': chp.specialization,
+                'service_area': chp.service_area
+            }
+        }, status=status.HTTP_200_OK)

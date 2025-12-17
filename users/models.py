@@ -20,6 +20,24 @@ class Role(models.Model):
     
     def __str__(self):
         return self.name
+    
+class Location(models.Model):
+    LEVELS = (
+        ('county', 'County'),
+        ('sub_county', 'Sub-County'),
+        ('ward', 'Ward'),
+        ('village', 'Village'),
+    )
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100)
+    level = models.CharField(max_length=20, choices=LEVELS)
+    parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.CASCADE, related_name='children')
+    class Meta:
+        unique_together = ('name','parent')
+        ordering = ['name']
+    def __str__(self):
+        return f"{self.name} ({self.level})"
+
 
 class User(AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -27,6 +45,7 @@ class User(AbstractUser):
     phone_number = models.CharField(max_length=15, blank=True)
     address = models.CharField(max_length=255, blank=True)
     roles = models.ManyToManyField(Role, related_name='users')
+    location = models.ForeignKey(Location, null=True, blank=True, on_delete=models.SET_NULL, related_name='users')
     is_verified = models.BooleanField(default=False)
     
     USERNAME_FIELD = 'email'
@@ -341,19 +360,110 @@ class Patient(models.Model):
         
         return patient_json
 
-# Signal to create a Patient profile when a user is assigned the patient role
-@receiver(m2m_changed, sender=User.roles.through)
-def create_patient_profile(sender, instance, action, pk_set, **kwargs):
+class CommunityHealthProvider(models.Model):
     """
-    Signal handler to create a Patient profile when a user is assigned the patient role.
+    Community Health Provider model for local healthcare workers
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='community_health_provider')
+    
+    # Basic information
+    certification_number = models.CharField(max_length=50, blank=True, help_text="Certification or license number")
+    years_of_experience = models.PositiveIntegerField(default=0)
+    specialization = models.CharField(max_length=200, blank=True, help_text="Area of specialization (e.g., maternal health, nutrition)")
+    
+    # Service area
+    service_area = models.CharField(max_length=200, blank=True, help_text="Geographic area of service")
+    languages_spoken = models.CharField(max_length=200, blank=True, help_text="Languages spoken (comma-separated)")
+    
+    # Contact and availability
+    is_active = models.BooleanField(default=True)
+    availability_hours = models.CharField(max_length=200, blank=True, help_text="Available hours (e.g., Mon-Fri 9AM-5PM)")
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Community Health Provider"
+        verbose_name_plural = "Community Health Providers"
+    
+    def __str__(self):
+        return f"CHP: {self.user.get_full_name() or self.user.username}"
+    
+    def to_fhir_json(self):
+        """
+        Convert to FHIR-compliant JSON representation
+        """
+        practitioner_json = {
+            "resourceType": "Practitioner",
+            "id": str(self.id),
+            "meta": {
+                "profile": ["http://hl7.org/fhir/StructureDefinition/Practitioner"]
+            },
+            "active": self.is_active,
+            "name": [
+                {
+                    "use": "official",
+                    "family": self.user.last_name,
+                    "given": [self.user.first_name] if self.user.first_name else []
+                }
+            ],
+            "telecom": [
+                {
+                    "system": "email",
+                    "value": self.user.email,
+                    "use": "work"
+                }
+            ],
+            "qualification": []
+        }
+        
+        if self.user.phone_number:
+            practitioner_json["telecom"].append({
+                "system": "phone",
+                "value": self.user.phone_number,
+                "use": "work"
+            })
+        
+        if self.certification_number:
+            practitioner_json["qualification"].append({
+                "identifier": [
+                    {
+                        "value": self.certification_number,
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "LN",
+                                    "display": "License number"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            })
+        
+        return practitioner_json
+
+# Signal to create profile when a user is assigned specific roles
+@receiver(m2m_changed, sender=User.roles.through)
+def create_user_profile(sender, instance, action, pk_set, **kwargs):
+    """
+    Signal handler to create profiles when a user is assigned specific roles.
     """
     if action == 'post_add':
         # Check if any of the newly added roles is 'patient'
         patient_role_exists = Role.objects.filter(pk__in=pk_set, name='patient').exists()
-        
         if patient_role_exists:
             # Create a Patient profile if it doesn't exist
             Patient.objects.get_or_create(user=instance)
+        
+        # Check if any of the newly added roles is 'community_health_provider'
+        chp_role_exists = Role.objects.filter(pk__in=pk_set, name='community_health_provider').exists()
+        if chp_role_exists:
+            # Create a CommunityHealthProvider profile if it doesn't exist
+            CommunityHealthProvider.objects.get_or_create(user=instance)
 
 class AuditLog(models.Model):
     """
