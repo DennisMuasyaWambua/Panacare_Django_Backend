@@ -333,73 +333,193 @@ class DoctorViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
     
+    @swagger_auto_schema(
+        operation_description="Create a new doctor account (Admin only). Creates both user and doctor profiles in one operation.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['username', 'email', 'password', 'first_name', 'last_name', 'specialty', 'license_number'],
+            properties={
+                'username': openapi.Schema(type=openapi.TYPE_STRING, description="Unique username for the doctor"),
+                'email': openapi.Schema(type=openapi.TYPE_STRING, format='email', description="Doctor's email address"),
+                'password': openapi.Schema(type=openapi.TYPE_STRING, description="Password for the doctor account"),
+                'first_name': openapi.Schema(type=openapi.TYPE_STRING, description="Doctor's first name"),
+                'last_name': openapi.Schema(type=openapi.TYPE_STRING, description="Doctor's last name"),
+                'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description="Doctor's phone number"),
+                'address': openapi.Schema(type=openapi.TYPE_STRING, description="Doctor's address"),
+                'specialty': openapi.Schema(type=openapi.TYPE_STRING, description="Medical specialty"),
+                'license_number': openapi.Schema(type=openapi.TYPE_STRING, description="Medical license number"),
+                'experience_years': openapi.Schema(type=openapi.TYPE_INTEGER, description="Years of experience"),
+                'bio': openapi.Schema(type=openapi.TYPE_STRING, description="Doctor's biography"),
+                'communication_languages': openapi.Schema(type=openapi.TYPE_STRING, description="Languages spoken (comma-separated)"),
+                'accepts_referrals': openapi.Schema(type=openapi.TYPE_BOOLEAN, description="Whether doctor accepts referrals"),
+                'consultation_modes': openapi.Schema(type=openapi.TYPE_STRING, description="Consultation modes (comma-separated)"),
+                'facility_name': openapi.Schema(type=openapi.TYPE_STRING, description="Healthcare facility name"),
+                'education': openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    description="Education details (optional - default will be created if not provided)",
+                    properties={
+                        'level_of_education': openapi.Schema(type=openapi.TYPE_STRING, description="Education level"),
+                        'field': openapi.Schema(type=openapi.TYPE_STRING, description="Field of study"),
+                        'institution': openapi.Schema(type=openapi.TYPE_STRING, description="Educational institution"),
+                        'start_date': openapi.Schema(type=openapi.TYPE_STRING, format='date', description="Start date"),
+                        'end_date': openapi.Schema(type=openapi.TYPE_STRING, format='date', description="End date")
+                    }
+                )
+            }
+        ),
+        responses={
+            201: openapi.Response("Doctor created successfully", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'status': openapi.Schema(type=openapi.TYPE_STRING),
+                    'data': openapi.Schema(type=openapi.TYPE_OBJECT),
+                    'message': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING),
+                    'details': openapi.Schema(type=openapi.TYPE_OBJECT)
+                }
+            )),
+            500: openapi.Response("Internal Server Error")
+        }
+    )
     @action(detail=False, methods=['post'], permission_classes=[IsAdminUser])
     def admin_add_doctor(self, request):
         """
         Endpoint for admin to add a new doctor, creating both user and doctor profiles
         """
-        # Create education record if provided
-        education_data = request.data.get('education', {})
-        education = None
-        if education_data:
-            education_serializer = EducationSerializer(data=education_data)
-            if education_serializer.is_valid():
+        from django.db import transaction
+        from users.models import User
+        
+        # Validate required fields
+        required_fields = ['username', 'email', 'password', 'first_name', 'last_name', 'specialty', 'license_number']
+        missing_fields = [field for field in required_fields if not request.data.get(field)]
+        
+        if missing_fields:
+            return Response({
+                'error': f"Missing required fields: {', '.join(missing_fields)}"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check for existing user with same email or username
+        email = request.data.get('email')
+        username = request.data.get('username')
+        
+        if User.objects.filter(email=email).exists():
+            return Response({
+                'error': f"User with email {email} already exists"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if User.objects.filter(username=username).exists():
+            return Response({
+                'error': f"User with username {username} already exists"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Use database transaction for atomic operations
+        try:
+            with transaction.atomic():
+                # Create education record if provided, otherwise create default
+                education_data = request.data.get('education', {})
+                if not education_data:
+                    # Education is required, create default
+                    education_data = {
+                        'level_of_education': 'Medical Degree',
+                        'field': 'Medicine',
+                        'institution': 'Not Specified'
+                    }
+                
+                education_serializer = EducationSerializer(data=education_data)
+                if not education_serializer.is_valid():
+                    return Response({
+                        'error': 'Invalid education data',
+                        'details': education_serializer.errors
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
                 education = education_serializer.save()
-            else:
-                return Response(education_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Create user account
-        user_data = {
-            'username': request.data.get('username'),
-            'email': request.data.get('email'),
-            'password': request.data.get('password'),
-            'first_name': request.data.get('first_name'),
-            'last_name': request.data.get('last_name'),
-            'phone_number': request.data.get('phone_number', ''),
-            'address': request.data.get('address', ''),
-            'role_names': ['doctor']  # Assign doctor role
-        }
-        
-        user_serializer = UserSerializer(data=user_data)
-        if not user_serializer.is_valid():
-            # Delete education if it was created
-            if education:
-                education.delete()
-            return Response(user_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        user = user_serializer.save()
-        
-        # Auto-verify the doctor account created by admin
-        user.is_verified = True
-        user.save()
-        
-        # Create doctor profile
-        doctor_data = {
-            'user_id': user.id,
-            'specialty': request.data.get('specialty'),
-            'license_number': request.data.get('license_number'),
-            'experience_years': request.data.get('experience_years', 0),
-            'bio': request.data.get('bio', ''),
-            'education': education.id if education else None,
-            'is_verified': True,  # Auto-verify doctor profiles created by admin
-            'is_available': request.data.get('is_available', True)
-        }
-        
-        doctor_serializer = self.get_serializer(data=doctor_data)
-        if not doctor_serializer.is_valid():
-            # Delete user and education if doctor creation fails
-            user.delete()
-            if education:
-                education.delete()
-            return Response(doctor_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        doctor = doctor_serializer.save()
-        
-        return Response({
-            'doctor': doctor_serializer.data,
-            'user': user_serializer.data,
-            'message': 'Doctor account created successfully by admin'
-        }, status=status.HTTP_201_CREATED)
+                
+                # Create user account
+                user_data = {
+                    'username': username,
+                    'email': email,
+                    'password': request.data.get('password'),
+                    'first_name': request.data.get('first_name'),
+                    'last_name': request.data.get('last_name'),
+                    'phone_number': request.data.get('phone_number', ''),
+                    'address': request.data.get('address', ''),
+                    'role': 'doctor'  # Assign doctor role (single role field)
+                }
+                
+                # Add admin context to allow admin registration
+                user_serializer = UserSerializer(data=user_data, context={'admin_registration': True})
+                if not user_serializer.is_valid():
+                    return Response({
+                        'error': 'Invalid user data',
+                        'details': user_serializer.errors
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                user = user_serializer.save()
+                
+                # Auto-verify the doctor account created by admin
+                user.is_verified = True
+                user.save()
+                
+                # Create doctor profile
+                doctor_data = {
+                    'user_id': user.id,
+                    'specialty': request.data.get('specialty'),
+                    'license_number': request.data.get('license_number'),
+                    'experience_years': request.data.get('experience_years', 0),
+                    'education': education.id,
+                    'is_verified': True,  # Auto-verify doctor profiles created by admin
+                    'is_available': request.data.get('is_available', True),
+                }
+                
+                # Add optional fields only if they are provided and not empty
+                bio = request.data.get('bio', '').strip()
+                if bio:
+                    doctor_data['bio'] = bio
+                
+                communication_languages = request.data.get('communication_languages', 'en').strip()
+                if communication_languages:
+                    doctor_data['communication_languages'] = communication_languages
+                
+                accepts_referrals = request.data.get('accepts_referrals')
+                if accepts_referrals is not None:
+                    doctor_data['accepts_referrals'] = accepts_referrals
+                
+                consultation_modes = request.data.get('consultation_modes', 'audio,video').strip()
+                if consultation_modes:
+                    doctor_data['consultation_modes'] = consultation_modes
+                
+                facility_name = request.data.get('facility_name', '').strip()
+                if facility_name:
+                    doctor_data['facility_name'] = facility_name
+                
+                doctor_serializer = self.get_serializer(data=doctor_data)
+                if not doctor_serializer.is_valid():
+                    return Response({
+                        'error': 'Invalid doctor data',
+                        'details': doctor_serializer.errors
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                doctor = doctor_serializer.save()
+                
+                return Response({
+                    'status': 'success',
+                    'data': {
+                        'doctor': doctor_serializer.data,
+                        'user': user_serializer.data
+                    },
+                    'message': 'Doctor account created successfully by admin'
+                }, status=status.HTTP_201_CREATED)
+                
+        except Exception as e:
+            return Response({
+                'error': 'Failed to create doctor account',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=False, methods=['get'], permission_classes=[IsAdminUser])
     def admin_list_doctors(self, request):
