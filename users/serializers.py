@@ -28,14 +28,14 @@ class UserSerializer(serializers.ModelSerializer):
     role_names = serializers.ListField(
         child=serializers.CharField(), 
         required=False,
-        help_text="List of role names to assign to this user. Only doctor and patient roles are allowed."
+        help_text="List of role names to assign to this user. Only doctor, patient, and community_health_provider roles are allowed."
     )
     
     # Allow a single role assignment
     role = serializers.CharField(
         required=True,
         write_only=True,
-        help_text="Single role to assign to this user. Only doctor or patient role is allowed."
+        help_text="Single role to assign to this user. Only doctor, patient, or community_health_provider role is allowed."
     )
     
     def validate_role_names(self, value):
@@ -43,9 +43,9 @@ class UserSerializer(serializers.ModelSerializer):
         if value:
             # If it's an admin registration, allow 'admin' role
             if self.context.get('admin_registration'):
-                allowed_roles = ['doctor', 'patient', 'admin']
+                allowed_roles = ['doctor', 'patient', 'community_health_provider', 'admin']
             else:
-                allowed_roles = ['doctor', 'patient']
+                allowed_roles = ['doctor', 'patient', 'community_health_provider']
                 
             for role_name in value:
                 if role_name not in allowed_roles:
@@ -61,9 +61,9 @@ class UserSerializer(serializers.ModelSerializer):
         if value:
             # If it's an admin registration, allow 'admin' role
             if self.context.get('admin_registration'):
-                allowed_roles = ['doctor', 'patient', 'admin']
+                allowed_roles = ['doctor', 'patient', 'community_health_provider', 'admin']
             else:
-                allowed_roles = ['doctor', 'patient']
+                allowed_roles = ['doctor', 'patient', 'community_health_provider']
                 
             if value not in allowed_roles:
                 raise serializers.ValidationError(f"Role '{value}' is not allowed. Choose from: {', '.join(allowed_roles)}")
