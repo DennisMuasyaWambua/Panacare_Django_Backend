@@ -17,7 +17,7 @@ class LocationService:
         """
         Fetch location data from external API
         """
-        try:
+        try:    
             response = requests.get(cls.BASE_URL, timeout=10)
             if response.status_code == 200:
                 return response.json()
@@ -38,37 +38,29 @@ class LocationService:
             return False
             
         try:
-            for county_data in external_data:
+            for county_name, subcounties in external_data.items():
                 county, created = Location.objects.get_or_create(
-                    name=county_data['name'],
+                    name=county_name,
                     level='county',
                     parent=None,
-                    defaults={'name': county_data['name']}
+                    defaults={'name': county_name}
                 )
                 
-                for subcounty_data in county_data.get('subcounties', []):
+                for subcounty_name, wards in subcounties.items():
                     subcounty, created = Location.objects.get_or_create(
-                        name=subcounty_data['name'],
+                        name=subcounty_name,
                         level='sub_county',
                         parent=county,
-                        defaults={'name': subcounty_data['name']}
+                        defaults={'name': subcounty_name}
                     )
                     
-                    for ward_data in subcounty_data.get('wards', []):
+                    for ward_name in wards:
                         ward, created = Location.objects.get_or_create(
-                            name=ward_data['name'],
+                            name=ward_name,
                             level='ward',
                             parent=subcounty,
-                            defaults={'name': ward_data['name']}
+                            defaults={'name': ward_name}
                         )
-                        
-                        for village_name in ward_data.get('villages', []):
-                            village, created = Location.objects.get_or_create(
-                                name=village_name,
-                                level='village',
-                                parent=ward,
-                                defaults={'name': village_name}
-                            )
             
             cache.set('locations_synced', True, cls.CACHE_TIMEOUT)
             return True
