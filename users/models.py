@@ -98,7 +98,9 @@ class User(AbstractUser):
             logger.info(f"Email sending result: {result}")
             return result
         except Exception as e:
-            logger.error(f"Failed to send email: {str(e)}")
+            logger.error(f"Failed to send email to {self.email}: {str(e)}")
+            logger.error(f"Email configuration - Backend: {settings.EMAIL_BACKEND}, Host: {settings.EMAIL_HOST}, Port: {settings.EMAIL_PORT}")
+            logger.error(f"Email credentials - Host User: {'Set' if settings.EMAIL_HOST_USER else 'Not Set'}, Password: {'Set' if settings.EMAIL_HOST_PASSWORD else 'Not Set'}")
             raise
 
 class Patient(models.Model):

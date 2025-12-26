@@ -385,7 +385,9 @@ class UserRegisterAPIView(APIView):
                 domain = os.environ.get('FRONTEND_DOMAIN', request.get_host())
                 user.send_activation_email(domain)
                 message = 'Registration successful. Please check your email to activate your account.'
+                logger.info(f"Activation email sent successfully to {user.email}")
             except Exception as e:
+                logger.error(f"Failed to send activation email to {user.email}: {str(e)}")
                 print(f"Failed to send activation email: {str(e)}")
                 message = 'Registration successful. Please contact support if you do not receive an activation email.'
             
