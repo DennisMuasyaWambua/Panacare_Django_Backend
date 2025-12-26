@@ -381,15 +381,15 @@ class UserRegisterAPIView(APIView):
                 except Exception as e:
                     logger.error(f"Error creating FHIR patient object: {str(e)}")
             
-            try:
-                domain = os.environ.get('FRONTEND_DOMAIN', request.get_host())
-                user.send_activation_email(domain)
+            domain = os.environ.get('FRONTEND_DOMAIN', request.get_host())
+            email_result = user.send_activation_email(domain)
+            
+            if email_result:
                 message = 'Registration successful. Please check your email to activate your account.'
                 logger.info(f"Activation email sent successfully to {user.email}")
-            except Exception as e:
-                logger.error(f"Failed to send activation email to {user.email}: {str(e)}")
-                print(f"Failed to send activation email: {str(e)}")
-                message = 'Registration successful. Please contact support if you do not receive an activation email.'
+            else:
+                message = 'Registration successful. However, we encountered an issue sending the activation email. Please contact support.'
+                logger.warning(f"Email sending failed for {user.email}, but user registration completed successfully")
             
             return Response({
                 'detail': message,

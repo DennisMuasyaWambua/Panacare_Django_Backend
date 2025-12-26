@@ -87,21 +87,38 @@ class User(AbstractUser):
         logger.info(f"Email settings: HOST={settings.EMAIL_HOST}, PORT={settings.EMAIL_PORT}, TLS={settings.EMAIL_USE_TLS}")
         
         try:
-            result = send_mail(
-                subject,
-                message,
-                from_email,
-                [self.email],
-                html_message=message,
-                fail_silently=False,
-            )
-            logger.info(f"Email sending result: {result}")
-            return result
+            import signal
+            
+            def timeout_handler(signum, frame):
+                raise Exception("Email sending timeout after 15 seconds")
+            
+            # Set a 15-second timeout for email sending
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(15)
+            
+            try:
+                result = send_mail(
+                    subject,
+                    message,
+                    from_email,
+                    [self.email],
+                    html_message=message,
+                    fail_silently=False,
+                )
+                signal.alarm(0)  # Cancel the alarm
+                logger.info(f"Email sending result: {result}")
+                return result
+            finally:
+                signal.alarm(0)  # Ensure alarm is always cancelled
+                
         except Exception as e:
             logger.error(f"Failed to send email to {self.email}: {str(e)}")
             logger.error(f"Email configuration - Backend: {settings.EMAIL_BACKEND}, Host: {settings.EMAIL_HOST}, Port: {settings.EMAIL_PORT}")
             logger.error(f"Email credentials - Host User: {'Set' if settings.EMAIL_HOST_USER else 'Not Set'}, Password: {'Set' if settings.EMAIL_HOST_PASSWORD else 'Not Set'}")
-            raise
+            
+            # Don't raise the exception to prevent worker timeout, just log it
+            logger.warning(f"Email sending failed but continuing with user registration for {self.email}")
+            return False
 
 class Patient(models.Model):
     """
