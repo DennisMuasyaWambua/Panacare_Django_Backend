@@ -87,29 +87,21 @@ class User(AbstractUser):
         logger.info(f"Email settings: HOST={settings.EMAIL_HOST}, PORT={settings.EMAIL_PORT}, TLS={settings.EMAIL_USE_TLS}")
         
         try:
-            import signal
-            
-            def timeout_handler(signum, frame):
-                raise Exception("Email sending timeout after 15 seconds")
-            
-            # Set a 15-second timeout for email sending
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(15)
-            
-            try:
-                result = send_mail(
-                    subject,
-                    message,
-                    from_email,
-                    [self.email],
-                    html_message=message,
-                    fail_silently=False,
-                )
-                signal.alarm(0)  # Cancel the alarm
-                logger.info(f"Email sending result: {result}")
-                return result
-            finally:
-                signal.alarm(0)  # Ensure alarm is always cancelled
+            result = send_mail(
+                subject,
+                message,
+                from_email,
+                [self.email],
+                html_message=message,
+                fail_silently=False,
+            )
+            logger.info(f"Email sending result: {result}")
+            if result > 0:
+                logger.info(f"Email sent successfully to {self.email}")
+                return True
+            else:
+                logger.warning(f"Email sending returned 0 for {self.email}")
+                return False
                 
         except Exception as e:
             logger.error(f"Failed to send email to {self.email}: {str(e)}")
