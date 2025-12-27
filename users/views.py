@@ -29,13 +29,13 @@ from django_filters.rest_framework import DjangoFilterBackend
 # from google.fhir.r4.proto.core import codes_pb2, datatypes_pb2
 import json
 
-from .models import User, Role, Patient, AuditLog, Location, CommunityHealthProvider, EmailVerification
+from .models import User, Role, Patient, AuditLog, Location, CommunityHealthProvider
 from .serializers import (
     UserSerializer, RoleSerializer, PatientSerializer, 
     PasswordChangeSerializer, EmailChangeSerializer, PhoneChangeSerializer,
     ContactUsSerializer, SupportRequestSerializer, ForgotPasswordSerializer,
     AuditLogSerializer, AuditLogFilterSerializer, CommunityHealthProviderSerializer,
-    CHPPatientCreateSerializer, EmailVerificationSerializer, ResendVerificationSerializer
+    CHPPatientCreateSerializer
 )
 from .locations import LocationService
 from doctors.models import Doctor
@@ -381,14 +381,15 @@ class UserRegisterAPIView(APIView):
                 except Exception as e:
                     logger.error(f"Error creating FHIR patient object: {str(e)}")
             
-            email_result = user.send_verification_email()
+            domain = os.environ.get('FRONTEND_DOMAIN', request.get_host())
+            email_result = user.send_activation_email(domain)
             
             if email_result:
-                message = 'Registration successful. A verification email with a 6-digit code is being sent to your email address. Please check your email (including spam folder) for the verification code.'
-                logger.info(f"Verification email process started successfully for {user.email}")
+                message = 'Registration successful. Please check your email to activate your account.'
+                logger.info(f"Activation email sent successfully to {user.email}")
             else:
-                message = 'Registration successful. However, we encountered an issue starting the email sending process. Please contact support.'
-                logger.warning(f"Email sending process failed to start for {user.email}, but user registration completed successfully")
+                message = 'Registration successful. However, we encountered an issue sending the activation email. Please contact support.'
+                logger.warning(f"Email sending failed for {user.email}, but user registration completed successfully")
             
             return Response({
                 'detail': message,
@@ -396,41 +397,39 @@ class UserRegisterAPIView(APIView):
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class EmailVerifyAPIView(APIView):
-    """
-    Verify email with 6-digit code (Bionexus approach)
-    """
+class UserActivateAPIView(APIView):
     permission_classes = [permissions.AllowAny]
     
-    def post(self, request):
-        serializer = EmailVerificationSerializer(data=request.data)
-        
-        if serializer.is_valid():
-            user = serializer.validated_data['user']
-            verification = serializer.validated_data['verification']
+    def get(self, request, uidb64, token):
+        try:
+            # Decode the user id
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
             
-            # Mark verification as used
-            verification.is_used = True
-            verification.save()
-            
-            # Mark user as verified
-            user.is_verified = True
-            user.save()
-            
-            # Generate JWT tokens
-            refresh = RefreshToken.for_user(user)
-            
-            logger.info(f"Email verified successfully for {user.email}")
-            
+            # Check the token is valid
+            if default_token_generator.check_token(user, token):
+                user.is_verified = True
+                user.save()
+                
+                # Generate JWT tokens
+                refresh = RefreshToken.for_user(user)
+                
+                return Response({
+                    'detail': 'Account activated successfully!',
+                    'tokens': {
+                        'refresh': str(refresh),
+                        'access': str(refresh.access_token),
+                    }
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'error': 'Activation link is invalid or has expired!'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
             return Response({
-                'detail': 'Email verified successfully!',
-                'tokens': {
-                    'refresh': str(refresh),
-                    'access': str(refresh.access_token),
-                }
-            }, status=status.HTTP_200_OK)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                'error': 'Activation link is invalid!'
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
@@ -819,40 +818,39 @@ class UserProfileAPIView(APIView):
 
 class ResendVerificationAPIView(APIView):
     """
-    Endpoint to resend verification email with 6-digit code.
+    Endpoint to resend verification email.
     """
     permission_classes = [permissions.AllowAny]
     
     def post(self, request):
-        serializer = ResendVerificationSerializer(data=request.data)
+        email = request.data.get('email')
+        if not email:
+            return Response({
+                'error': 'Email is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
         
-        if serializer.is_valid():
-            email = serializer.validated_data['email']
+        try:
+            user = User.objects.get(email=email)
             
-            try:
-                user = User.objects.get(email=email)
-                
-                # Send new verification email
-                email_result = user.send_verification_email()
-                
-                if email_result:
-                    logger.info(f"Verification email resent successfully to {user.email}")
-                    return Response({
-                        'message': 'A new verification email with 6-digit code has been sent to your email address'
-                    }, status=status.HTTP_200_OK)
-                else:
-                    logger.warning(f"Failed to resend verification email to {user.email}")
-                    return Response({
-                        'message': 'Failed to send verification email. Please try again later.'
-                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                    
-            except User.DoesNotExist:
-                # Don't reveal if user exists
+            # Check if already verified
+            if user.is_verified:
                 return Response({
-                    'message': 'If an account with this email exists, a verification email has been sent'
-                }, status=status.HTTP_200_OK)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                    'message': 'Account is already verified'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Resend activation email
+            domain = os.environ.get('FRONTEND_DOMAIN', request.get_host())
+            user.send_activation_email(domain)
+            
+            return Response({
+                'message': 'Verification email has been resent'
+            }, status=status.HTTP_200_OK)
+            
+        except User.DoesNotExist:
+            # Don't reveal if user exists
+            return Response({
+                'message': 'If an account with this email exists, a verification email has been sent'
+            }, status=status.HTTP_200_OK)
 
 class PasswordChangeAPIView(APIView):
     """

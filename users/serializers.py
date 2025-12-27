@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-from .models import User, Role, Patient, AuditLog, Location, CommunityHealthProvider, EmailVerification
+from .models import User, Role, Patient, AuditLog, Location, CommunityHealthProvider
 
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
@@ -534,46 +534,3 @@ class CHPPatientCreateSerializer(serializers.Serializer):
             'patient': patient,
             'temporary_password': password
         }
-
-class EmailVerificationSerializer(serializers.Serializer):
-    """Serializer for email verification with 6-digit code"""
-    email = serializers.EmailField()
-    verification_code = serializers.CharField(max_length=6, min_length=6)
-    
-    def validate(self, data):
-        email = data['email']
-        code = data['verification_code']
-        
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            raise serializers.ValidationError("Invalid email address.")
-        
-        try:
-            verification = EmailVerification.objects.get(
-                user=user,
-                verification_code=code,
-                is_used=False
-            )
-        except EmailVerification.DoesNotExist:
-            raise serializers.ValidationError("Invalid verification code.")
-        
-        if verification.is_expired():
-            raise serializers.ValidationError("Verification code has expired.")
-        
-        data['user'] = user
-        data['verification'] = verification
-        return data
-
-class ResendVerificationSerializer(serializers.Serializer):
-    """Serializer for resending verification email"""
-    email = serializers.EmailField()
-    
-    def validate_email(self, value):
-        try:
-            user = User.objects.get(email=value)
-            if user.is_verified:
-                raise serializers.ValidationError("Email is already verified.")
-            return value
-        except User.DoesNotExist:
-            raise serializers.ValidationError("User with this email does not exist.")

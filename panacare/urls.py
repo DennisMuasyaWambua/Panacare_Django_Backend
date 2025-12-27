@@ -11,7 +11,7 @@ from django.conf.urls.static import static
 # Import views
 from users.views import (
     RoleListAPIView, RoleDetailAPIView,
-    UserListAPIView, UserDetailAPIView, UserRegisterAPIView, UserLoginAPIView, EmailVerifyAPIView,
+    UserListAPIView, UserDetailAPIView, UserRegisterAPIView, UserLoginAPIView, UserActivateAPIView,
     PatientListAPIView, PatientDetailAPIView, PatientProfileAPIView, UserProfileAPIView, register_admin_user,
     ResendVerificationAPIView, PasswordChangeAPIView, EmailChangeAPIView, PhoneChangeAPIView,
     ContactUsAPIView, SupportRequestAPIView, ForgotPasswordAPIView, ResetPasswordAPIView, AuditLogViewSet,
@@ -166,7 +166,7 @@ urlpatterns = [
     path('api/users/<uuid:pk>/', UserDetailAPIView.as_view(), name='user-detail'),
     path('api/users/register/', UserRegisterAPIView.as_view(), name='user-register'),
     path('api/users/login/', UserLoginAPIView.as_view(), name='user-login'),
-    path('api/users/verify-email/', EmailVerifyAPIView.as_view(), name='email-verify'),
+    path('api/users/activate/<str:uidb64>/<str:token>/', UserActivateAPIView.as_view(), name='user-activate'),
     path('api/users/register-admin/', register_admin_user, name='register-admin'),
     
     # Authentication endpoints

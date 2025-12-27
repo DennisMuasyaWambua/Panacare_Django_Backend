@@ -3,13 +3,13 @@ from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
 from django.conf import settings
 from django.core.mail import send_mail
-# Removed unused imports - no longer using URL-based activation
+from django.template.loader import render_to_string
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from django.contrib.auth.tokens import default_token_generator
 from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
-from django.utils import timezone
 import uuid
-import random
-import string
 
 class Role(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -54,40 +54,36 @@ class User(AbstractUser):
     def __str__(self):
         return self.email
     
-    def send_verification_email(self):
+    def send_activation_email(self, domain):
         """
-        Send a verification email with 6-digit code (using Bionexus approach)
+        Send an activation email to the user (async to prevent timeouts)
         """
         import logging
         logger = logging.getLogger(__name__)
         
-        # Deactivate previous verification codes
-        EmailVerification.objects.filter(user=self, is_used=False).update(is_used=True)
+        uid = urlsafe_base64_encode(force_bytes(self.pk))
+        token = default_token_generator.make_token(self)
         
-        # Create new verification
-        verification = EmailVerification.objects.create(user=self)
+        # Use https if not localhost/127.0.0.1
+        protocol = 'http'
+        if domain not in ['localhost', '127.0.0.1'] and not domain.startswith('192.168.'):
+            protocol = 'https'
+            
+        activation_url = f"{protocol}://{domain}/api/users/activate/{uid}/{token}/"
         
-        subject = 'Verify your Panacare account'
-        message = f'''
-Hello {self.username or self.first_name or 'there'},
-
-Thank you for registering with Panacare!
-
-Your verification code is: {verification.verification_code}
-
-This code will expire in 15 minutes.
-
-Please use this code to verify your email address and activate your account.
-
-Best regards,
-Panacare Team
-        '''
+        subject = 'Activate Your Panacare Account'
+        logo_url = f"{protocol}://{domain}/static/images/logo.jpg"
+        message = render_to_string('users/activation_email.html', {
+            'user': self,
+            'activation_url': activation_url,
+            'logo_url': logo_url,
+        })
         
-        # Use DEFAULT_FROM_EMAIL as fallback
-        from_email = settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER or 'noreply@panacare.com'
+        # Use DEFAULT_FROM_EMAIL as fallback if EMAIL_HOST_USER is empty
+        from_email = settings.EMAIL_HOST_USER or settings.DEFAULT_FROM_EMAIL or 'noreply@panacare.com'
         
         # Log email sending attempt
-        logger.info(f"Attempting to send verification email to {self.email} from {from_email}")
+        logger.info(f"Attempting to send activation email to {self.email} from {from_email}")
         logger.info(f"Email settings: HOST={settings.EMAIL_HOST}, PORT={settings.EMAIL_PORT}, TLS={settings.EMAIL_USE_TLS}")
         
         # Send email in background thread to prevent worker timeout
@@ -104,11 +100,12 @@ Panacare Team
                     message,
                     from_email,
                     [self.email],
+                    html_message=message,
                     fail_silently=False,
                 )
                 logger.info(f"Email sending result: {result}")
                 if result > 0:
-                    logger.info(f"Verification email sent successfully to {self.email}")
+                    logger.info(f"Email sent successfully to {self.email}")
                 else:
                     logger.warning(f"Email sending returned 0 for {self.email}")
                     
@@ -136,45 +133,12 @@ Panacare Team
         try:
             email_thread = threading.Thread(target=send_email_async, daemon=True)
             email_thread.start()
-            logger.info(f"Verification email process started in background for {self.email}")
+            logger.info(f"Email sending started in background for {self.email}")
             return True  # Return True immediately since we started the process
         except Exception as e:
             logger.error(f"Failed to start email thread for {self.email}: {str(e)}")
             return False
 
-class EmailVerification(models.Model):
-    """
-    Model to store email verification codes for user activation
-    """
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='email_verifications')
-    verification_code = models.CharField(max_length=6)
-    created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
-    is_used = models.BooleanField(default=False)
-    
-    def save(self, *args, **kwargs):
-        if not self.verification_code:
-            self.verification_code = self.generate_verification_code()
-        if not self.expires_at:
-            self.expires_at = timezone.now() + timezone.timedelta(minutes=15)
-        super().save(*args, **kwargs)
-    
-    def generate_verification_code(self):
-        """Generate a 6-digit verification code"""
-        return ''.join(random.choices(string.digits, k=6))
-    
-    def is_expired(self):
-        """Check if the verification code has expired"""
-        return timezone.now() > self.expires_at
-    
-    class Meta:
-        verbose_name = "Email Verification"
-        verbose_name_plural = "Email Verifications"
-        ordering = ['-created_at']
-    
-    def __str__(self):
-        return f"Verification for {self.user.email} - {self.verification_code}"
 
 class Patient(models.Model):
     """
