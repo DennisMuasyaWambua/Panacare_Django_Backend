@@ -112,6 +112,14 @@ class User(AbstractUser):
             except socket.timeout:
                 logger.error(f"Email sending timed out for {self.email}")
                 logger.warning(f"Email sending failed due to timeout for {self.email}")
+            except OSError as e:
+                if e.errno == 101:  # Network is unreachable
+                    logger.error(f"Network connectivity issue - cannot reach SMTP server for {self.email}")
+                    logger.error("This is typically a firewall, network configuration, or Railway platform issue")
+                    logger.error("Consider using Railway's environment variables or alternative email service")
+                else:
+                    logger.error(f"Network error sending email to {self.email}: {str(e)}")
+                logger.warning(f"Email sending failed due to network issues for {self.email}")
             except Exception as e:
                 logger.error(f"Failed to send email to {self.email}: {str(e)}")
                 logger.error(f"Email configuration - Backend: {settings.EMAIL_BACKEND}, Host: {settings.EMAIL_HOST}, Port: {settings.EMAIL_PORT}")
