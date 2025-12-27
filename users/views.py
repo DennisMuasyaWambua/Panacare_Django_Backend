@@ -385,11 +385,11 @@ class UserRegisterAPIView(APIView):
             email_result = user.send_activation_email(domain)
             
             if email_result:
-                message = 'Registration successful. Please check your email to activate your account.'
-                logger.info(f"Activation email sent successfully to {user.email}")
+                message = 'Registration successful. An activation email is being sent to your email address. Please check your email (including spam folder) to activate your account.'
+                logger.info(f"Activation email process started successfully for {user.email}")
             else:
-                message = 'Registration successful. However, we encountered an issue sending the activation email. Please contact support.'
-                logger.warning(f"Email sending failed for {user.email}, but user registration completed successfully")
+                message = 'Registration successful. However, we encountered an issue starting the email sending process. Please contact support.'
+                logger.warning(f"Email sending process failed to start for {user.email}, but user registration completed successfully")
             
             return Response({
                 'detail': message,

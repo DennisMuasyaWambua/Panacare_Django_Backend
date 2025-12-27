@@ -1,85 +1,54 @@
 """
-Custom email backends for robust email sending with fallbacks
+Custom email backends with timeout settings to prevent worker timeouts
 """
-import logging
-from django.core.mail.backends.smtp import EmailBackend as SMTPBackend
-from django.core.mail.backends.console import EmailBackend as ConsoleBackend
+
+from django.core.mail.backends.smtp import EmailBackend
 from django.conf import settings
+import socket
 
-logger = logging.getLogger(__name__)
 
-class FallbackEmailBackend:
+class TimeoutSMTPEmailBackend(EmailBackend):
     """
-    Email backend that tries SMTP first, then falls back to console logging
+    SMTP backend with timeout support to prevent long-running email operations
     """
-    
-    def __init__(self, **kwargs):
-        self.smtp_backend = SMTPBackend(**kwargs)
-        self.console_backend = ConsoleBackend(**kwargs)
-        
-    def send_messages(self, email_messages):
-        """
-        Try to send via SMTP, fallback to console if it fails
-        """
-        if not email_messages:
-            return 0
-            
-        # Try SMTP first with timeout protection
-        try:
-            import signal
-            
-            def timeout_handler(signum, frame):
-                raise Exception("SMTP timeout after 10 seconds")
-            
-            # Set a 10-second timeout for SMTP
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(10)
-            
-            try:
-                result = self.smtp_backend.send_messages(email_messages)
-                signal.alarm(0)  # Cancel alarm
-                
-                if result > 0:
-                    logger.info(f"Successfully sent {result} emails via SMTP")
-                    return result
-                else:
-                    logger.warning("SMTP backend returned 0, trying fallback")
-                    raise Exception("SMTP backend failed to send messages")
-                    
-            finally:
-                signal.alarm(0)  # Ensure alarm is cancelled
-                
-        except Exception as e:
-            logger.error(f"SMTP email sending failed: {str(e)}")
-            logger.info("Falling back to console email backend")
-            
-            # Fallback to console backend
-            try:
-                # Log the email details for debugging
-                for message in email_messages:
-                    logger.info(f"FALLBACK EMAIL - To: {message.to}, Subject: {message.subject}")
-                    logger.info(f"FALLBACK EMAIL - From: {message.from_email}")
-                    logger.info(f"FALLBACK EMAIL - Body: {message.body[:200]}...")
-                
-                # Use console backend as fallback
-                result = self.console_backend.send_messages(email_messages)
-                logger.info(f"Fallback console backend processed {result} messages")
-                return result
-                
-            except Exception as console_error:
-                logger.error(f"Console email backend also failed: {str(console_error)}")
-                return 0
     
     def open(self):
-        """Open connection - delegate to SMTP backend"""
+        """
+        Ensure an open connection to the email server. Return whether or not a
+        new connection was required (True or False), with socket timeout applied.
+        """
+        if self.connection:
+            # Nothing to do if the connection is already open.
+            return False
+
+        # If local_hostname is not specified, socket.getfqdn() gets used.
+        # For performance, we use the cached FQDN for local_hostname.
+        connection_params = {
+            'local_hostname': getattr(settings, 'EMAIL_HOST_DOMAIN', None)
+        }
+        if self.timeout is not None:
+            connection_params['timeout'] = self.timeout
         try:
-            return self.smtp_backend.open()
-        except:
-            return True  # Console backend doesn't need opening
-    
-    def close(self):
-        """Close connection - delegate to SMTP backend"""
-        try:
-            return self.smtp_backend.close()
-        except:
-            return True  # Console backend doesn't need closing
+            self.connection = self.connection_class(
+                self.host, self.port, **connection_params
+            )
+            
+            # Apply socket timeout
+            if hasattr(self.connection, 'sock') and self.connection.sock:
+                timeout = getattr(settings, 'EMAIL_TIMEOUT', 30)
+                self.connection.sock.settimeout(timeout)
+            
+            # TLS/SSL are mutually exclusive, so only attempt TLS over non-secure connections.
+            if not self.use_ssl and self.use_tls:
+                self.connection.starttls()
+            if self.use_ssl:
+                self.connection = self.connection_class(
+                    self.host, self.port, **connection_params
+                )
+            if self.username and self.password:
+                self.connection.login(self.username, self.password)
+            return True
+        except (socket.gaierror, socket.error, socket.timeout) as e:
+            if not self.fail_silently:
+                raise
+            return False

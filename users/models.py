@@ -56,7 +56,7 @@ class User(AbstractUser):
     
     def send_activation_email(self, domain):
         """
-        Send an activation email to the user
+        Send an activation email to the user (async to prevent timeouts)
         """
         import logging
         logger = logging.getLogger(__name__)
@@ -86,30 +86,49 @@ class User(AbstractUser):
         logger.info(f"Attempting to send activation email to {self.email} from {from_email}")
         logger.info(f"Email settings: HOST={settings.EMAIL_HOST}, PORT={settings.EMAIL_PORT}, TLS={settings.EMAIL_USE_TLS}")
         
-        try:
-            result = send_mail(
-                subject,
-                message,
-                from_email,
-                [self.email],
-                html_message=message,
-                fail_silently=False,
-            )
-            logger.info(f"Email sending result: {result}")
-            if result > 0:
-                logger.info(f"Email sent successfully to {self.email}")
-                return True
-            else:
-                logger.warning(f"Email sending returned 0 for {self.email}")
-                return False
+        # Send email in background thread to prevent worker timeout
+        import threading
+        
+        def send_email_async():
+            import socket
+            try:
+                # Set a timeout for the operation
+                socket.setdefaulttimeout(30)
                 
+                result = send_mail(
+                    subject,
+                    message,
+                    from_email,
+                    [self.email],
+                    html_message=message,
+                    fail_silently=False,
+                )
+                logger.info(f"Email sending result: {result}")
+                if result > 0:
+                    logger.info(f"Email sent successfully to {self.email}")
+                else:
+                    logger.warning(f"Email sending returned 0 for {self.email}")
+                    
+            except socket.timeout:
+                logger.error(f"Email sending timed out for {self.email}")
+                logger.warning(f"Email sending failed due to timeout for {self.email}")
+            except Exception as e:
+                logger.error(f"Failed to send email to {self.email}: {str(e)}")
+                logger.error(f"Email configuration - Backend: {settings.EMAIL_BACKEND}, Host: {settings.EMAIL_HOST}, Port: {settings.EMAIL_PORT}")
+                logger.error(f"Email credentials - Host User: {'Set' if settings.EMAIL_HOST_USER else 'Not Set'}, Password: {'Set' if settings.EMAIL_HOST_PASSWORD else 'Not Set'}")
+                logger.warning(f"Email sending failed for {self.email}")
+            finally:
+                # Reset timeout
+                socket.setdefaulttimeout(None)
+        
+        # Start background thread for email sending
+        try:
+            email_thread = threading.Thread(target=send_email_async, daemon=True)
+            email_thread.start()
+            logger.info(f"Email sending started in background for {self.email}")
+            return True  # Return True immediately since we started the process
         except Exception as e:
-            logger.error(f"Failed to send email to {self.email}: {str(e)}")
-            logger.error(f"Email configuration - Backend: {settings.EMAIL_BACKEND}, Host: {settings.EMAIL_HOST}, Port: {settings.EMAIL_PORT}")
-            logger.error(f"Email credentials - Host User: {'Set' if settings.EMAIL_HOST_USER else 'Not Set'}, Password: {'Set' if settings.EMAIL_HOST_PASSWORD else 'Not Set'}")
-            
-            # Don't raise the exception to prevent worker timeout, just log it
-            logger.warning(f"Email sending failed but continuing with user registration for {self.email}")
+            logger.error(f"Failed to start email thread for {self.email}: {str(e)}")
             return False
 
 class Patient(models.Model):
@@ -466,6 +485,9 @@ def create_user_profile(sender, instance, action, pk_set, **kwargs):
     """
     Signal handler to create profiles when a user is assigned specific roles.
     """
+    # Suppress unused parameter warnings - these are required by Django signal interface
+    _ = sender, kwargs
+    
     if action == 'post_add':
         # Check if any of the newly added roles is 'patient'
         patient_role_exists = Role.objects.filter(pk__in=pk_set, name='patient').exists()
