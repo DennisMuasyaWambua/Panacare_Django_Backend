@@ -31,7 +31,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-b5d_wilkzt5+d1cexz9dg
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
 # For development
-APPEND_SLASH = False
+APPEND_SLASH = True
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,3cc1a282b886.ngrok-free.app,panacaredjangobackend-production.up.railway.app,panacare-django-backend.onrender.com').split(',')
 
@@ -399,7 +399,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-b5d_wilkzt5+d1cexz9dg
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
 # For development
-APPEND_SLASH = False
+APPEND_SLASH = True
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,panacaredjangobackend-production.up.railway.app,panacare-django-backend.onrender.com').split(',')
 
@@ -624,6 +624,10 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
     'EXCEPTION_HANDLER': 'panacare.utils.custom_exception_handler',
 }
+FIREBASE_SERVICE_ACCOUNT_PATH = os.environ.get(
+      'FIREBASE_SERVICE_ACCOUNT_PATH',
+      os.path.join(BASE_DIR, 'firebase-service-account.json')
+  )
 
 # JWT settings
 from datetime import timedelta

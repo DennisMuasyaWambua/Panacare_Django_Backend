@@ -40,6 +40,9 @@ env/
 # Environment
 .env
 
+# Firebase
+firebase-service-account.json
+
 # OS
 .DS_Store
 .DS_Store?

@@ -537,6 +537,26 @@ class UserLoginAPIView(APIView):
             except Doctor.DoesNotExist:
                 role_specific_data['doctor'] = None
         
+        # If user is a community health provider, include CHP profile data
+        if user.roles.filter(name='community_health_provider').exists():
+            try:
+                # Get or create CHP profile
+                chp, created = CommunityHealthProvider.objects.get_or_create(user=user)
+                
+                # Log if a new profile was created
+                if created:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.info(f"Created new CHP profile for user {user.email} during login")
+                
+                chp_serializer = CommunityHealthProviderSerializer(chp)
+                role_specific_data['community_health_provider'] = chp_serializer.data
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error accessing CHP profile during login: {str(e)}")
+                role_specific_data['community_health_provider'] = None
+        
         return Response({
             'access': str(access_token),
             'refresh': str(refresh),
@@ -2578,7 +2598,7 @@ class CHPPatientAppointmentsAPIView(APIView):
                               status=status.HTTP_400_BAD_REQUEST)
         
         # Order by most recent first
-        appointments = appointments_query.order_by('-appointment_date', '-appointment_time')
+        appointments = appointments_query.order_by('-appointment_date', '-start_time')
         
         # Prepare response data
         appointments_data = []

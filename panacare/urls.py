@@ -229,7 +229,7 @@ urlpatterns = [
     path('', include('clinical_support.urls')),
     
     # FCM Notifications
-    path('', include('notifications.urls')),
+    path('api/', include('notifications.urls')),
 ]
 
 # Media files serving in development
