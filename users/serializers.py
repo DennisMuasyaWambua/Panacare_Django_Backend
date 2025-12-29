@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from .models import User, Role, Patient, AuditLog, Location, CommunityHealthProvider
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -502,6 +503,11 @@ class CHPPatientCreateSerializer(serializers.Serializer):
         return value
     
     def create(self, validated_data):
+        # Double-check email uniqueness to prevent race conditions
+        email = validated_data.get('email')
+        if email and User.objects.filter(email=email).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        
         # Extract UUID fields
         patient_id = validated_data.pop('patient_id', None)
         user_id = validated_data.pop('user_id', None)
@@ -580,6 +586,7 @@ class CHPPatientCreateSerializer(serializers.Serializer):
         except Role.DoesNotExist:
             pass
         
+        
         # Create patient profile with optional pre-generated UUID
         patient_data['user'] = user
         
@@ -595,20 +602,28 @@ class CHPPatientCreateSerializer(serializers.Serializer):
             try:
                 patient.save()
             except Exception as e:
-                # Handle potential duplicate key errors
+                # Clean up user if patient creation fails
+                user.delete()
                 if 'duplicate key' in str(e).lower():
                     raise serializers.ValidationError(f"Patient with ID {patient_id} already exists")
                 raise serializers.ValidationError(f"Error creating patient: {str(e)}")
         else:
-            # Auto-generate UUID
+            # Auto-generate UUID using get_or_create to handle duplicates
             try:
-                patient = Patient.objects.create(**patient_data)
+                # Create defaults dict without the user field
+                defaults = {k: v for k, v in patient_data.items() if k != 'user'}
+                patient, created = Patient.objects.get_or_create(
+                    user=user,
+                    defaults=defaults
+                )
+                if not created:
+                    # Patient already existed for this user, update it with new data
+                    for key, value in defaults.items():
+                        setattr(patient, key, value)
+                    patient.save()
             except Exception as e:
-                # Handle potential duplicate errors
-                if 'duplicate key' in str(e).lower() and 'user_id' in str(e).lower():
-                    # User was created but patient creation failed - clean up
-                    user.delete()
-                    raise serializers.ValidationError("Patient creation failed due to duplicate user association. Please try again.")
+                # Clean up user if patient creation fails
+                user.delete()
                 raise serializers.ValidationError(f"Error creating patient: {str(e)}")
         
         return {
