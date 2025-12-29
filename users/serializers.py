@@ -489,6 +489,18 @@ class CHPPatientCreateSerializer(serializers.Serializer):
             return cleaned_phone
         return value
     
+    def validate_email(self, value):
+        """Validate email uniqueness"""
+        if value and User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+    
+    def validate_username(self, value):
+        """Validate username uniqueness if provided"""
+        if value and User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("A user with this username already exists.")
+        return value
+    
     def create(self, validated_data):
         # Extract UUID fields
         patient_id = validated_data.pop('patient_id', None)

@@ -1837,7 +1837,7 @@ class CHPDoctorAvailabilityAPIView(APIView):
         from datetime import datetime
         
         # Base query for active and verified doctors
-        doctors_query = Doctor.objects.filter(is_active=True, is_verified=True)
+        doctors_query = Doctor.objects.filter(is_available=True, is_verified=True)
         
         # Apply filters
         name = request.query_params.get('name')
@@ -1881,7 +1881,7 @@ class CHPDoctorAvailabilityAPIView(APIView):
                 'specialty': doctor.specialty,
                 'experience_years': doctor.experience_years,
                 'license_number': doctor.license_number,
-                'consultation_fee': doctor.consultation_fee,
+                'bio': doctor.bio,
                 'contact': {
                     'email': doctor.user.email,
                     'phone': doctor.user.phone_number
