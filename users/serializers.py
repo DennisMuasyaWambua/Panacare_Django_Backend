@@ -460,6 +460,35 @@ class CHPPatientCreateSerializer(serializers.Serializer):
                 raise serializers.ValidationError("Patient with this ID already exists")
         return value
     
+    def validate_phone_number(self, value):
+        """Validate and clean phone number to fit 15 character limit"""
+        if value:
+            # Remove common formatting characters
+            cleaned_phone = ''.join(char for char in value if char.isdigit() or char == '+')
+            # Ensure it fits the 15 character database constraint
+            if len(cleaned_phone) > 15:
+                raise serializers.ValidationError(
+                    f"Phone number too long. Maximum 15 characters allowed. "
+                    f"Current length: {len(cleaned_phone)}. "
+                    f"Consider removing country code or formatting."
+                )
+            return cleaned_phone
+        return value
+    
+    def validate_emergency_contact_phone(self, value):
+        """Validate and clean emergency contact phone number"""
+        if value:
+            # Remove common formatting characters
+            cleaned_phone = ''.join(char for char in value if char.isdigit() or char == '+')
+            # Ensure it fits the 15 character database constraint
+            if len(cleaned_phone) > 15:
+                raise serializers.ValidationError(
+                    f"Emergency contact phone number too long. Maximum 15 characters allowed. "
+                    f"Current length: {len(cleaned_phone)}."
+                )
+            return cleaned_phone
+        return value
+    
     def create(self, validated_data):
         # Extract UUID fields
         patient_id = validated_data.pop('patient_id', None)
@@ -488,6 +517,21 @@ class CHPPatientCreateSerializer(serializers.Serializer):
         # Prepare user data
         user_data.update(validated_data)
         
+        # Generate username if not provided
+        if not user_data.get('username'):
+            # Generate username from first_name, last_name and a random suffix
+            import secrets
+            import string
+            random_suffix = ''.join(secrets.choice(string.digits) for _ in range(4))
+            base_username = f"{user_data.get('first_name', '').lower()}{user_data.get('last_name', '').lower()}{random_suffix}"
+            # Ensure username is unique
+            username = base_username
+            counter = 1
+            while User.objects.filter(username=username).exists():
+                username = f"{base_username}{counter}"
+                counter += 1
+            user_data['username'] = username
+        
         # Generate password for patient
         import secrets
         import string
@@ -500,10 +544,22 @@ class CHPPatientCreateSerializer(serializers.Serializer):
             user_data['id'] = user_id
             user = User(**user_data)
             user.set_password(user_data['password'])
-            user.save()
+            try:
+                user.save()
+            except Exception as e:
+                # Handle potential duplicate key errors
+                if 'duplicate key' in str(e).lower():
+                    raise serializers.ValidationError(f"User with ID {user_id} already exists or username is taken")
+                raise serializers.ValidationError(f"Error creating user: {str(e)}")
         else:
             # Auto-generate UUID
-            user = User.objects.create_user(**user_data)
+            try:
+                user = User.objects.create_user(**user_data)
+            except Exception as e:
+                # Handle potential duplicate username errors
+                if 'duplicate' in str(e).lower():
+                    raise serializers.ValidationError("Username already exists. Please try again.")
+                raise serializers.ValidationError(f"Error creating user: {str(e)}")
         
         # Add patient role
         try:
@@ -524,10 +580,24 @@ class CHPPatientCreateSerializer(serializers.Serializer):
             # Use pre-generated UUID
             patient_data['id'] = patient_id
             patient = Patient(**patient_data)
-            patient.save()
+            try:
+                patient.save()
+            except Exception as e:
+                # Handle potential duplicate key errors
+                if 'duplicate key' in str(e).lower():
+                    raise serializers.ValidationError(f"Patient with ID {patient_id} already exists")
+                raise serializers.ValidationError(f"Error creating patient: {str(e)}")
         else:
             # Auto-generate UUID
-            patient = Patient.objects.create(**patient_data)
+            try:
+                patient = Patient.objects.create(**patient_data)
+            except Exception as e:
+                # Handle potential duplicate errors
+                if 'duplicate key' in str(e).lower() and 'user_id' in str(e).lower():
+                    # User was created but patient creation failed - clean up
+                    user.delete()
+                    raise serializers.ValidationError("Patient creation failed due to duplicate user association. Please try again.")
+                raise serializers.ValidationError(f"Error creating patient: {str(e)}")
         
         return {
             'user': user,
