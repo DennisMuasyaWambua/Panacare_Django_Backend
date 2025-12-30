@@ -434,6 +434,14 @@ class AppointmentViewSet(viewsets.ModelViewSet):
                 queryset = queryset.filter(patient=patient)
             except Patient.DoesNotExist:
                 return Appointment.objects.none()
+        elif self.request.user.is_authenticated and self.request.user.roles.filter(name='community_health_provider').exists():
+            # CHPs can only see appointments they created
+            try:
+                from users.models import CommunityHealthProvider
+                chp = self.request.user.community_health_provider
+                queryset = queryset.filter(created_by_chp=chp)
+            except CommunityHealthProvider.DoesNotExist:
+                return Appointment.objects.none()
         else:
             return Appointment.objects.none()
             

@@ -18,7 +18,7 @@ from users.views import (
     CountiesListAPIView, SubCountiesListAPIView, WardsListAPIView, VillagesListAPIView,
     LocationHierarchyAPIView, SyncLocationsAPIView, CHPPatientCreateAPIView, CHPClinicalDecisionSupportAPIView,
     CHPDoctorAvailabilityAPIView, CHPAppointmentBookingAPIView, CHPBatchAppointmentBookingAPIView,
-    CHPPatientAppointmentsAPIView, CHPPatientsListAPIView
+    CHPPatientAppointmentsAPIView, CHPPatientsListAPIView, CHPStatsAPIView, CHPProfileAPIView
 )
 from doctors.views import DoctorViewSet
 import doctors.views
@@ -195,6 +195,7 @@ urlpatterns = [
     path('api/locations/sync/', SyncLocationsAPIView.as_view(), name='sync-locations'),
     
     # Community Health Provider endpoints
+    path('api/chps/<uuid:chp_id>/', CHPProfileAPIView.as_view(), name='chp-profile'),
     path('api/chp/create-patient/', CHPPatientCreateAPIView.as_view(), name='chp-create-patient'),
     path('api/chp/patients/', CHPPatientsListAPIView.as_view(), name='chp-patients-list'),
     path('api/chp/cdss/', CHPClinicalDecisionSupportAPIView.as_view(), name='chp-cdss'),
@@ -202,6 +203,7 @@ urlpatterns = [
     path('api/chp/book-appointment/', CHPAppointmentBookingAPIView.as_view(), name='chp-book-appointment'),
     path('api/chp/batch-book-appointments/', CHPBatchAppointmentBookingAPIView.as_view(), name='chp-batch-book-appointments'),
     path('api/chp/appointments/', CHPPatientAppointmentsAPIView.as_view(), name='chp-appointments'),
+    path('api/chp/stats/', CHPStatsAPIView.as_view(), name='chp-stats'),
     
     # Add the admin URLs explicitly
     *admin_urls,

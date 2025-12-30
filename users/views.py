@@ -2889,3 +2889,103 @@ class CHPPatientsListAPIView(APIView):
                 'total_patients_onboarded': len(patients_data)
             }
         }, status=status.HTTP_200_OK)
+
+
+class CHPStatsAPIView(APIView):
+    """
+    Get statistics for Community Health Provider including:
+    - Number of referrals (appointments created by CHP)
+    - Average rating of doctors CHP referred patients to
+    - Joining date
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from healthcare.models import Appointment, DoctorRating
+        from django.db.models import Avg
+        
+        try:
+            # Get the CHP profile
+            chp = CommunityHealthProvider.objects.get(user=request.user)
+        except CommunityHealthProvider.DoesNotExist:
+            return Response({
+                'error': 'CHP profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Count referrals (appointments created by this CHP)
+        referrals_count = Appointment.objects.filter(created_by_chp=chp).count()
+
+        # Get all doctors that this CHP has referred patients to
+        referred_doctors = Appointment.objects.filter(
+            created_by_chp=chp
+        ).values_list('doctor', flat=True).distinct()
+
+        # Calculate average rating of those doctors
+        average_rating = None
+        if referred_doctors:
+            ratings = DoctorRating.objects.filter(
+                doctor__in=referred_doctors
+            ).aggregate(avg_rating=Avg('rating'))
+            average_rating = round(ratings['avg_rating'], 2) if ratings['avg_rating'] else None
+
+        # Get joining date
+        joining_date = chp.user.date_joined
+
+        return Response({
+            'chp_id': str(chp.id),
+            'chp_name': chp.user.get_full_name(),
+            'stats': {
+                'referrals_count': referrals_count,
+                'average_rating': average_rating,
+                'joining_date': joining_date.isoformat()
+            }
+        }, status=status.HTTP_200_OK)
+
+
+class CHPProfileAPIView(APIView):
+    """
+    Get CHP profile by UUID
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, chp_id):
+        try:
+            chp = CommunityHealthProvider.objects.get(id=chp_id)
+        except CommunityHealthProvider.DoesNotExist:
+            return Response({
+                'error': 'CHP not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Build profile response
+        profile_data = {
+            'id': str(chp.id),
+            'user': {
+                'id': str(chp.user.id),
+                'username': chp.user.username,
+                'first_name': chp.user.first_name,
+                'last_name': chp.user.last_name,
+                'email': chp.user.email,
+                'phone': chp.user.phone,
+                'date_joined': chp.user.date_joined.isoformat(),
+                'is_active': chp.user.is_active,
+                'is_verified': chp.user.is_verified
+            },
+            'certification_number': chp.certification_number,
+            'years_of_experience': chp.years_of_experience,
+            'specialization': chp.specialization,
+            'service_area': chp.service_area,
+            'languages': chp.languages,
+            'is_active': chp.is_active,
+            'created_at': chp.created_at.isoformat(),
+            'updated_at': chp.updated_at.isoformat()
+        }
+
+        # Add location info if available
+        if chp.user.location:
+            profile_data['user']['location'] = {
+                'id': str(chp.user.location.id),
+                'name': chp.user.location.name,
+                'level': chp.user.location.level
+            }
+
+        return Response(profile_data, status=status.HTTP_200_OK)
