@@ -2965,7 +2965,7 @@ class CHPProfileAPIView(APIView):
                 'first_name': chp.user.first_name,
                 'last_name': chp.user.last_name,
                 'email': chp.user.email,
-                'phone': chp.user.phone,
+                'phone': chp.user.phone_number,
                 'date_joined': chp.user.date_joined.isoformat(),
                 'is_active': chp.user.is_active,
                 'is_verified': chp.user.is_verified
@@ -2974,7 +2974,7 @@ class CHPProfileAPIView(APIView):
             'years_of_experience': chp.years_of_experience,
             'specialization': chp.specialization,
             'service_area': chp.service_area,
-            'languages': chp.languages,
+            'languages': chp.languages_spoken,
             'is_active': chp.is_active,
             'created_at': chp.created_at.isoformat(),
             'updated_at': chp.updated_at.isoformat()
