@@ -29,13 +29,13 @@ from django_filters.rest_framework import DjangoFilterBackend
 # from google.fhir.r4.proto.core import codes_pb2, datatypes_pb2
 import json
 
-from .models import User, Role, Patient, AuditLog, Location, CommunityHealthProvider
+from .models import User, Role, Patient, AuditLog, Location, CommunityHealthProvider, CHPPatientMessage
 from .serializers import (
     UserSerializer, RoleSerializer, PatientSerializer, 
     PasswordChangeSerializer, EmailChangeSerializer, PhoneChangeSerializer,
     ContactUsSerializer, SupportRequestSerializer, ForgotPasswordSerializer,
     AuditLogSerializer, AuditLogFilterSerializer, CommunityHealthProviderSerializer,
-    CHPPatientCreateSerializer
+    CHPPatientCreateSerializer, CHPPatientMessageSerializer, CHPAssignmentSerializer
 )
 from .locations import LocationService
 from doctors.models import Doctor
@@ -2989,3 +2989,209 @@ class CHPProfileAPIView(APIView):
             }
 
         return Response(profile_data, status=status.HTTP_200_OK)
+
+
+class AdminCHPAssignmentAPIView(APIView):
+    """
+    Admin endpoint to assign/reassign CHP to patient
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        # Check if user is admin
+        if not request.user.roles.filter(name='admin').exists():
+            return Response({
+                'error': 'Admin access required'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = CHPAssignmentSerializer(data=request.data)
+        if serializer.is_valid():
+            chp_id = serializer.validated_data['chp_id']
+            patient_id = serializer.validated_data['patient_id']
+            
+            try:
+                chp = CommunityHealthProvider.objects.get(id=chp_id)
+                patient = Patient.objects.get(id=patient_id)
+                
+                # Get previous CHP if any
+                previous_chp = patient.created_by_chp
+                
+                # Assign CHP to patient
+                patient.created_by_chp = chp
+                patient.save()
+                
+                # Create audit log
+                AuditLog.objects.create(
+                    user=request.user,
+                    username=request.user.username,
+                    activity='chp_assignment',
+                    email_address=request.user.email,
+                    role=','.join([role.name for role in request.user.roles.all()]),
+                    date_joined=request.user.date_joined,
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                    details={
+                        'patient_id': str(patient.id),
+                        'patient_name': patient.user.get_full_name(),
+                        'chp_id': str(chp.id),
+                        'chp_name': chp.user.get_full_name(),
+                        'previous_chp_id': str(previous_chp.id) if previous_chp else None,
+                        'previous_chp_name': previous_chp.user.get_full_name() if previous_chp else None,
+                        'action': 'reassignment' if previous_chp else 'assignment'
+                    }
+                )
+                
+                return Response({
+                    'message': f"Patient {patient.user.get_full_name()} successfully {'reassigned' if previous_chp else 'assigned'} to CHP {chp.user.get_full_name()}",
+                    'patient': {
+                        'id': str(patient.id),
+                        'name': patient.user.get_full_name(),
+                        'email': patient.user.email
+                    },
+                    'chp': {
+                        'id': str(chp.id),
+                        'name': chp.user.get_full_name(),
+                        'specialization': chp.specialization
+                    },
+                    'previous_chp': {
+                        'id': str(previous_chp.id),
+                        'name': previous_chp.user.get_full_name()
+                    } if previous_chp else None
+                }, status=status.HTTP_200_OK)
+                
+            except CommunityHealthProvider.DoesNotExist:
+                return Response({
+                    'error': 'CHP not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            except Patient.DoesNotExist:
+                return Response({
+                    'error': 'Patient not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+                
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CHPPatientMessageAPIView(APIView):
+    """
+    Endpoint for CHP-Patient messaging
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        """Get messages for current user (either CHP or Patient)"""
+        user = request.user
+        patient_id = request.query_params.get('patient_id')
+        chp_id = request.query_params.get('chp_id')
+        
+        # Check if user is CHP or patient
+        is_chp = user.roles.filter(name__in=['chp', 'community_health_provider']).exists()
+        is_patient = user.roles.filter(name='patient').exists()
+        
+        if not (is_chp or is_patient):
+            return Response({
+                'error': 'Only CHPs and patients can access messages'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Build query based on user type
+        if is_chp:
+            if patient_id:
+                # CHP viewing messages with specific patient
+                messages = CHPPatientMessage.objects.filter(
+                    Q(sender=user, patient_id=patient_id) |
+                    Q(recipient=user, patient_id=patient_id)
+                )
+            else:
+                # CHP viewing all their messages
+                messages = CHPPatientMessage.objects.filter(
+                    Q(sender=user) | Q(recipient=user)
+                )
+        else:  # is_patient
+            # Patient viewing their messages with CHP
+            try:
+                patient = Patient.objects.get(user=user)
+                if chp_id:
+                    messages = CHPPatientMessage.objects.filter(
+                        patient=patient,
+                        chp_id=chp_id
+                    )
+                else:
+                    messages = CHPPatientMessage.objects.filter(patient=patient)
+            except Patient.DoesNotExist:
+                return Response({
+                    'error': 'Patient profile not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = CHPPatientMessageSerializer(messages, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        """Send a message"""
+        user = request.user
+        data = request.data.copy()
+        
+        # Set sender
+        data['sender'] = user.id
+        
+        # Validate sender is either CHP or patient
+        is_chp = user.roles.filter(name__in=['chp', 'community_health_provider']).exists()
+        is_patient = user.roles.filter(name='patient').exists()
+        
+        if not (is_chp or is_patient):
+            return Response({
+                'error': 'Only CHPs and patients can send messages'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = CHPPatientMessageSerializer(data=data)
+        if serializer.is_valid():
+            # Additional validation
+            patient_id = serializer.validated_data['patient']
+            chp_id = serializer.validated_data['chp']
+            recipient_id = serializer.validated_data['recipient']
+            
+            try:
+                patient = Patient.objects.get(id=patient_id.id)
+                chp = CommunityHealthProvider.objects.get(id=chp_id.id)
+                recipient = User.objects.get(id=recipient_id.id)
+                
+                # Ensure the relationship is valid
+                if is_chp:
+                    # CHP sending to patient
+                    if patient.user != recipient:
+                        return Response({
+                            'error': 'Recipient must be the patient'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                else:
+                    # Patient sending to CHP
+                    if chp.user != recipient:
+                        return Response({
+                            'error': 'Recipient must be the assigned CHP'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                    if patient.user != user:
+                        return Response({
+                            'error': 'You can only send messages for your own patient profile'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                
+                message = serializer.save()
+                return Response(CHPPatientMessageSerializer(message).data, status=status.HTTP_201_CREATED)
+                
+            except (Patient.DoesNotExist, CommunityHealthProvider.DoesNotExist, User.DoesNotExist) as e:
+                return Response({
+                    'error': 'Invalid patient, CHP, or recipient'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, message_id):
+        """Mark message as read"""
+        try:
+            message = CHPPatientMessage.objects.get(id=message_id, recipient=request.user)
+            message.is_read = True
+            message.save()
+            
+            return Response({
+                'message': 'Message marked as read'
+            }, status=status.HTTP_200_OK)
+            
+        except CHPPatientMessage.DoesNotExist:
+            return Response({
+                'error': 'Message not found'
+            }, status=status.HTTP_404_NOT_FOUND)

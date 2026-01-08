@@ -598,3 +598,26 @@ class AuditLog(models.Model):
             return f"{minutes}m"
         else:
             return f"{total_seconds}s"
+
+
+class CHPPatientMessage(models.Model):
+    """
+    Model for messages between CHP and Patient
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_messages')
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='messages')
+    chp = models.ForeignKey(CommunityHealthProvider, on_delete=models.CASCADE, related_name='messages')
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "CHP-Patient Message"
+        verbose_name_plural = "CHP-Patient Messages"
+
+    def __str__(self):
+        return f"Message from {self.sender.username} to {self.recipient.username} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"

@@ -18,7 +18,8 @@ from users.views import (
     CountiesListAPIView, SubCountiesListAPIView, WardsListAPIView, VillagesListAPIView,
     LocationHierarchyAPIView, SyncLocationsAPIView, CHPPatientCreateAPIView, CHPClinicalDecisionSupportAPIView,
     CHPDoctorAvailabilityAPIView, CHPAppointmentBookingAPIView, CHPBatchAppointmentBookingAPIView,
-    CHPPatientAppointmentsAPIView, CHPPatientsListAPIView, CHPStatsAPIView, CHPProfileAPIView
+    CHPPatientAppointmentsAPIView, CHPPatientsListAPIView, CHPStatsAPIView, CHPProfileAPIView,
+    AdminCHPAssignmentAPIView, CHPPatientMessageAPIView
 )
 from doctors.views import DoctorViewSet
 import doctors.views
@@ -204,6 +205,13 @@ urlpatterns = [
     path('api/chp/batch-book-appointments/', CHPBatchAppointmentBookingAPIView.as_view(), name='chp-batch-book-appointments'),
     path('api/chp/appointments/', CHPPatientAppointmentsAPIView.as_view(), name='chp-appointments'),
     path('api/chp/stats/', CHPStatsAPIView.as_view(), name='chp-stats'),
+    
+    # Admin CHP-Patient Assignment
+    path('api/admin/assign-chp-patient/', AdminCHPAssignmentAPIView.as_view(), name='admin-assign-chp-patient'),
+    
+    # CHP-Patient Messaging
+    path('api/messages/', CHPPatientMessageAPIView.as_view(), name='chp-patient-messages'),
+    path('api/messages/<uuid:message_id>/read/', CHPPatientMessageAPIView.as_view(), name='mark-message-read'),
     
     # Add the admin URLs explicitly
     *admin_urls,

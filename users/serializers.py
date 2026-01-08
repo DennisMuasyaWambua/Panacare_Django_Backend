@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from .models import User, Role, Patient, AuditLog, Location, CommunityHealthProvider
+from .models import User, Role, Patient, AuditLog, Location, CommunityHealthProvider, CHPPatientMessage
 
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
@@ -631,3 +631,38 @@ class CHPPatientCreateSerializer(serializers.Serializer):
             'patient': patient,
             'temporary_password': password
         }
+
+
+class CHPPatientMessageSerializer(serializers.ModelSerializer):
+    sender_name = serializers.CharField(source='sender.get_full_name', read_only=True)
+    recipient_name = serializers.CharField(source='recipient.get_full_name', read_only=True)
+    patient_name = serializers.CharField(source='patient.user.get_full_name', read_only=True)
+    chp_name = serializers.CharField(source='chp.user.get_full_name', read_only=True)
+    
+    class Meta:
+        model = CHPPatientMessage
+        fields = [
+            'id', 'sender', 'recipient', 'patient', 'chp', 
+            'message', 'is_read', 'created_at', 'updated_at',
+            'sender_name', 'recipient_name', 'patient_name', 'chp_name'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+class CHPAssignmentSerializer(serializers.Serializer):
+    chp_id = serializers.UUIDField()
+    patient_id = serializers.UUIDField()
+    
+    def validate(self, data):
+        # Check if CHP exists
+        try:
+            CommunityHealthProvider.objects.get(id=data['chp_id'])
+        except CommunityHealthProvider.DoesNotExist:
+            raise serializers.ValidationError("CHP not found")
+        
+        # Check if Patient exists
+        try:
+            Patient.objects.get(id=data['patient_id'])
+        except Patient.DoesNotExist:
+            raise serializers.ValidationError("Patient not found")
+        
+        return data

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, Role, Patient, CommunityHealthProvider, AuditLog
+from .models import User, Role, Patient, CommunityHealthProvider, AuditLog, CHPPatientMessage
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
@@ -114,4 +114,16 @@ class AuditLogAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         # Only superusers can delete audit logs
         return request.user.is_superuser
+
+
+@admin.register(CHPPatientMessage)
+class CHPPatientMessageAdmin(admin.ModelAdmin):
+    list_display = ('sender', 'recipient', 'patient', 'chp', 'is_read', 'created_at')
+    list_filter = ('is_read', 'created_at', 'chp')
+    search_fields = ('sender__email', 'recipient__email', 'patient__user__email', 'message')
+    readonly_fields = ('created_at', 'updated_at')
+    ordering = ['-created_at']
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('sender', 'recipient', 'patient', 'chp')
 
