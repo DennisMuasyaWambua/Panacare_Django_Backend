@@ -909,3 +909,100 @@ class PatientJournal(models.Model):
     
     def __str__(self):
         return f"{self.patient.user.get_full_name()} - {self.title}"
+
+
+class Referral(models.Model):
+    """
+    Referral model to track patients referred by CHPs to doctors
+    Maps to FHIR ServiceRequest resource
+    """
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('declined', 'Declined'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    URGENCY_CHOICES = [
+        ('routine', 'Routine'),
+        ('urgent', 'Urgent'),
+        ('asap', 'ASAP'),
+        ('stat', 'STAT'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Core relationships
+    patient = models.ForeignKey('users.Patient', on_delete=models.CASCADE, related_name='referrals_received')
+    referring_chp = models.ForeignKey('users.CommunityHealthProvider', on_delete=models.CASCADE, related_name='referrals_made')
+    referred_to_doctor = models.ForeignKey('doctors.Doctor', on_delete=models.CASCADE, related_name='referrals_received')
+    
+    # Referral details
+    referral_reason = models.TextField(help_text="Reason for referral")
+    clinical_notes = models.TextField(blank=True, help_text="Additional clinical observations")
+    urgency = models.CharField(max_length=10, choices=URGENCY_CHOICES, default='routine')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    
+    # Follow-up information
+    follow_up_required = models.BooleanField(default=True)
+    follow_up_notes = models.TextField(blank=True, help_text="Follow-up instructions or notes")
+    
+    # Status tracking
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    doctor_notes = models.TextField(blank=True, help_text="Doctor's notes on the referral")
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Patient Referral"
+        verbose_name_plural = "Patient Referrals"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['referring_chp', 'status']),
+            models.Index(fields=['referred_to_doctor', 'status']),
+            models.Index(fields=['patient', 'status']),
+            models.Index(fields=['created_at']),
+        ]
+    
+    def __str__(self):
+        return f"Referral: {self.patient.user.get_full_name()} → Dr. {self.referred_to_doctor.user.get_full_name()}"
+    
+    def to_fhir_json(self):
+        """Return FHIR-compliant ServiceRequest representation"""
+        return {
+            "resourceType": "ServiceRequest",
+            "id": str(self.id),
+            "status": self.status,
+            "intent": "order",
+            "priority": self.urgency,
+            "subject": {
+                "reference": f"Patient/{self.patient.id}",
+                "display": self.patient.user.get_full_name() or self.patient.user.email
+            },
+            "requester": {
+                "reference": f"CommunityHealthProvider/{self.referring_chp.id}",
+                "display": f"CHP: {self.referring_chp.user.get_full_name()}"
+            },
+            "performer": [
+                {
+                    "reference": f"Practitioner/{self.referred_to_doctor.id}",
+                    "display": f"Dr. {self.referred_to_doctor.user.get_full_name()}"
+                }
+            ],
+            "reasonCode": [
+                {
+                    "text": self.referral_reason
+                }
+            ],
+            "note": [
+                {
+                    "text": self.clinical_notes
+                }
+            ] if self.clinical_notes else [],
+            "authoredOn": self.created_at.isoformat(),
+        }

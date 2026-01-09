@@ -19,7 +19,8 @@ from users.views import (
     LocationHierarchyAPIView, SyncLocationsAPIView, CHPPatientCreateAPIView, CHPClinicalDecisionSupportAPIView,
     CHPDoctorAvailabilityAPIView, CHPAppointmentBookingAPIView, CHPBatchAppointmentBookingAPIView,
     CHPPatientAppointmentsAPIView, CHPPatientsListAPIView, CHPStatsAPIView, CHPProfileAPIView,
-    AdminCHPAssignmentAPIView, CHPPatientMessageAPIView
+    AdminCHPAssignmentAPIView, CHPPatientMessageAPIView, CHPReferralCreateAPIView,
+    CHPReferralsListAPIView, CHPReferralDetailAPIView
 )
 from doctors.views import DoctorViewSet
 import doctors.views
@@ -212,6 +213,11 @@ urlpatterns = [
     # CHP-Patient Messaging
     path('api/messages/', CHPPatientMessageAPIView.as_view(), name='chp-patient-messages'),
     path('api/messages/<uuid:message_id>/read/', CHPPatientMessageAPIView.as_view(), name='mark-message-read'),
+    
+    # CHP Referral endpoints
+    path('api/chp/referrals/', CHPReferralsListAPIView.as_view(), name='chp-referrals-list'),
+    path('api/chp/referrals/create/', CHPReferralCreateAPIView.as_view(), name='chp-referral-create'),
+    path('api/chp/referrals/<uuid:referral_id>/', CHPReferralDetailAPIView.as_view(), name='chp-referral-detail'),
     
     # Add the admin URLs explicitly
     *admin_urls,

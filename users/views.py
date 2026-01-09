@@ -40,6 +40,8 @@ from .serializers import (
 from .locations import LocationService
 from doctors.models import Doctor
 from doctors.serializers import DoctorSerializer
+from healthcare.models import Referral
+from healthcare.serializers import ReferralCreateSerializer, ReferralListSerializer, ReferralDetailSerializer
 
 # Generate a secure token for admin registration
 # This is a one-time use token that should be removed after use
@@ -3195,3 +3197,185 @@ class CHPPatientMessageAPIView(APIView):
             return Response({
                 'error': 'Message not found'
             }, status=status.HTTP_404_NOT_FOUND)
+
+
+class CHPReferralCreateAPIView(APIView):
+    """
+    CHP endpoint to create patient referrals to doctors
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        """Create a new patient referral"""
+        try:
+            # Verify user is a CHP
+            chp = request.user.community_health_provider
+        except CommunityHealthProvider.DoesNotExist:
+            return Response({
+                'error': 'You must be a Community Health Provider to create referrals'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = ReferralCreateSerializer(data=request.data, context={'request': request})
+        
+        if serializer.is_valid():
+            referral = serializer.save()
+            
+            return Response({
+                'message': 'Referral created successfully',
+                'referral_id': referral.id,
+                'patient': referral.patient.user.get_full_name(),
+                'doctor': f"Dr. {referral.referred_to_doctor.user.get_full_name()}",
+                'status': referral.status,
+                'created_at': referral.created_at
+            }, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CHPReferralsListAPIView(APIView):
+    """
+    CHP endpoint to list all patients referred by the CHP
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """List all referrals made by the authenticated CHP"""
+        try:
+            # Verify user is a CHP
+            chp = request.user.community_health_provider
+        except CommunityHealthProvider.DoesNotExist:
+            return Response({
+                'error': 'You must be a Community Health Provider to view referrals'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Get all referrals made by this CHP
+        referrals = Referral.objects.filter(referring_chp=chp)
+        
+        # Apply filters
+        status_filter = request.GET.get('status', None)
+        if status_filter:
+            referrals = referrals.filter(status=status_filter)
+        
+        urgency_filter = request.GET.get('urgency', None)
+        if urgency_filter:
+            referrals = referrals.filter(urgency=urgency_filter)
+        
+        patient_search = request.GET.get('patient_search', None)
+        if patient_search:
+            referrals = referrals.filter(
+                Q(patient__user__first_name__icontains=patient_search) |
+                Q(patient__user__last_name__icontains=patient_search) |
+                Q(patient__user__email__icontains=patient_search)
+            )
+        
+        doctor_search = request.GET.get('doctor_search', None)
+        if doctor_search:
+            referrals = referrals.filter(
+                Q(referred_to_doctor__user__first_name__icontains=doctor_search) |
+                Q(referred_to_doctor__user__last_name__icontains=doctor_search) |
+                Q(referred_to_doctor__specialty__icontains=doctor_search)
+            )
+        
+        # Order by creation date (newest first)
+        referrals = referrals.order_by('-created_at')
+        
+        # Paginate results
+        from django.core.paginator import Paginator
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 10))
+        
+        paginator = Paginator(referrals, page_size)
+        page_obj = paginator.get_page(page)
+        
+        serializer = ReferralListSerializer(page_obj, many=True)
+        
+        # Prepare summary statistics
+        total_referrals = referrals.count()
+        pending_count = referrals.filter(status='pending').count()
+        accepted_count = referrals.filter(status='accepted').count()
+        completed_count = referrals.filter(status='completed').count()
+        
+        return Response({
+            'referrals': serializer.data,
+            'pagination': {
+                'current_page': page,
+                'total_pages': paginator.num_pages,
+                'total_results': total_referrals,
+                'page_size': page_size,
+                'has_next': page_obj.has_next(),
+                'has_previous': page_obj.has_previous()
+            },
+            'summary': {
+                'total_referrals': total_referrals,
+                'pending': pending_count,
+                'accepted': accepted_count,
+                'completed': completed_count
+            }
+        }, status=status.HTTP_200_OK)
+
+
+class CHPReferralDetailAPIView(APIView):
+    """
+    CHP endpoint to view details of a specific referral
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request, referral_id):
+        """Get detailed information about a specific referral"""
+        try:
+            # Verify user is a CHP
+            chp = request.user.community_health_provider
+        except CommunityHealthProvider.DoesNotExist:
+            return Response({
+                'error': 'You must be a Community Health Provider to view referrals'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            # Get the referral and ensure it belongs to this CHP
+            referral = Referral.objects.get(id=referral_id, referring_chp=chp)
+        except Referral.DoesNotExist:
+            return Response({
+                'error': 'Referral not found or you do not have permission to view it'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = ReferralDetailSerializer(referral)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def patch(self, request, referral_id):
+        """Update referral status or add notes (limited fields)"""
+        try:
+            # Verify user is a CHP
+            chp = request.user.community_health_provider
+        except CommunityHealthProvider.DoesNotExist:
+            return Response({
+                'error': 'You must be a Community Health Provider to update referrals'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            # Get the referral and ensure it belongs to this CHP
+            referral = Referral.objects.get(id=referral_id, referring_chp=chp)
+        except Referral.DoesNotExist:
+            return Response({
+                'error': 'Referral not found or you do not have permission to update it'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Only allow updating certain fields by CHP
+        allowed_fields = ['clinical_notes', 'follow_up_notes', 'follow_up_required']
+        update_data = {k: v for k, v in request.data.items() if k in allowed_fields}
+        
+        if not update_data:
+            return Response({
+                'error': 'No valid fields to update'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Update the referral
+        for field, value in update_data.items():
+            setattr(referral, field, value)
+        
+        referral.save()
+        
+        serializer = ReferralDetailSerializer(referral)
+        return Response({
+            'message': 'Referral updated successfully',
+            'referral': serializer.data
+        }, status=status.HTTP_200_OK)

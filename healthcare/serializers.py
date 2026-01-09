@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import (
     HealthCare, Appointment, Consultation, ConsultationChat, DoctorRating,
     Article, ArticleComment, ArticleCommentLike, Package, PatientDoctorAssignment, PatientSubscription, DoctorAvailability, Payment,
-    PatientJournal,
+    PatientJournal, Referral,
     # AppointmentDocument, Resource,
 )
 from doctors.serializers import DoctorSerializer
@@ -841,3 +841,134 @@ class PatientRiskListSerializer(serializers.ModelSerializer):
     
     def get_doctor_name(self, obj):
         return obj.doctor.user.get_full_name() or obj.doctor.user.username
+
+
+class ReferralCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating referrals by CHPs"""
+    
+    patient_id = serializers.UUIDField(help_text="ID of the patient to refer")
+    doctor_id = serializers.UUIDField(help_text="ID of the doctor to refer to")
+    
+    class Meta:
+        model = Referral
+        fields = [
+            'patient_id', 'doctor_id', 'referral_reason', 'clinical_notes', 
+            'urgency', 'follow_up_required', 'follow_up_notes'
+        ]
+        
+    def validate_patient_id(self, value):
+        """Validate that patient exists"""
+        try:
+            patient = Patient.objects.get(id=value)
+            return patient
+        except Patient.DoesNotExist:
+            raise serializers.ValidationError("Patient with this ID does not exist.")
+    
+    def validate_doctor_id(self, value):
+        """Validate that doctor exists and accepts referrals"""
+        try:
+            doctor = Doctor.objects.get(id=value)
+            if not doctor.accepts_referrals:
+                raise serializers.ValidationError("This doctor does not accept referrals.")
+            return doctor
+        except Doctor.DoesNotExist:
+            raise serializers.ValidationError("Doctor with this ID does not exist.")
+    
+    def create(self, validated_data):
+        patient = validated_data.pop('patient_id')
+        doctor = validated_data.pop('doctor_id')
+        referral = Referral.objects.create(
+            patient=patient,
+            referred_to_doctor=doctor,
+            referring_chp=self.context['request'].user.community_health_provider,
+            **validated_data
+        )
+        return referral
+
+
+class ReferralListSerializer(serializers.ModelSerializer):
+    """Serializer for listing referrals with detailed information"""
+    
+    patient_name = serializers.SerializerMethodField()
+    patient_email = serializers.SerializerMethodField()
+    patient_phone = serializers.SerializerMethodField()
+    doctor_name = serializers.SerializerMethodField()
+    doctor_specialty = serializers.SerializerMethodField()
+    referring_chp_name = serializers.SerializerMethodField()
+    status_display = serializers.SerializerMethodField()
+    urgency_display = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Referral
+        fields = [
+            'id', 'patient_name', 'patient_email', 'patient_phone',
+            'doctor_name', 'doctor_specialty', 'referring_chp_name',
+            'referral_reason', 'clinical_notes', 'urgency', 'urgency_display',
+            'status', 'status_display', 'follow_up_required', 'follow_up_notes',
+            'accepted_at', 'completed_at', 'doctor_notes', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_patient_name(self, obj):
+        return obj.patient.user.get_full_name() or obj.patient.user.username
+    
+    def get_patient_email(self, obj):
+        return obj.patient.user.email
+    
+    def get_patient_phone(self, obj):
+        return obj.patient.user.phone_number
+    
+    def get_doctor_name(self, obj):
+        return f"Dr. {obj.referred_to_doctor.user.get_full_name()}"
+    
+    def get_doctor_specialty(self, obj):
+        return obj.referred_to_doctor.specialty
+    
+    def get_referring_chp_name(self, obj):
+        return obj.referring_chp.user.get_full_name()
+    
+    def get_status_display(self, obj):
+        return obj.get_status_display()
+    
+    def get_urgency_display(self, obj):
+        return obj.get_urgency_display()
+
+
+class ReferralDetailSerializer(serializers.ModelSerializer):
+    """Detailed serializer for individual referral view"""
+    
+    patient = serializers.SerializerMethodField()
+    referred_to_doctor = serializers.SerializerMethodField()
+    referring_chp = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Referral
+        fields = '__all__'
+        read_only_fields = ['id', 'referring_chp', 'created_at', 'updated_at']
+    
+    def get_patient(self, obj):
+        return {
+            'id': obj.patient.id,
+            'name': obj.patient.user.get_full_name() or obj.patient.user.username,
+            'email': obj.patient.user.email,
+            'phone': obj.patient.user.phone_number,
+            'date_of_birth': obj.patient.date_of_birth,
+            'gender': obj.patient.gender,
+        }
+    
+    def get_referred_to_doctor(self, obj):
+        return {
+            'id': obj.referred_to_doctor.id,
+            'name': f"Dr. {obj.referred_to_doctor.user.get_full_name()}",
+            'specialty': obj.referred_to_doctor.specialty,
+            'email': obj.referred_to_doctor.user.email,
+            'facility': obj.referred_to_doctor.facility_name,
+        }
+    
+    def get_referring_chp(self, obj):
+        return {
+            'id': obj.referring_chp.id,
+            'name': obj.referring_chp.user.get_full_name(),
+            'email': obj.referring_chp.user.email,
+            'certification': obj.referring_chp.certification_number,
+        }
