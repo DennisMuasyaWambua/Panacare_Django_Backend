@@ -3080,107 +3080,147 @@ class CHPPatientMessageAPIView(APIView):
 
     def get(self, request):
         """Get messages for current user (either CHP or Patient)"""
-        user = request.user
-        patient_id = request.query_params.get('patient_id')
-        chp_id = request.query_params.get('chp_id')
-        
-        # Check if user is CHP or patient
-        is_chp = user.roles.filter(name__in=['chp', 'community_health_provider']).exists()
-        is_patient = user.roles.filter(name='patient').exists()
-        
-        if not (is_chp or is_patient):
-            return Response({
-                'error': 'Only CHPs and patients can access messages'
-            }, status=status.HTTP_403_FORBIDDEN)
-        
-        # Build query based on user type
-        if is_chp:
-            if patient_id:
-                # CHP viewing messages with specific patient
-                messages = CHPPatientMessage.objects.filter(
-                    Q(sender=user, patient_id=patient_id) |
-                    Q(recipient=user, patient_id=patient_id)
-                )
-            else:
-                # CHP viewing all their messages
-                messages = CHPPatientMessage.objects.filter(
-                    Q(sender=user) | Q(recipient=user)
-                )
-        else:  # is_patient
-            # Patient viewing their messages with CHP
-            try:
-                patient = Patient.objects.get(user=user)
-                if chp_id:
+        try:
+            user = request.user
+            patient_id = request.query_params.get('patient_id')
+            chp_id = request.query_params.get('chp_id')
+
+            # Check if user is CHP or patient
+            is_chp = user.roles.filter(name__in=['chp', 'community_health_provider']).exists()
+            is_patient = user.roles.filter(name='patient').exists()
+
+            if not (is_chp or is_patient):
+                return Response({
+                    'error': 'Only CHPs and patients can access messages'
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # Build query based on user type
+            if is_chp:
+                if patient_id:
+                    # CHP viewing messages with specific patient
                     messages = CHPPatientMessage.objects.filter(
-                        patient=patient,
-                        chp_id=chp_id
+                        Q(sender=user, patient_id=patient_id) |
+                        Q(recipient=user, patient_id=patient_id)
                     )
                 else:
-                    messages = CHPPatientMessage.objects.filter(patient=patient)
-            except Patient.DoesNotExist:
-                return Response({
-                    'error': 'Patient profile not found'
-                }, status=status.HTTP_404_NOT_FOUND)
-        
-        serializer = CHPPatientMessageSerializer(messages, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+                    # CHP viewing all their messages
+                    messages = CHPPatientMessage.objects.filter(
+                        Q(sender=user) | Q(recipient=user)
+                    )
+            else:  # is_patient
+                # Patient viewing their messages with CHP
+                try:
+                    patient = Patient.objects.get(user=user)
+                    if chp_id:
+                        messages = CHPPatientMessage.objects.filter(
+                            patient=patient,
+                            chp_id=chp_id
+                        )
+                    else:
+                        messages = CHPPatientMessage.objects.filter(patient=patient)
+                except Patient.DoesNotExist:
+                    return Response({
+                        'error': 'Patient profile not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+
+            # Order messages by creation time
+            messages = messages.select_related('sender', 'recipient', 'patient__user', 'chp__user').order_by('-created_at')
+
+            serializer = CHPPatientMessageSerializer(messages, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'error': f'Failed to fetch messages: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def post(self, request):
         """Send a message"""
-        user = request.user
-        data = request.data.copy()
-        
-        # Set sender
-        data['sender'] = user.id
-        
-        # Validate sender is either CHP or patient
-        is_chp = user.roles.filter(name__in=['chp', 'community_health_provider']).exists()
-        is_patient = user.roles.filter(name='patient').exists()
-        
-        if not (is_chp or is_patient):
-            return Response({
-                'error': 'Only CHPs and patients can send messages'
-            }, status=status.HTTP_403_FORBIDDEN)
-        
-        serializer = CHPPatientMessageSerializer(data=data)
-        if serializer.is_valid():
-            # Additional validation
-            patient_id = serializer.validated_data['patient']
-            chp_id = serializer.validated_data['chp']
-            recipient_id = serializer.validated_data['recipient']
-            
+        try:
+            user = request.user
+            data = request.data.copy()
+
+            # Validate sender is either CHP or patient
+            is_chp = user.roles.filter(name__in=['chp', 'community_health_provider']).exists()
+            is_patient = user.roles.filter(name='patient').exists()
+
+            if not (is_chp or is_patient):
+                return Response({
+                    'error': 'Only CHPs and patients can send messages'
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # Get and validate patient
+            patient_id = data.get('patient')
+            if not patient_id:
+                return Response({
+                    'error': 'Patient ID is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             try:
-                patient = Patient.objects.get(id=patient_id.id)
-                chp = CommunityHealthProvider.objects.get(id=chp_id.id)
-                recipient = User.objects.get(id=recipient_id.id)
-                
-                # Ensure the relationship is valid
-                if is_chp:
-                    # CHP sending to patient
-                    if patient.user != recipient:
+                patient = Patient.objects.get(id=patient_id)
+            except Patient.DoesNotExist:
+                return Response({
+                    'error': f'Patient with ID {patient_id} does not exist'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Get CHP - either from request data or from patient's assigned CHP
+            if is_chp:
+                # CHP is the sender
+                try:
+                    chp = CommunityHealthProvider.objects.get(user=user)
+                    data['chp'] = str(chp.id)
+                    data['sender'] = str(user.id)
+                    # Recipient is the patient's user
+                    data['recipient'] = str(patient.user.id)
+                except CommunityHealthProvider.DoesNotExist:
+                    return Response({
+                        'error': 'CHP profile not found for current user'
+                    }, status=status.HTTP_404_NOT_FOUND)
+            else:
+                # Patient is the sender
+                if patient.user != user:
+                    return Response({
+                        'error': 'You can only send messages for your own patient profile'
+                    }, status=status.HTTP_403_FORBIDDEN)
+
+                # Get CHP from request or patient's assigned CHP
+                chp_id = data.get('chp')
+                if not chp_id:
+                    # Try to get patient's CHP who created them
+                    if patient.created_by_chp:
+                        chp_id = str(patient.created_by_chp.id)
+                    else:
                         return Response({
-                            'error': 'Recipient must be the patient'
+                            'error': 'CHP ID is required. No CHP assigned to patient.'
                         }, status=status.HTTP_400_BAD_REQUEST)
-                else:
-                    # Patient sending to CHP
-                    if chp.user != recipient:
-                        return Response({
-                            'error': 'Recipient must be the assigned CHP'
-                        }, status=status.HTTP_400_BAD_REQUEST)
-                    if patient.user != user:
-                        return Response({
-                            'error': 'You can only send messages for your own patient profile'
-                        }, status=status.HTTP_400_BAD_REQUEST)
-                
+
+                try:
+                    chp = CommunityHealthProvider.objects.get(id=chp_id)
+                    data['chp'] = str(chp.id)
+                    data['sender'] = str(user.id)
+                    # Recipient is the CHP's user
+                    data['recipient'] = str(chp.user.id)
+                except CommunityHealthProvider.DoesNotExist:
+                    return Response({
+                        'error': f'CHP with ID {chp_id} does not exist'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Validate message content
+            if not data.get('message'):
+                return Response({
+                    'error': 'Message content is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            serializer = CHPPatientMessageSerializer(data=data)
+            if serializer.is_valid():
                 message = serializer.save()
                 return Response(CHPPatientMessageSerializer(message).data, status=status.HTTP_201_CREATED)
-                
-            except (Patient.DoesNotExist, CommunityHealthProvider.DoesNotExist, User.DoesNotExist) as e:
-                return Response({
-                    'error': 'Invalid patient, CHP, or recipient'
-                }, status=status.HTTP_400_BAD_REQUEST)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response({
+                'error': f'Failed to send message: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def patch(self, request, message_id):
         """Mark message as read"""
@@ -3209,17 +3249,17 @@ class CHPReferralCreateAPIView(APIView):
         """Create a new patient referral"""
         try:
             # Verify user is a CHP
-            chp = request.user.community_health_provider
+            chp = CommunityHealthProvider.objects.get(user=request.user)
         except CommunityHealthProvider.DoesNotExist:
             return Response({
                 'error': 'You must be a Community Health Provider to create referrals'
             }, status=status.HTTP_403_FORBIDDEN)
-        
+
         serializer = ReferralCreateSerializer(data=request.data, context={'request': request})
-        
+
         if serializer.is_valid():
             referral = serializer.save()
-            
+
             return Response({
                 'message': 'Referral created successfully',
                 'referral_id': referral.id,
@@ -3228,7 +3268,7 @@ class CHPReferralCreateAPIView(APIView):
                 'status': referral.status,
                 'created_at': referral.created_at
             }, status=status.HTTP_201_CREATED)
-        
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -3242,76 +3282,83 @@ class CHPReferralsListAPIView(APIView):
         """List all referrals made by the authenticated CHP"""
         try:
             # Verify user is a CHP
-            chp = request.user.community_health_provider
+            chp = CommunityHealthProvider.objects.get(user=request.user)
         except CommunityHealthProvider.DoesNotExist:
             return Response({
                 'error': 'You must be a Community Health Provider to view referrals'
             }, status=status.HTTP_403_FORBIDDEN)
-        
-        # Get all referrals made by this CHP
-        referrals = Referral.objects.filter(referring_chp=chp)
-        
-        # Apply filters
-        status_filter = request.GET.get('status', None)
-        if status_filter:
-            referrals = referrals.filter(status=status_filter)
-        
-        urgency_filter = request.GET.get('urgency', None)
-        if urgency_filter:
-            referrals = referrals.filter(urgency=urgency_filter)
-        
-        patient_search = request.GET.get('patient_search', None)
-        if patient_search:
-            referrals = referrals.filter(
-                Q(patient__user__first_name__icontains=patient_search) |
-                Q(patient__user__last_name__icontains=patient_search) |
-                Q(patient__user__email__icontains=patient_search)
+
+        try:
+            # Get all referrals made by this CHP
+            referrals = Referral.objects.filter(referring_chp=chp).select_related(
+                'patient__user', 'referred_to_doctor__user'
             )
-        
-        doctor_search = request.GET.get('doctor_search', None)
-        if doctor_search:
-            referrals = referrals.filter(
-                Q(referred_to_doctor__user__first_name__icontains=doctor_search) |
-                Q(referred_to_doctor__user__last_name__icontains=doctor_search) |
-                Q(referred_to_doctor__specialty__icontains=doctor_search)
-            )
-        
-        # Order by creation date (newest first)
-        referrals = referrals.order_by('-created_at')
-        
-        # Paginate results
-        from django.core.paginator import Paginator
-        page = int(request.GET.get('page', 1))
-        page_size = int(request.GET.get('page_size', 10))
-        
-        paginator = Paginator(referrals, page_size)
-        page_obj = paginator.get_page(page)
-        
-        serializer = ReferralListSerializer(page_obj, many=True)
-        
-        # Prepare summary statistics
-        total_referrals = referrals.count()
-        pending_count = referrals.filter(status='pending').count()
-        accepted_count = referrals.filter(status='accepted').count()
-        completed_count = referrals.filter(status='completed').count()
-        
-        return Response({
-            'referrals': serializer.data,
-            'pagination': {
-                'current_page': page,
-                'total_pages': paginator.num_pages,
-                'total_results': total_referrals,
-                'page_size': page_size,
-                'has_next': page_obj.has_next(),
-                'has_previous': page_obj.has_previous()
-            },
-            'summary': {
-                'total_referrals': total_referrals,
-                'pending': pending_count,
-                'accepted': accepted_count,
-                'completed': completed_count
-            }
-        }, status=status.HTTP_200_OK)
+
+            # Apply filters
+            status_filter = request.GET.get('status', None)
+            if status_filter:
+                referrals = referrals.filter(status=status_filter)
+
+            urgency_filter = request.GET.get('urgency', None)
+            if urgency_filter:
+                referrals = referrals.filter(urgency=urgency_filter)
+
+            patient_search = request.GET.get('patient_search', None)
+            if patient_search:
+                referrals = referrals.filter(
+                    Q(patient__user__first_name__icontains=patient_search) |
+                    Q(patient__user__last_name__icontains=patient_search) |
+                    Q(patient__user__email__icontains=patient_search)
+                )
+
+            doctor_search = request.GET.get('doctor_search', None)
+            if doctor_search:
+                referrals = referrals.filter(
+                    Q(referred_to_doctor__user__first_name__icontains=doctor_search) |
+                    Q(referred_to_doctor__user__last_name__icontains=doctor_search) |
+                    Q(referred_to_doctor__specialty__icontains=doctor_search)
+                )
+
+            # Order by creation date (newest first)
+            referrals = referrals.order_by('-created_at')
+
+            # Paginate results
+            from django.core.paginator import Paginator
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', 10))
+
+            paginator = Paginator(referrals, page_size)
+            page_obj = paginator.get_page(page)
+
+            serializer = ReferralListSerializer(page_obj, many=True)
+
+            # Prepare summary statistics
+            total_referrals = referrals.count()
+            pending_count = referrals.filter(status='pending').count()
+            accepted_count = referrals.filter(status='accepted').count()
+            completed_count = referrals.filter(status='completed').count()
+
+            return Response({
+                'referrals': serializer.data,
+                'pagination': {
+                    'current_page': page,
+                    'total_pages': paginator.num_pages,
+                    'total_results': total_referrals,
+                    'page_size': page_size,
+                    'has_next': page_obj.has_next(),
+                    'has_previous': page_obj.has_previous()
+                },
+                'summary': {
+                    'total_referrals': total_referrals,
+                    'pending': pending_count,
+                    'accepted': accepted_count,
+                    'completed': completed_count
+                }
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'error': f'Failed to fetch referrals: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class CHPReferralDetailAPIView(APIView):
@@ -3324,20 +3371,22 @@ class CHPReferralDetailAPIView(APIView):
         """Get detailed information about a specific referral"""
         try:
             # Verify user is a CHP
-            chp = request.user.community_health_provider
+            chp = CommunityHealthProvider.objects.get(user=request.user)
         except CommunityHealthProvider.DoesNotExist:
             return Response({
                 'error': 'You must be a Community Health Provider to view referrals'
             }, status=status.HTTP_403_FORBIDDEN)
-        
+
         try:
             # Get the referral and ensure it belongs to this CHP
-            referral = Referral.objects.get(id=referral_id, referring_chp=chp)
+            referral = Referral.objects.select_related(
+                'patient__user', 'referred_to_doctor__user'
+            ).get(id=referral_id, referring_chp=chp)
         except Referral.DoesNotExist:
             return Response({
                 'error': 'Referral not found or you do not have permission to view it'
             }, status=status.HTTP_404_NOT_FOUND)
-        
+
         serializer = ReferralDetailSerializer(referral)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
@@ -3345,12 +3394,12 @@ class CHPReferralDetailAPIView(APIView):
         """Update referral status or add notes (limited fields)"""
         try:
             # Verify user is a CHP
-            chp = request.user.community_health_provider
+            chp = CommunityHealthProvider.objects.get(user=request.user)
         except CommunityHealthProvider.DoesNotExist:
             return Response({
                 'error': 'You must be a Community Health Provider to update referrals'
             }, status=status.HTTP_403_FORBIDDEN)
-        
+
         try:
             # Get the referral and ensure it belongs to this CHP
             referral = Referral.objects.get(id=referral_id, referring_chp=chp)
@@ -3358,22 +3407,22 @@ class CHPReferralDetailAPIView(APIView):
             return Response({
                 'error': 'Referral not found or you do not have permission to update it'
             }, status=status.HTTP_404_NOT_FOUND)
-        
+
         # Only allow updating certain fields by CHP
         allowed_fields = ['clinical_notes', 'follow_up_notes', 'follow_up_required']
         update_data = {k: v for k, v in request.data.items() if k in allowed_fields}
-        
+
         if not update_data:
             return Response({
                 'error': 'No valid fields to update'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # Update the referral
         for field, value in update_data.items():
             setattr(referral, field, value)
-        
+
         referral.save()
-        
+
         serializer = ReferralDetailSerializer(referral)
         return Response({
             'message': 'Referral updated successfully',

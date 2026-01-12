@@ -875,12 +875,21 @@ class ReferralCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Doctor with this ID does not exist.")
     
     def create(self, validated_data):
+        from users.models import CommunityHealthProvider
+
         patient = validated_data.pop('patient_id')
         doctor = validated_data.pop('doctor_id')
+
+        # Get CHP from user
+        try:
+            chp = CommunityHealthProvider.objects.get(user=self.context['request'].user)
+        except CommunityHealthProvider.DoesNotExist:
+            raise serializers.ValidationError("User is not a Community Health Provider")
+
         referral = Referral.objects.create(
             patient=patient,
             referred_to_doctor=doctor,
-            referring_chp=self.context['request'].user.community_health_provider,
+            referring_chp=chp,
             **validated_data
         )
         return referral
