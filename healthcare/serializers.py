@@ -897,7 +897,8 @@ class ReferralCreateSerializer(serializers.ModelSerializer):
 
 class ReferralListSerializer(serializers.ModelSerializer):
     """Serializer for listing referrals with detailed information"""
-    
+
+    patient_id = serializers.SerializerMethodField()
     patient_name = serializers.SerializerMethodField()
     patient_email = serializers.SerializerMethodField()
     patient_phone = serializers.SerializerMethodField()
@@ -910,14 +911,17 @@ class ReferralListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Referral
         fields = [
-            'id', 'patient_name', 'patient_email', 'patient_phone',
+            'id', 'patient_id', 'patient_name', 'patient_email', 'patient_phone',
             'doctor_name', 'doctor_specialty', 'referring_chp_name',
             'referral_reason', 'clinical_notes', 'urgency', 'urgency_display',
             'status', 'status_display', 'follow_up_required', 'follow_up_notes',
             'accepted_at', 'completed_at', 'doctor_notes', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
-    
+
+    def get_patient_id(self, obj):
+        return str(obj.patient.id)
+
     def get_patient_name(self, obj):
         return obj.patient.user.get_full_name() or obj.patient.user.username
     
