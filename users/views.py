@@ -2672,6 +2672,7 @@ class CHPPatientsListAPIView(APIView):
                             type=openapi.TYPE_OBJECT,
                             properties={
                                 'id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                                'patient_id': openapi.Schema(type=openapi.TYPE_STRING, format="uuid", description="Patient UUID (same as id, for consistency with referrals endpoint)"),
                                 'name': openapi.Schema(type=openapi.TYPE_STRING, example="Mary Wanjiku"),
                                 'email': openapi.Schema(type=openapi.TYPE_STRING, example="patient@example.com"),
                                 'phone': openapi.Schema(type=openapi.TYPE_STRING, example="+254722333444"),
@@ -2840,6 +2841,7 @@ class CHPPatientsListAPIView(APIView):
             
             patient_data = {
                 'id': str(patient.id),
+                'patient_id': str(patient.id),
                 'name': patient.user.get_full_name(),
                 'email': patient.user.email,
                 'phone': patient.user.phone_number,
