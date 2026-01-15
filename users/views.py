@@ -3227,18 +3227,32 @@ class CHPPatientMessageAPIView(APIView):
     def patch(self, request, message_id):
         """Mark message as read"""
         try:
-            message = CHPPatientMessage.objects.get(id=message_id, recipient=request.user)
+            # First check if message exists at all
+            try:
+                message = CHPPatientMessage.objects.get(id=message_id)
+            except CHPPatientMessage.DoesNotExist:
+                return Response({
+                    'error': 'Message not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            # Check if user is the recipient
+            if message.recipient != request.user:
+                return Response({
+                    'error': 'You can only mark messages as read if you are the recipient'
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # Mark as read
             message.is_read = True
             message.save()
-            
+
             return Response({
                 'message': 'Message marked as read'
             }, status=status.HTTP_200_OK)
-            
-        except CHPPatientMessage.DoesNotExist:
+
+        except Exception as e:
             return Response({
-                'error': 'Message not found'
-            }, status=status.HTTP_404_NOT_FOUND)
+                'error': f'Failed to mark message as read: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class CHPReferralCreateAPIView(APIView):
