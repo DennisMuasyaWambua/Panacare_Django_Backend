@@ -3444,3 +3444,388 @@ class CHPReferralDetailAPIView(APIView):
             'message': 'Referral updated successfully',
             'referral': serializer.data
         }, status=status.HTTP_200_OK)
+
+
+class CHPNotifyPatientAPIView(APIView):
+    """
+    CHP endpoint to notify patients about upcoming appointments
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="Notify patient(s) about upcoming appointment(s). CHP can send reminders to patients about their appointments.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['appointment_ids'],
+            properties={
+                'appointment_ids': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Schema(type=openapi.TYPE_STRING, format="uuid"),
+                    description="List of appointment IDs to notify patients about"
+                ),
+                'custom_message': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Optional custom message to include in the notification",
+                    example="Please remember your appointment tomorrow at 10:00 AM"
+                )
+            },
+            example={
+                "appointment_ids": ["550e8400-e29b-41d4-a716-446655440000"],
+                "custom_message": "Please remember your appointment tomorrow"
+            }
+        ),
+        responses={
+            200: openapi.Response(
+                "Notifications sent successfully",
+                openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, example="Notifications sent successfully"),
+                        'results': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'total': openapi.Schema(type=openapi.TYPE_INTEGER, example=5),
+                                'successful': openapi.Schema(type=openapi.TYPE_INTEGER, example=4),
+                                'failed': openapi.Schema(type=openapi.TYPE_INTEGER, example=1),
+                                'details': openapi.Schema(
+                                    type=openapi.TYPE_ARRAY,
+                                    items=openapi.Schema(
+                                        type=openapi.TYPE_OBJECT,
+                                        properties={
+                                            'appointment_id': openapi.Schema(type=openapi.TYPE_STRING),
+                                            'patient': openapi.Schema(type=openapi.TYPE_STRING),
+                                            'status': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'failed']),
+                                            'message': openapi.Schema(type=openapi.TYPE_STRING)
+                                        }
+                                    )
+                                )
+                            }
+                        )
+                    }
+                )
+            ),
+            400: openapi.Response("Bad Request"),
+            403: openapi.Response("Forbidden - CHP access required"),
+            404: openapi.Response("Appointment not found")
+        },
+        tags=['CHP Management']
+    )
+    def post(self, request):
+        """
+        Send notifications to patients about their upcoming appointments
+        """
+        try:
+            # Verify user is a CHP
+            try:
+                chp = CommunityHealthProvider.objects.get(user=request.user)
+            except CommunityHealthProvider.DoesNotExist:
+                return Response({
+                    'error': 'Only Community Health Providers can access this endpoint'
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # Get appointment IDs from request
+            appointment_ids = request.data.get('appointment_ids', [])
+            custom_message = request.data.get('custom_message', '')
+
+            if not appointment_ids:
+                return Response({
+                    'error': 'appointment_ids is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Import Appointment model and FCMNotificationService
+            from healthcare.models import Appointment
+            from notifications.services import FCMNotificationService
+
+            results = {
+                'total': len(appointment_ids),
+                'successful': 0,
+                'failed': 0,
+                'details': []
+            }
+
+            for appointment_id in appointment_ids:
+                try:
+                    # Get the appointment
+                    appointment = Appointment.objects.get(id=appointment_id)
+
+                    # Verify this appointment was created by this CHP
+                    if appointment.created_by_chp != chp:
+                        results['failed'] += 1
+                        results['details'].append({
+                            'appointment_id': str(appointment_id),
+                            'patient': 'N/A',
+                            'status': 'failed',
+                            'message': 'You can only notify patients for appointments you created'
+                        })
+                        continue
+
+                    # Format the notification
+                    patient_name = appointment.patient.user.get_full_name() or appointment.patient.user.username
+                    doctor_name = f"Dr. {appointment.doctor.user.get_full_name()}"
+                    appointment_datetime = f"{appointment.appointment_date} at {appointment.start_time.strftime('%H:%M')}"
+
+                    title = "Upcoming Appointment Reminder"
+                    body = f"Reminder: You have an appointment with {doctor_name} on {appointment_datetime}."
+
+                    if custom_message:
+                        body += f"\n\n{custom_message}"
+
+                    # Prepare notification data
+                    notification_data = {
+                        'type': 'appointment_reminder',
+                        'appointment_id': str(appointment.id),
+                        'appointment_date': str(appointment.appointment_date),
+                        'start_time': str(appointment.start_time),
+                        'doctor_name': doctor_name
+                    }
+
+                    # Send notification to patient
+                    notification_result = FCMNotificationService.send_to_user(
+                        user=appointment.patient.user,
+                        title=title,
+                        body=body,
+                        data=notification_data,
+                        notification_type='appointment',
+                        sent_by=request.user,
+                        save_to_history=True
+                    )
+
+                    if notification_result.get('success', 0) > 0:
+                        results['successful'] += 1
+                        results['details'].append({
+                            'appointment_id': str(appointment_id),
+                            'patient': patient_name,
+                            'status': 'success',
+                            'message': 'Notification sent successfully'
+                        })
+                    else:
+                        results['failed'] += 1
+                        results['details'].append({
+                            'appointment_id': str(appointment_id),
+                            'patient': patient_name,
+                            'status': 'failed',
+                            'message': notification_result.get('message', 'Failed to send notification')
+                        })
+
+                except Appointment.DoesNotExist:
+                    results['failed'] += 1
+                    results['details'].append({
+                        'appointment_id': str(appointment_id),
+                        'patient': 'N/A',
+                        'status': 'failed',
+                        'message': 'Appointment not found'
+                    })
+                except Exception as e:
+                    logger.error(f"Error notifying patient for appointment {appointment_id}: {e}")
+                    results['failed'] += 1
+                    results['details'].append({
+                        'appointment_id': str(appointment_id),
+                        'patient': 'N/A',
+                        'status': 'failed',
+                        'message': str(e)
+                    })
+
+            return Response({
+                'message': 'Notification process completed',
+                'results': results
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error in CHPNotifyPatientAPIView: {e}")
+            return Response({
+                'error': f'An error occurred: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CHPRescheduleAppointmentAPIView(APIView):
+    """
+    CHP endpoint to reschedule appointments on behalf of patients
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="Reschedule appointment on behalf of a patient. CHP can reschedule appointments they created for their patients.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['appointment_id', 'appointment_date', 'start_time', 'end_time', 'reschedule_reason'],
+            properties={
+                'appointment_id': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format="uuid",
+                    description="Appointment ID to reschedule"
+                ),
+                'appointment_date': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format='date',
+                    description='New appointment date (YYYY-MM-DD)',
+                    example='2026-02-15'
+                ),
+                'start_time': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format='time',
+                    description='New start time (HH:MM:SS)',
+                    example='10:00:00'
+                ),
+                'end_time': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format='time',
+                    description='New end time (HH:MM:SS)',
+                    example='11:00:00'
+                ),
+                'reschedule_reason': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description='Reason for rescheduling',
+                    example='Patient requested to change appointment time'
+                ),
+                'notify_patient': openapi.Schema(
+                    type=openapi.TYPE_BOOLEAN,
+                    description='Send notification to patient about the reschedule (default: true)',
+                    default=True
+                )
+            }
+        ),
+        responses={
+            200: openapi.Response(
+                "Appointment rescheduled successfully",
+                openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'message': openapi.Schema(type=openapi.TYPE_STRING),
+                        'appointment': openapi.Schema(type=openapi.TYPE_OBJECT)
+                    }
+                )
+            ),
+            400: openapi.Response("Bad Request"),
+            403: openapi.Response("Forbidden - CHP access required"),
+            404: openapi.Response("Appointment not found")
+        },
+        tags=['CHP Management']
+    )
+    def post(self, request):
+        """
+        Reschedule an appointment on behalf of a patient
+        """
+        try:
+            # Verify user is a CHP
+            try:
+                chp = CommunityHealthProvider.objects.get(user=request.user)
+            except CommunityHealthProvider.DoesNotExist:
+                return Response({
+                    'error': 'Only Community Health Providers can access this endpoint'
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # Get request data
+            appointment_id = request.data.get('appointment_id')
+            appointment_date = request.data.get('appointment_date')
+            start_time = request.data.get('start_time')
+            end_time = request.data.get('end_time')
+            reschedule_reason = request.data.get('reschedule_reason')
+            notify_patient = request.data.get('notify_patient', True)
+
+            # Validate required fields
+            if not all([appointment_id, appointment_date, start_time, end_time, reschedule_reason]):
+                return Response({
+                    'error': 'appointment_id, appointment_date, start_time, end_time, and reschedule_reason are required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Import Appointment model
+            from healthcare.models import Appointment
+            from datetime import datetime
+
+            # Get the appointment
+            try:
+                appointment = Appointment.objects.get(id=appointment_id)
+            except Appointment.DoesNotExist:
+                return Response({
+                    'error': 'Appointment not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            # Verify this appointment was created by this CHP
+            if appointment.created_by_chp != chp:
+                return Response({
+                    'error': 'You can only reschedule appointments you created'
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # Check if appointment can be rescheduled
+            if appointment.status in ['fulfilled', 'cancelled', 'noshow']:
+                return Response({
+                    'error': f'Cannot reschedule an appointment with status: {appointment.status}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Validate and convert date
+            try:
+                appointment_date_obj = datetime.strptime(appointment_date, '%Y-%m-%d').date()
+            except ValueError:
+                return Response({
+                    'error': 'Invalid date format. Use YYYY-MM-DD format.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Store previous values for reference
+            previous_date = appointment.appointment_date
+            previous_start = appointment.start_time
+            previous_end = appointment.end_time
+
+            # Update the appointment
+            appointment.appointment_date = appointment_date_obj
+            appointment.start_time = start_time
+            appointment.end_time = end_time
+
+            # Add rescheduling note
+            current_notes = appointment.notes or ""
+            reschedule_note = f"[CHP Reschedule {datetime.now().strftime('%Y-%m-%d %H:%M')}] "\
+                             f"Rescheduled by CHP {chp.user.get_full_name()}. "\
+                             f"Changed from {previous_date} {previous_start}-{previous_end} to "\
+                             f"{appointment_date_obj} {start_time}-{end_time}. "\
+                             f"Reason: {reschedule_reason}"
+
+            if current_notes:
+                appointment.notes = f"{current_notes}\n\n{reschedule_note}"
+            else:
+                appointment.notes = reschedule_note
+
+            # Update status to scheduled
+            appointment.status = 'scheduled'
+            appointment.save()
+
+            # Send notification to patient if requested
+            if notify_patient:
+                from notifications.services import FCMNotificationService
+
+                doctor_name = f"Dr. {appointment.doctor.user.get_full_name()}"
+                new_datetime = f"{appointment_date_obj} at {start_time}"
+
+                title = "Appointment Rescheduled"
+                body = f"Your appointment with {doctor_name} has been rescheduled to {new_datetime}. Reason: {reschedule_reason}"
+
+                notification_data = {
+                    'type': 'appointment_rescheduled',
+                    'appointment_id': str(appointment.id),
+                    'appointment_date': str(appointment_date_obj),
+                    'start_time': str(start_time),
+                    'doctor_name': doctor_name
+                }
+
+                FCMNotificationService.send_to_user(
+                    user=appointment.patient.user,
+                    title=title,
+                    body=body,
+                    data=notification_data,
+                    notification_type='appointment',
+                    sent_by=request.user,
+                    save_to_history=True
+                )
+
+            # Serialize and return the updated appointment
+            from healthcare.serializers import AppointmentSerializer
+            serializer = AppointmentSerializer(appointment)
+
+            return Response({
+                'message': 'Appointment rescheduled successfully',
+                'appointment': serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error in CHPRescheduleAppointmentAPIView: {e}")
+            return Response({
+                'error': f'An error occurred: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
