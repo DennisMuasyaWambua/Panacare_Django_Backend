@@ -58,6 +58,7 @@ INSTALLED_APPS = [
         'healthcare',
     'clinical_support',
     'fhir_api',
+    'clinical_data',  # FHIR clinical resources
     'notifications',
 ]
 
@@ -426,6 +427,7 @@ INSTALLED_APPS = [
         'healthcare',
     'clinical_support',
     'fhir_api',
+    'clinical_data',  # FHIR clinical resources
     'notifications',
 ]
 
