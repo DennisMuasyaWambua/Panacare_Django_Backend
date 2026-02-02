@@ -5783,10 +5783,14 @@ class PatientJournalViewSet(viewsets.ModelViewSet):
         """
         Filter journals by patient if user is a patient
         """
+        # Return base queryset for swagger schema generation
+        if getattr(self, 'swagger_fake_view', False):
+            return PatientJournal.objects.none()
+
         queryset = PatientJournal.objects.all().order_by('-created_at')
-        
+
         # If user is a patient, only show their journals
-        if self.request.user.roles.filter(name='patient').exists():
+        if hasattr(self.request.user, 'roles') and self.request.user.roles.filter(name='patient').exists():
             try:
                 patient = Patient.objects.get(user=self.request.user)
                 queryset = queryset.filter(patient=patient)
@@ -5795,7 +5799,7 @@ class PatientJournalViewSet(viewsets.ModelViewSet):
         
         # Filter by patient_id if provided (for doctors/admins)
         patient_id = self.request.query_params.get('patient_id')
-        if patient_id and (self.request.user.roles.filter(name__in=['doctor', 'admin']).exists()):
+        if patient_id and hasattr(self.request.user, 'roles') and self.request.user.roles.filter(name__in=['doctor', 'admin']).exists():
             queryset = queryset.filter(patient_id=patient_id)
         
         # Filter by tags

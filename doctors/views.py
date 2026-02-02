@@ -783,37 +783,10 @@ class DoctorViewSet(viewsets.ModelViewSet):
         })
         
     @swagger_auto_schema(
-        operation_description="Create a review for a doctor",
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            required=['rating'],
-            properties={
-                'rating': openapi.Schema(type=openapi.TYPE_INTEGER, description="Rating (1-5 stars)", minimum=1, maximum=5),
-                'review': openapi.Schema(type=openapi.TYPE_STRING, description="Text review"),
-                'is_anonymous': openapi.Schema(type=openapi.TYPE_BOOLEAN, description="Whether to post review anonymously")
-            }
-        ),
+        operation_description="Export doctors list to CSV format",
         responses={
-            201: openapi.Response("Created", openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'message': openapi.Schema(type=openapi.TYPE_STRING),
-                    'doctor_id': openapi.Schema(type=openapi.TYPE_STRING),
-                    'doctor_name': openapi.Schema(type=openapi.TYPE_STRING)
-                }
-            )),
-            400: openapi.Response("Bad Request", openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING)
-                }
-            )),
-            404: openapi.Response("Not Found", openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING)
-                }
-            ))
+            200: openapi.Response("CSV file", schema=openapi.Schema(type=openapi.TYPE_FILE)),
+            401: openapi.Response("Unauthorized")
         }
     )
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated], url_path='export-csv')
@@ -871,6 +844,40 @@ class DoctorViewSet(viewsets.ModelViewSet):
 
         return response
 
+    @swagger_auto_schema(
+        operation_description="Create a review for a doctor",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['rating'],
+            properties={
+                'rating': openapi.Schema(type=openapi.TYPE_INTEGER, description="Rating (1-5 stars)", minimum=1, maximum=5),
+                'review': openapi.Schema(type=openapi.TYPE_STRING, description="Text review"),
+                'is_anonymous': openapi.Schema(type=openapi.TYPE_BOOLEAN, description="Whether to post review anonymously")
+            }
+        ),
+        responses={
+            201: openapi.Response("Created", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'message': openapi.Schema(type=openapi.TYPE_STRING),
+                    'doctor_id': openapi.Schema(type=openapi.TYPE_STRING),
+                    'doctor_name': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            400: openapi.Response("Bad Request", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            )),
+            404: openapi.Response("Not Found", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING)
+                }
+            ))
+        }
+    )
     @action(detail=True, methods=['post'], permission_classes=[IsPatientUser])
     def review(self, request, pk=None):
         """
