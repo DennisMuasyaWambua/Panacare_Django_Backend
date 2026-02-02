@@ -1,4 +1,6 @@
-# Multi-stage build for Django Healthcare Backend
+# Production Dockerfile for Django Healthcare Backend
+# Multi-stage build optimized for production
+
 # Stage 1: Builder - Install dependencies
 FROM python:3.11-slim as builder
 
@@ -19,18 +21,20 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Stage 2: Runtime - Create final image
+# Stage 2: Runtime - Create final production image
 FROM python:3.11-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    DEBUG=False
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     libpq5 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -51,6 +55,9 @@ RUN mkdir -p /app/staticfiles /app/media /app/logs && \
     chown -R django:django /app && \
     chmod -R 755 /app
 
+# Collect static files (run during build for production)
+RUN python manage.py collectstatic --noinput || echo "Static collection failed, will retry at runtime"
+
 # Copy and set entrypoint script
 COPY --chown=django:django docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
@@ -61,8 +68,12 @@ USER django
 # Expose port
 EXPOSE 8000
 
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/admin/login/ || exit 1
+
 # Set entrypoint
 ENTRYPOINT ["docker-entrypoint.sh"]
 
-# Default command (development server)
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Production command (Gunicorn with multiple workers)
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "panacare.wsgi:application"]

@@ -639,52 +639,199 @@ class PatientListAPIView(APIView):
     Only accessible by admin and doctor users.
     """
     permission_classes = [IsAdminOrDoctor]
-    
+
     def get(self, request):
+        # Check if CSV export is requested
+        export_format = request.query_params.get('export')
+        if export_format == 'csv':
+            return self.export_csv(request)
+
         # Get patient role
         patient_role = get_object_or_404(Role, name='patient')
-        
+
         # Get all users with patient role
         patients = Patient.objects.filter(user__roles=patient_role)
-        
+
         # Apply filtering
         name = request.query_params.get('name')
         if name:
             patients = patients.filter(
-                models.Q(user__first_name__icontains=name) | 
+                models.Q(user__first_name__icontains=name) |
                 models.Q(user__last_name__icontains=name)
             )
-        
+
         # Serialize the data
         serializer = PatientSerializer(patients, many=True, context={'request': request})
-        
+
         # Set appropriate content type for FHIR responses
         response = Response(serializer.data)
         if request.query_params.get('format') == 'fhir':
             response["Content-Type"] = "application/fhir+json"
-        
+
+        return response
+
+    def export_csv(self, request):
+        """
+        Export patients list to CSV format
+        """
+        from django.http import HttpResponse
+
+        # Get patient role
+        patient_role = get_object_or_404(Role, name='patient')
+
+        # Get all patients with optional filtering
+        patients = Patient.objects.filter(user__roles=patient_role).select_related('user')
+
+        # Apply filtering
+        name = request.query_params.get('name')
+        if name:
+            patients = patients.filter(
+                models.Q(user__first_name__icontains=name) |
+                models.Q(user__last_name__icontains=name)
+            )
+
+        # Create CSV response
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="patients_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+
+        writer = csv.writer(response)
+
+        # Write header
+        writer.writerow([
+            'Patient ID', 'First Name', 'Last Name', 'Email', 'Phone Number', 'Address',
+            'Date of Birth', 'Gender', 'Blood Type', 'Height (cm)', 'Weight (kg)',
+            'Allergies', 'Medical Conditions', 'Medications',
+            'Emergency Contact Name', 'Emergency Contact Phone', 'Emergency Contact Relationship',
+            'Insurance Provider', 'Insurance Policy Number', 'Created At'
+        ])
+
+        # Write data
+        for patient in patients:
+            writer.writerow([
+                str(patient.id),
+                patient.user.first_name,
+                patient.user.last_name,
+                patient.user.email,
+                patient.user.phone_number or '',
+                patient.user.address or '',
+                patient.date_of_birth or '',
+                patient.gender or '',
+                patient.blood_type or '',
+                patient.height_cm or '',
+                patient.weight_kg or '',
+                patient.allergies or '',
+                patient.medical_conditions or '',
+                patient.medications or '',
+                patient.emergency_contact_name or '',
+                patient.emergency_contact_phone or '',
+                patient.emergency_contact_relationship or '',
+                patient.insurance_provider or '',
+                patient.insurance_policy_number or '',
+                patient.created_at.strftime('%Y-%m-%d %H:%M:%S') if patient.created_at else ''
+            ])
+
         return response
 
 class PatientDetailAPIView(APIView):
     """
-    API endpoint to get details of a specific patient.
+    API endpoint to get, update, or delete a specific patient.
     Only accessible by admin and doctor users.
     """
     permission_classes = [IsAdminOrDoctor]
-    
+
     def get_object(self, pk):
         return get_object_or_404(Patient, pk=pk)
-    
+
     def get(self, request, pk):
         patient = self.get_object(pk)
         serializer = PatientSerializer(patient, context={'request': request})
-        
+
         # Set appropriate content type for FHIR responses
         response = Response(serializer.data)
         if request.query_params.get('format') == 'fhir':
             response["Content-Type"] = "application/fhir+json"
-        
+
         return response
+
+    def put(self, request, pk):
+        """
+        Full update of patient record.
+        Updates both User fields (name, email, phone, address) and Patient fields (DOB, gender, medical history, etc.)
+        """
+        patient = self.get_object(pk)
+        user = patient.user
+
+        # Update User fields if provided
+        user_fields = ['first_name', 'last_name', 'email', 'phone_number', 'address', 'username']
+        user_updated = False
+        for field in user_fields:
+            if field in request.data:
+                setattr(user, field, request.data[field])
+                user_updated = True
+
+        if user_updated:
+            try:
+                user.save()
+            except Exception as e:
+                return Response({
+                    'error': f'Failed to update user fields: {str(e)}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Update Patient fields
+        serializer = PatientSerializer(patient, data=request.data, partial=False, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, pk):
+        """
+        Partial update of patient record.
+        Updates both User fields (name, email, phone, address) and Patient fields (DOB, gender, medical history, etc.)
+        """
+        patient = self.get_object(pk)
+        user = patient.user
+
+        # Update User fields if provided
+        user_fields = ['first_name', 'last_name', 'email', 'phone_number', 'address', 'username']
+        user_updated = False
+        for field in user_fields:
+            if field in request.data:
+                setattr(user, field, request.data[field])
+                user_updated = True
+
+        if user_updated:
+            try:
+                user.save()
+            except Exception as e:
+                return Response({
+                    'error': f'Failed to update user fields: {str(e)}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Update Patient fields
+        serializer = PatientSerializer(patient, data=request.data, partial=True, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk):
+        """
+        Delete a patient record.
+        Note: This will also delete the associated user account.
+        """
+        patient = self.get_object(pk)
+        user = patient.user
+
+        # Delete the patient record (this will cascade to related records)
+        patient.delete()
+
+        # Delete the user account
+        user.delete()
+
+        return Response({
+            'message': 'Patient and associated user account deleted successfully'
+        }, status=status.HTTP_204_NO_CONTENT)
 
 class PatientProfileAPIView(APIView):
     """

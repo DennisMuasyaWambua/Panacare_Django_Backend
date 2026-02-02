@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: panacare_db_prod
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    networks:
+      - panacare_network
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Only expose to host if you need external access (e.g., for backups)
+    # ports:
+    #   - "5432:5432"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: panacare_web_prod
+    command: gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 120 --access-logfile - --error-logfile - panacare.wsgi:application
+    volumes:
+      # Read-only code mount for security (optional - can remove if you build code into image)
+      # - .:/app:ro
+      # Media files persistence
+      - media_volume:/app/media
+      # Static files (collected during build)
+      - static_volume:/app/staticfiles
+      # Firebase credentials (read-only)
+      - ./firebase-service-account.json:/app/firebase-service-account.json:ro
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.production
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - panacare_network
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/admin/login/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  nginx:
+    image: nginx:alpine
+    container_name: panacare_nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - static_volume:/app/staticfiles:ro
+      - media_volume:/app/media:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - web
+    networks:
+      - panacare_network
+    restart: always
+
+  # Optional: Certbot for SSL certificates
+  certbot:
+    image: certbot/certbot
+    container_name: panacare_certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - panacare_network
+
+networks:
+  panacare_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: panacare_postgres_data_prod
+  media_volume:
+    name: panacare_media_prod
+  static_volume:
+    name: panacare_static_prod

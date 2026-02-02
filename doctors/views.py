@@ -198,7 +198,50 @@ class DoctorViewSet(viewsets.ModelViewSet):
     )
     def retrieve(self, request, *args, **kwargs):
         return super().retrieve(request, *args, **kwargs)
-    
+
+    def update(self, request, *args, **kwargs):
+        """
+        Full update of doctor record.
+        Updates both User fields (name, email, phone, address) and Doctor fields (specialty, license, etc.)
+        """
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        user = instance.user
+
+        # Update User fields if provided
+        user_fields = ['first_name', 'last_name', 'email', 'phone_number', 'address', 'username']
+        user_updated = False
+        for field in user_fields:
+            if field in request.data:
+                setattr(user, field, request.data[field])
+                user_updated = True
+
+        if user_updated:
+            try:
+                user.save()
+            except Exception as e:
+                return Response({
+                    'error': f'Failed to update user fields: {str(e)}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Update Doctor fields
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        if getattr(instance, '_prefetched_objects_cache', None):
+            instance._prefetched_objects_cache = {}
+
+        return Response(serializer.data)
+
+    def partial_update(self, request, *args, **kwargs):
+        """
+        Partial update of doctor record.
+        Updates both User fields (name, email, phone, address) and Doctor fields (specialty, license, etc.)
+        """
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
     def initial(self, request, *args, **kwargs):
         """
         Add CORS headers to all responses
@@ -773,6 +816,61 @@ class DoctorViewSet(viewsets.ModelViewSet):
             ))
         }
     )
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated], url_path='export-csv')
+    def export_csv(self, request):
+        """
+        Export doctors list to CSV format.
+        Accessible by authenticated users (admin, doctors, patients).
+        """
+        import csv
+        from django.http import HttpResponse
+        from datetime import datetime
+
+        # Apply the same filtering as the list view
+        queryset = self.filter_queryset(self.get_queryset()).select_related('user', 'education')
+
+        # Create CSV response
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="doctors_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+
+        writer = csv.writer(response)
+
+        # Write header
+        writer.writerow([
+            'Doctor ID', 'First Name', 'Last Name', 'Email', 'Phone Number', 'Address',
+            'Specialty', 'License Number', 'Experience Years', 'Bio',
+            'Education Level', 'Education Field', 'Education Institution',
+            'Is Verified', 'Is Available', 'Communication Languages',
+            'Accepts Referrals', 'Consultation Modes', 'Facility Name', 'Created At'
+        ])
+
+        # Write data
+        for doctor in queryset:
+            writer.writerow([
+                str(doctor.id),
+                doctor.user.first_name,
+                doctor.user.last_name,
+                doctor.user.email,
+                doctor.user.phone_number or '',
+                doctor.user.address or '',
+                doctor.specialty,
+                doctor.license_number,
+                doctor.experience_years or 0,
+                doctor.bio or '',
+                doctor.education.level_of_education if doctor.education else '',
+                doctor.education.field if doctor.education else '',
+                doctor.education.institution if doctor.education else '',
+                'Yes' if doctor.is_verified else 'No',
+                'Yes' if doctor.is_available else 'No',
+                doctor.communication_languages or '',
+                'Yes' if doctor.accepts_referrals else 'No',
+                doctor.consultation_modes or '',
+                doctor.facility_name or '',
+                doctor.created_at.strftime('%Y-%m-%d %H:%M:%S') if doctor.created_at else ''
+            ])
+
+        return response
+
     @action(detail=True, methods=['post'], permission_classes=[IsPatientUser])
     def review(self, request, pk=None):
         """
