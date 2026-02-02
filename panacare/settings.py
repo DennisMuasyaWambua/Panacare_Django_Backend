@@ -151,7 +151,11 @@ WSGI_APPLICATION = 'panacare.wsgi.application'
 
 if os.environ.get("ENVIRONMENT")=="production":
     DATABASES = {
-    'default': dj_database_url.config(default=os.getenv("DATABASE_PUBLIC_URL"))
+    'default': dj_database_url.config(
+        default=os.getenv("DATABASE_PUBLIC_URL"),
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
     }
 else:
     DATABASES = {
@@ -520,7 +524,11 @@ WSGI_APPLICATION = 'panacare.wsgi.application'
 
 if os.environ.get("ENVIRONMENT")=="production":
     DATABASES = {
-    'default': dj_database_url.config(default=os.getenv("DATABASE_PUBLIC_URL"))
+    'default': dj_database_url.config(
+        default=os.getenv("DATABASE_PUBLIC_URL"),
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
     }
 else:
     DATABASES = {

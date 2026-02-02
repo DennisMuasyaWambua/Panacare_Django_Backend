@@ -16,16 +16,26 @@ import psycopg2
 import os
 
 try:
-    conn = psycopg2.connect(
-        dbname=os.environ.get('DB_NAME', 'panacare_db'),
-        user=os.environ.get('DB_USER', 'panacare'),
-        password=os.environ.get('DB_PASSWORD', 'panacare'),
-        host=os.environ.get('DB_HOST', 'db'),
-        port=os.environ.get('DB_PORT', '5432')
-    )
+    # Check if DATABASE_PUBLIC_URL is set (for production)
+    database_url = os.environ.get('DATABASE_PUBLIC_URL')
+
+    if database_url:
+        # Use the full database URL for production
+        conn = psycopg2.connect(database_url)
+    else:
+        # Use individual environment variables for development
+        conn = psycopg2.connect(
+            dbname=os.environ.get('DB_NAME', 'panacare_db'),
+            user=os.environ.get('DB_USER', 'panacare'),
+            password=os.environ.get('DB_PASSWORD', 'panacare'),
+            host=os.environ.get('DB_HOST', 'db'),
+            port=os.environ.get('DB_PORT', '5432')
+        )
+
     conn.close()
     sys.exit(0)
-except psycopg2.OperationalError:
+except psycopg2.OperationalError as e:
+    print(f"Connection error: {e}")
     sys.exit(1)
 END
     do
@@ -35,7 +45,7 @@ END
             exit 1
         fi
         echo "PostgreSQL is unavailable - sleeping (attempt $count/$max_tries)"
-        sleep 1
+        sleep 2
     done
 
     echo "PostgreSQL is ready!"
