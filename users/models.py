@@ -408,31 +408,31 @@ class CommunityHealthProvider(models.Model):
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='community_health_provider')
-    
+
     # Basic information
     certification_number = models.CharField(max_length=50, blank=True, help_text="Certification or license number")
     years_of_experience = models.PositiveIntegerField(default=0)
     specialization = models.CharField(max_length=200, blank=True, help_text="Area of specialization (e.g., maternal health, nutrition)")
-    
+
     # Service area
     service_area = models.CharField(max_length=200, blank=True, help_text="Geographic area of service")
     languages_spoken = models.CharField(max_length=200, blank=True, help_text="Languages spoken (comma-separated)")
-    
+
     # Contact and availability
     is_active = models.BooleanField(default=True)
     availability_hours = models.CharField(max_length=200, blank=True, help_text="Available hours (e.g., Mon-Fri 9AM-5PM)")
-    
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         verbose_name = "Community Health Provider"
         verbose_name_plural = "Community Health Providers"
-    
+
     def __str__(self):
         return f"CHP: {self.user.get_full_name() or self.user.username}"
-    
+
     def to_fhir_json(self):
         """
         Convert to FHIR-compliant JSON representation
@@ -460,14 +460,14 @@ class CommunityHealthProvider(models.Model):
             ],
             "qualification": []
         }
-        
+
         if self.user.phone_number:
             practitioner_json["telecom"].append({
                 "system": "phone",
                 "value": self.user.phone_number,
                 "use": "work"
             })
-        
+
         if self.certification_number:
             practitioner_json["qualification"].append({
                 "identifier": [
@@ -485,7 +485,187 @@ class CommunityHealthProvider(models.Model):
                     }
                 ]
             })
-        
+
+        return practitioner_json
+
+class Clinician(models.Model):
+    """
+    Clinician model for healthcare professionals who provide clinical services.
+    Clinicians can include nurses, nurse practitioners, physician assistants,
+    clinical officers, and other licensed healthcare providers.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='clinician')
+
+    # Professional information
+    license_number = models.CharField(max_length=100, unique=True, help_text="Professional license number")
+    license_type = models.CharField(max_length=100, blank=True, help_text="Type of license (e.g., RN, NP, PA, Clinical Officer)")
+    issuing_authority = models.CharField(max_length=200, blank=True, help_text="Licensing board or authority")
+    license_expiry_date = models.DateField(null=True, blank=True, help_text="License expiration date")
+
+    # Qualifications and experience
+    qualification = models.CharField(max_length=200, blank=True, help_text="Highest qualification (e.g., BSN, MSN, Diploma)")
+    years_of_experience = models.PositiveIntegerField(default=0, help_text="Years of clinical experience")
+    specialization = models.CharField(max_length=200, blank=True, help_text="Clinical specialization (e.g., Emergency Care, Pediatrics, ICU)")
+
+    # Professional details
+    professional_bio = models.TextField(blank=True, help_text="Professional biography")
+    skills = models.TextField(blank=True, help_text="Key clinical skills and competencies")
+    certifications = models.TextField(blank=True, help_text="Additional certifications (comma-separated)")
+
+    # Work information
+    department = models.CharField(max_length=200, blank=True, help_text="Department or unit")
+    facility_name = models.CharField(max_length=200, blank=True, help_text="Healthcare facility name")
+
+    # Verification and status
+    is_verified = models.BooleanField(default=False, help_text="Whether the clinician's credentials are verified")
+    is_active = models.BooleanField(default=True, help_text="Whether the clinician is active in the system")
+    verified_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='verified_clinicians',
+        help_text="Admin who verified this clinician"
+    )
+    verification_date = models.DateTimeField(null=True, blank=True, help_text="Date when credentials were verified")
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Clinician"
+        verbose_name_plural = "Clinicians"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Clinician: {self.user.get_full_name() or self.user.username} ({self.license_type})"
+
+    def to_fhir_json(self):
+        """
+        Convert to FHIR-compliant Practitioner resource representation
+        """
+        practitioner_json = {
+            "resourceType": "Practitioner",
+            "id": str(self.id),
+            "meta": {
+                "profile": ["http://hl7.org/fhir/StructureDefinition/Practitioner"]
+            },
+            "identifier": [
+                {
+                    "use": "official",
+                    "system": "urn:panacare:clinician",
+                    "value": str(self.id)
+                }
+            ],
+            "active": self.is_active,
+            "name": [
+                {
+                    "use": "official",
+                    "family": self.user.last_name,
+                    "given": [self.user.first_name] if self.user.first_name else [],
+                    "text": self.user.get_full_name()
+                }
+            ],
+            "telecom": [
+                {
+                    "system": "email",
+                    "value": self.user.email,
+                    "use": "work"
+                }
+            ],
+            "qualification": []
+        }
+
+        # Add phone number if available
+        if self.user.phone_number:
+            practitioner_json["telecom"].append({
+                "system": "phone",
+                "value": self.user.phone_number,
+                "use": "work"
+            })
+
+        # Add license information
+        if self.license_number:
+            practitioner_json["identifier"].append({
+                "use": "official",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                            "code": "LN",
+                            "display": "License number"
+                        }
+                    ],
+                    "text": "Professional License"
+                },
+                "system": self.issuing_authority or "urn:panacare:license",
+                "value": self.license_number,
+                "period": {
+                    "end": self.license_expiry_date.isoformat() if self.license_expiry_date else None
+                }
+            })
+
+            # Add license as qualification
+            qualification = {
+                "identifier": [
+                    {
+                        "value": self.license_number
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/v2-0360",
+                            "code": "LN",
+                            "display": self.license_type or "Licensed Clinician"
+                        }
+                    ],
+                    "text": self.license_type or "Professional License"
+                }
+            }
+
+            if self.issuing_authority:
+                qualification["issuer"] = {
+                    "display": self.issuing_authority
+                }
+
+            if self.license_expiry_date:
+                qualification["period"] = {
+                    "end": self.license_expiry_date.isoformat()
+                }
+
+            practitioner_json["qualification"].append(qualification)
+
+        # Add highest qualification
+        if self.qualification:
+            practitioner_json["qualification"].append({
+                "code": {
+                    "text": self.qualification
+                }
+            })
+
+        # Add specialization
+        if self.specialization:
+            practitioner_json["extension"] = practitioner_json.get("extension", []) + [
+                {
+                    "url": "http://hl7.org/fhir/StructureDefinition/practitioner-specialty",
+                    "valueCodeableConcept": {
+                        "text": self.specialization
+                    }
+                }
+            ]
+
+        # Add bio if available
+        if self.professional_bio:
+            practitioner_json["extension"] = practitioner_json.get("extension", []) + [
+                {
+                    "url": "http://hl7.org/fhir/StructureDefinition/practitioner-bio",
+                    "valueString": self.professional_bio
+                }
+            ]
+
         return practitioner_json
 
 # Signal to create profile when a user is assigned specific roles
@@ -496,19 +676,25 @@ def create_user_profile(sender, instance, action, pk_set, **kwargs):
     """
     # Suppress unused parameter warnings - these are required by Django signal interface
     _ = sender, kwargs
-    
+
     if action == 'post_add':
         # Check if any of the newly added roles is 'patient'
         patient_role_exists = Role.objects.filter(pk__in=pk_set, name='patient').exists()
         if patient_role_exists:
             # Create a Patient profile if it doesn't exist
             Patient.objects.get_or_create(user=instance)
-        
+
         # Check if any of the newly added roles is 'community_health_provider'
         chp_role_exists = Role.objects.filter(pk__in=pk_set, name='community_health_provider').exists()
         if chp_role_exists:
             # Create a CommunityHealthProvider profile if it doesn't exist
             CommunityHealthProvider.objects.get_or_create(user=instance)
+
+        # Check if any of the newly added roles is 'clinician'
+        clinician_role_exists = Role.objects.filter(pk__in=pk_set, name='clinician').exists()
+        if clinician_role_exists:
+            # Create a Clinician profile if it doesn't exist
+            Clinician.objects.get_or_create(user=instance)
 
 class AuditLog(models.Model):
     """

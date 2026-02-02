@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from .models import User, Role, Patient, AuditLog, Location, CommunityHealthProvider, CHPPatientMessage
+from .models import User, Role, Patient, AuditLog, Location, CommunityHealthProvider, CHPPatientMessage, Clinician
 
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
@@ -27,16 +27,16 @@ class UserSerializer(serializers.ModelSerializer):
     
     # Make role selection more user-friendly by using role names
     role_names = serializers.ListField(
-        child=serializers.CharField(), 
+        child=serializers.CharField(),
         required=False,
-        help_text="List of role names to assign to this user. Only doctor, patient, and community_health_provider roles are allowed."
+        help_text="List of role names to assign to this user. Allowed roles: doctor, patient, clinician, and community_health_provider."
     )
-    
+
     # Allow a single role assignment
     role = serializers.CharField(
         required=True,
         write_only=True,
-        help_text="Single role to assign to this user. Only doctor, patient, or community_health_provider role is allowed."
+        help_text="Single role to assign to this user. Allowed roles: doctor, patient, clinician, or community_health_provider."
     )
     
     def validate_role_names(self, value):
@@ -44,10 +44,10 @@ class UserSerializer(serializers.ModelSerializer):
         if value:
             # If it's an admin registration, allow 'admin' role
             if self.context.get('admin_registration'):
-                allowed_roles = ['doctor', 'patient', 'community_health_provider', 'admin']
+                allowed_roles = ['doctor', 'patient', 'clinician', 'community_health_provider', 'admin']
             else:
-                allowed_roles = ['doctor', 'patient', 'community_health_provider']
-                
+                allowed_roles = ['doctor', 'patient', 'clinician', 'community_health_provider']
+
             for role_name in value:
                 if role_name not in allowed_roles:
                     raise serializers.ValidationError(f"Role '{role_name}' is not allowed. Choose from: {', '.join(allowed_roles)}")
@@ -56,16 +56,16 @@ class UserSerializer(serializers.ModelSerializer):
                 except Role.DoesNotExist:
                     raise serializers.ValidationError(f"Role with name '{role_name}' does not exist")
         return value
-        
+
     def validate_role(self, value):
         """Validate that the role exists in the database"""
         if value:
             # If it's an admin registration, allow 'admin' role
             if self.context.get('admin_registration'):
-                allowed_roles = ['doctor', 'patient', 'community_health_provider', 'admin']
+                allowed_roles = ['doctor', 'patient', 'clinician', 'community_health_provider', 'admin']
             else:
-                allowed_roles = ['doctor', 'patient', 'community_health_provider']
-                
+                allowed_roles = ['doctor', 'patient', 'clinician', 'community_health_provider']
+
             if value not in allowed_roles:
                 raise serializers.ValidationError(f"Role '{value}' is not allowed. Choose from: {', '.join(allowed_roles)}")
             try:
@@ -401,6 +401,104 @@ class CommunityHealthProviderSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("User with the provided ID does not exist")
         
         return super().create(validated_data)
+
+
+class ClinicianSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    user_id = serializers.UUIDField(write_only=True, required=False)
+
+    # Additional computed fields
+    full_name = serializers.SerializerMethodField()
+    contact_info = serializers.SerializerMethodField()
+    verification_status = serializers.SerializerMethodField()
+    verified_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Clinician
+        fields = [
+            'id', 'user', 'user_id', 'license_number', 'license_type',
+            'issuing_authority', 'license_expiry_date', 'qualification',
+            'years_of_experience', 'specialization', 'professional_bio',
+            'skills', 'certifications', 'department', 'facility_name',
+            'is_verified', 'is_active', 'verified_by', 'verification_date',
+            'created_at', 'updated_at', 'full_name', 'contact_info',
+            'verification_status', 'verified_by_name'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'is_verified', 'verified_by', 'verification_date']
+        extra_kwargs = {
+            'license_number': {'help_text': 'Professional license number'},
+            'license_type': {'help_text': 'Type of license (e.g., RN, NP, PA, Clinical Officer)'},
+            'issuing_authority': {'help_text': 'Licensing board or authority'},
+            'license_expiry_date': {'help_text': 'License expiration date'},
+            'qualification': {'help_text': 'Highest qualification (e.g., BSN, MSN, Diploma)'},
+            'years_of_experience': {'help_text': 'Years of clinical experience'},
+            'specialization': {'help_text': 'Clinical specialization (e.g., Emergency Care, Pediatrics)'},
+            'professional_bio': {'help_text': 'Professional biography'},
+            'skills': {'help_text': 'Key clinical skills and competencies'},
+            'certifications': {'help_text': 'Additional certifications (comma-separated)'},
+            'department': {'help_text': 'Department or unit'},
+            'facility_name': {'help_text': 'Healthcare facility name'},
+        }
+
+    def get_full_name(self, obj):
+        return obj.user.get_full_name() or obj.user.username
+
+    def get_contact_info(self, obj):
+        return {
+            'email': obj.user.email,
+            'phone': obj.user.phone_number,
+            'address': obj.user.address
+        }
+
+    def get_verification_status(self, obj):
+        if obj.is_verified:
+            return "verified"
+        return "pending"
+
+    def get_verified_by_name(self, obj):
+        if obj.verified_by:
+            return obj.verified_by.get_full_name() or obj.verified_by.username
+        return None
+
+    def create(self, validated_data):
+        user_id = validated_data.pop('user_id', None)
+        if user_id:
+            try:
+                user = User.objects.get(id=user_id)
+                validated_data['user'] = user
+            except User.DoesNotExist:
+                raise serializers.ValidationError("User with the provided ID does not exist")
+
+        return super().create(validated_data)
+
+    def to_representation(self, instance):
+        """
+        If FHIR format is requested, return FHIR JSON representation.
+        """
+        request = self.context.get('request')
+
+        # Default to standard representation
+        if not request or not request.query_params.get('format') == 'fhir':
+            return super().to_representation(instance)
+
+        # Return FHIR format
+        return instance.to_fhir_json()
+
+
+class ClinicianVerificationSerializer(serializers.Serializer):
+    """
+    Serializer for admin to verify clinician credentials
+    """
+    clinician_id = serializers.UUIDField(required=True, help_text="Clinician ID to verify")
+    is_verified = serializers.BooleanField(required=True, help_text="Verification status")
+    verification_notes = serializers.CharField(required=False, allow_blank=True, help_text="Optional notes about verification")
+
+    def validate_clinician_id(self, value):
+        try:
+            Clinician.objects.get(id=value)
+        except Clinician.DoesNotExist:
+            raise serializers.ValidationError("Clinician with the provided ID does not exist")
+        return value
 
 
 class CHPPatientCreateSerializer(serializers.Serializer):

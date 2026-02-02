@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, Role, Patient, CommunityHealthProvider, AuditLog, CHPPatientMessage
+from .models import User, Role, Patient, CommunityHealthProvider, Clinician, AuditLog, CHPPatientMessage
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
@@ -76,6 +76,49 @@ class CommunityHealthProviderAdmin(admin.ModelAdmin):
         }),
     )
     readonly_fields = ('created_at', 'updated_at')
+
+@admin.register(Clinician)
+class ClinicianAdmin(admin.ModelAdmin):
+    list_display = ('user', 'license_type', 'license_number', 'specialization', 'years_of_experience', 'is_verified', 'is_active')
+    list_filter = ('is_verified', 'is_active', 'license_type', 'specialization', 'years_of_experience')
+    search_fields = ('user__email', 'user__username', 'user__first_name', 'user__last_name',
+                    'license_number', 'license_type', 'qualification', 'specialization', 'facility_name')
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('user', 'is_active')
+        }),
+        ('License Information', {
+            'fields': ('license_number', 'license_type', 'issuing_authority', 'license_expiry_date')
+        }),
+        ('Professional Details', {
+            'fields': ('qualification', 'years_of_experience', 'specialization', 'skills', 'certifications')
+        }),
+        ('Work Information', {
+            'fields': ('facility_name', 'department', 'professional_bio')
+        }),
+        ('Verification', {
+            'fields': ('is_verified', 'verified_by', 'verification_date')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    readonly_fields = ('created_at', 'updated_at', 'verified_by', 'verification_date')
+
+    def save_model(self, request, obj, form, change):
+        """Auto-set verification fields when admin verifies a clinician"""
+        if change:  # Only for updates, not new records
+            # Check if is_verified changed from False to True
+            try:
+                old_obj = Clinician.objects.get(pk=obj.pk)
+                if not old_obj.is_verified and obj.is_verified and not obj.verified_by:
+                    from django.utils import timezone
+                    obj.verified_by = request.user
+                    obj.verification_date = timezone.now()
+            except Clinician.DoesNotExist:
+                pass
+        super().save_model(request, obj, form, change)
 
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):

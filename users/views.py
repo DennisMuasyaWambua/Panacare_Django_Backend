@@ -143,9 +143,45 @@ class IsAdminOrDoctor(permissions.BasePermission):
         # Check if user is authenticated
         if not request.user.is_authenticated:
             return False
-        
+
         # Check if user has admin or doctor role
         return request.user.roles.filter(name__in=['admin', 'doctor']).exists()
+
+class IsClinicianUser(permissions.BasePermission):
+    """
+    Permission class to check if the user has clinician role
+    """
+    def has_permission(self, request, view):
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return False
+
+        # Check if user has clinician role and has a clinician profile
+        return request.user.roles.filter(name='clinician').exists() and hasattr(request.user, 'clinician')
+
+class IsClinicianOrDoctor(permissions.BasePermission):
+    """
+    Permission class to check if the user has clinician or doctor role
+    """
+    def has_permission(self, request, view):
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return False
+
+        # Check if user has clinician or doctor role
+        return request.user.roles.filter(name__in=['clinician', 'doctor']).exists()
+
+class IsHealthcareProvider(permissions.BasePermission):
+    """
+    Permission class to check if the user is a healthcare provider (doctor, clinician, or CHP)
+    """
+    def has_permission(self, request, view):
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return False
+
+        # Check if user has doctor, clinician, or community_health_provider role
+        return request.user.roles.filter(name__in=['doctor', 'clinician', 'community_health_provider']).exists()
 
 class IsAdminOrAuthenticated(permissions.BasePermission):
     """
