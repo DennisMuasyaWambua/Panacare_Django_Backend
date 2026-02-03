@@ -174,6 +174,7 @@ class Patient(models.Model):
     allergies = models.TextField(blank=True, help_text="Known allergies")
     medical_conditions = models.TextField(blank=True, help_text="Pre-existing medical conditions")
     medications = models.TextField(blank=True, help_text="Current medications")
+    health_notes = models.TextField(blank=True, help_text="Recent symptoms and health notes")
     emergency_contact_name = models.CharField(max_length=100, blank=True)
     emergency_contact_phone = models.CharField(max_length=15, blank=True)
     emergency_contact_relationship = models.CharField(max_length=50, blank=True)

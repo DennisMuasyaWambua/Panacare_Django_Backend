@@ -1726,6 +1726,7 @@ class CHPPatientCreateAPIView(APIView):
                 'allergies': openapi.Schema(type=openapi.TYPE_STRING, example="Penicillin"),
                 'medical_conditions': openapi.Schema(type=openapi.TYPE_STRING, example="Diabetes Type 2"),
                 'medications': openapi.Schema(type=openapi.TYPE_STRING, example="Metformin 500mg"),
+                'health_notes': openapi.Schema(type=openapi.TYPE_STRING, example="Patient reports mild headaches and fatigue"),
                 'height_cm': openapi.Schema(type=openapi.TYPE_INTEGER, example=165),
                 'weight_kg': openapi.Schema(type=openapi.TYPE_NUMBER, example=65.5),
                 'emergency_contact_name': openapi.Schema(type=openapi.TYPE_STRING, example="John Wanjiku"),

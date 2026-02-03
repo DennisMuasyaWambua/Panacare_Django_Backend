@@ -164,14 +164,15 @@ class PatientSerializer(serializers.ModelSerializer):
     allergies = serializers.CharField(required=False, help_text="Known allergies")
     medical_conditions = serializers.CharField(required=False, help_text="Pre-existing medical conditions")
     medications = serializers.CharField(required=False, help_text="Current medications")
-    
+    health_notes = serializers.CharField(required=False, help_text="Recent symptoms and health notes")
+
     class Meta:
         model = Patient
         fields = [
-            'id', 'user', 'user_id', 'date_of_birth', 'gender', 
+            'id', 'user', 'user_id', 'date_of_birth', 'gender',
             'active', 'marital_status', 'language', 'identifier_system',
-            'blood_type', 'height_cm', 'weight_kg', 'allergies', 
-            'medical_conditions', 'medications', 
+            'blood_type', 'height_cm', 'weight_kg', 'allergies',
+            'medical_conditions', 'medications', 'health_notes',
             'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relationship',
             'insurance_provider', 'insurance_policy_number', 'insurance_group_number',
             'created_at', 'updated_at'
@@ -535,6 +536,7 @@ class CHPPatientCreateSerializer(serializers.Serializer):
     allergies = serializers.CharField(required=False)
     medical_conditions = serializers.CharField(required=False)
     medications = serializers.CharField(required=False)
+    health_notes = serializers.CharField(required=False)
     emergency_contact_name = serializers.CharField(required=False)
     emergency_contact_phone = serializers.CharField(required=False)
     emergency_contact_relationship = serializers.CharField(required=False)
@@ -617,8 +619,8 @@ class CHPPatientCreateSerializer(serializers.Serializer):
         # Patient fields
         patient_fields = [
             'date_of_birth', 'gender', 'blood_type', 'height_cm', 'weight_kg',
-            'allergies', 'medical_conditions', 'medications', 'emergency_contact_name',
-            'emergency_contact_phone', 'emergency_contact_relationship'
+            'allergies', 'medical_conditions', 'medications', 'health_notes',
+            'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relationship'
         ]
         
         for field in patient_fields:
