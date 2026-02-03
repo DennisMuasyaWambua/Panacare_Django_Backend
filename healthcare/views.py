@@ -5555,7 +5555,7 @@ class EnhancedAppointmentListViewSet(viewsets.ReadOnlyModelViewSet):
                 Q(patient__user__last_name__icontains=search) |
                 Q(doctor__user__first_name__icontains=search) |
                 Q(doctor__user__last_name__icontains=search) |
-                Q(healthcare__name__icontains=search)
+                Q(healthcare_facility__name__icontains=search)
             )
             
         status_filter = self.request.query_params.get('status')
@@ -5711,7 +5711,7 @@ class EnhancedAppointmentListViewSet(viewsets.ReadOnlyModelViewSet):
                 subscription,
                 appointment.status.title(),
                 f"Dr. {appointment.doctor.user.first_name} {appointment.doctor.user.last_name}",
-                appointment.healthcare.name
+                appointment.healthcare_facility.name if appointment.healthcare_facility else 'N/A'
             ])
         
         return response
