@@ -94,8 +94,8 @@ class UserSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'password', 'first_name', 'last_name', 
-                  'phone_number', 'address', 'location', 'location_id', 'roles', 'role_names', 'role', 'is_verified']
+        fields = ['id', 'username', 'email', 'password', 'first_name', 'last_name',
+                  'phone_number', 'address', 'location', 'location_id', 'roles', 'role_names', 'role', 'is_verified', 'profile_url']
         read_only_fields = ['id', 'is_verified']
         extra_kwargs = {
             'username': {'help_text': 'Your username'},
@@ -105,6 +105,7 @@ class UserSerializer(serializers.ModelSerializer):
             'phone_number': {'help_text': 'Your phone number'},
             'address': {'help_text': 'Your address'},
             'location_id': {'help_text': 'UUID of your location (village level preferred)'},
+            'profile_url': {'help_text': 'URL to your profile picture', 'required': False},
         }
     
     def create(self, validated_data):

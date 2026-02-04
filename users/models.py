@@ -47,7 +47,8 @@ class User(AbstractUser):
     roles = models.ManyToManyField(Role, related_name='users')
     location = models.ForeignKey(Location, null=True, blank=True, on_delete=models.SET_NULL, related_name='users')
     is_verified = models.BooleanField(default=False)
-    
+    profile_url = models.URLField(max_length=500, blank=True, null=True, help_text="URL to user's profile picture")
+
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
     
